@@ -4,6 +4,7 @@
 #include <steam/steamnetworkingsockets.h>
 
 #include <cstdio>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -19,6 +20,13 @@
 namespace wok {
 
 namespace {
+
+// One lock for the whole library facade: the client runs its game connection and its server-browser
+// queries on different threads, and the status callback routes through the shared maps below.
+std::recursive_mutex& netMutex() {
+    static std::recursive_mutex m;
+    return m;
+}
 
 int g_initCount = 0;
 // The library status callback is a plain function; route it to the owning object.
@@ -68,6 +76,7 @@ bool resolve(const char* host, uint16_t port, SteamNetworkingIPAddr& out) {
 }  // namespace
 
 bool netInit() {
+    std::lock_guard netLock(netMutex());
     if (g_initCount++ > 0) return true;
     SteamNetworkingErrMsg err;
     if (!GameNetworkingSockets_Init(nullptr, err)) {
@@ -80,6 +89,7 @@ bool netInit() {
 }
 
 void netShutdown() {
+    std::lock_guard netLock(netMutex());
     if (g_initCount == 0 || --g_initCount > 0) return;
     GameNetworkingSockets_Kill();
 }
@@ -87,6 +97,7 @@ void netShutdown() {
 // ---------------------------------------------------------------- server
 
 NetServer::~NetServer() {
+    std::lock_guard netLock(netMutex());
     if (listen_ != k_HSteamListenSocket_Invalid) {
         g_servers.erase(listen_);
         sockets()->CloseListenSocket(listen_);
@@ -95,6 +106,7 @@ NetServer::~NetServer() {
 }
 
 bool NetServer::listen(uint16_t port) {
+    std::lock_guard netLock(netMutex());
     SteamNetworkingIPAddr addr;
     addr.Clear();
     addr.m_port = port;
@@ -131,17 +143,20 @@ void NetServer::onStatus(const void* p) {
 }
 
 void NetServer::send(ConnId conn, std::span<const uint8_t> data, bool reliable) {
+    std::lock_guard netLock(netMutex());
     sockets()->SendMessageToConnection(conn, data.data(), static_cast<uint32>(data.size()), sendFlags(reliable),
                                        nullptr);
 }
 
 void NetServer::close(ConnId conn) {
+    std::lock_guard netLock(netMutex());
     // Linger so a final reliable message (e.g. a rejection HelloAck) is still delivered.
     sockets()->CloseConnection(conn, 0, nullptr, true);
     pending_.push_back({NetEvent::Disconnected, conn, {}});
 }
 
 std::vector<NetEvent> NetServer::poll() {
+    std::lock_guard netLock(netMutex());
     sockets()->RunCallbacks();
     SteamNetworkingMessage_t* msgs[64];
     for (;;) {
@@ -160,6 +175,7 @@ std::vector<NetEvent> NetServer::poll() {
 NetClient::~NetClient() { disconnect(); }
 
 bool NetClient::connect(const char* host, uint16_t port) {
+    std::lock_guard netLock(netMutex());
     disconnect();
     SteamNetworkingIPAddr addr;
     if (!resolve(host, port, addr)) return false;
@@ -190,12 +206,14 @@ void NetClient::onStatus(const void* p) {
 }
 
 void NetClient::send(std::span<const uint8_t> data, bool reliable) {
+    std::lock_guard netLock(netMutex());
     if (!connected_) return;
     sockets()->SendMessageToConnection(conn_, data.data(), static_cast<uint32>(data.size()), sendFlags(reliable),
                                        nullptr);
 }
 
 std::vector<NetEvent> NetClient::poll() {
+    std::lock_guard netLock(netMutex());
     sockets()->RunCallbacks();
     if (conn_ != k_HSteamNetConnection_Invalid) {
         SteamNetworkingMessage_t* msgs[64];
@@ -212,6 +230,7 @@ std::vector<NetEvent> NetClient::poll() {
 }
 
 void NetClient::disconnect() {
+    std::lock_guard netLock(netMutex());
     if (conn_ == k_HSteamNetConnection_Invalid) return;
     g_clients.erase(conn_);
     sockets()->CloseConnection(conn_, 0, nullptr, true);
