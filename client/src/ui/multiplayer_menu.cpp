@@ -293,9 +293,13 @@ void MultiplayerMenu::showLoading(const std::string& text) {
                                             "loading_screen3.dds", "loading_screen4.dds", "loading_screen5.dds",
                                             "loading_screen6.dds", "loading_screen9.dds", "loading_screen10.dds"};
             const char* image = kImages[GetTickCount64() % std::size(kImages)];
+            // The layout's 0..1 coordinates resolve against Kenshi's UI-scaled space; force the root
+            // to the real window size so the cover hides everything (e.g. the editor's side panel).
+            RECT rc{};
+            if (HWND wnd = GetActiveWindow() ? GetActiveWindow() : GetForegroundWindow(); wnd && GetClientRect(wnd, &rc))
+                mygui::setCoord(mygui::findWidget(kLoadingRoot), 0, 0, rc.right - rc.left, rc.bottom - rc.top);
             mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "BackgroundImage"), "ImageTexture", image);
-            mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"), "Caption",
-                               "Joining World of Kenshi - your character is on its way.");
+            // Title line uses Kenshi's huge font: keep it short; details go in the message box.
             log("ui: Kenshi loading screen shown (%s)", image);
         } else {
             // Fallback: plain opaque cover on the topmost layer.
@@ -336,8 +340,14 @@ void MultiplayerMenu::updateLoading(float dt) {
         return;
     }
     loadingTime_ += dt;
-    const char* step = autoStep_ == 0 ? "Joining the server..." : autoStep_ == 1 ? "Loading the world..."
-                                                                                : "Restoring your character...";
+    // Short title for Kenshi's big LOADING font, details in the message box below it.
+    const char* step = autoStep_ == 0 ? "JOINING..." : autoStep_ == 1 ? "LOADING..." : "RESTORING...";
+    const char* detail = autoStep_ == 0   ? "Joining the World of Kenshi server."
+                         : autoStep_ == 1 ? "Loading the world."
+                                          : "Bringing your character back where you left it.";
+    for (mygui::Widget* msg : {mygui::findBySuffixExcept("_MessageText", kLoadingPrefix, 4),
+                               mygui::findWidget(std::string(kLoadingPrefix) + "MessageText")})
+        if (msg) mygui::setProperty(msg, "Caption", detail);
     // Never two loading screens: while Kenshi shows its own, drop ours and write our step into it.
     if (mygui::Widget* kenshiText = mygui::findBySuffixExcept("_LoadingText", kLoadingPrefix, 4)) {
         if (mygui::Widget* ours = mygui::findWidget(kLoadingRoot)) mygui::destroy(ours);

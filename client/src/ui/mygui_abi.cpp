@@ -48,6 +48,7 @@ struct Api {
     Widget* (*getChildAt)(Widget* w, size_t index);
     void (*riseClick)(void* widgetInput);
     void* (*getLayoutManager)();
+    void (*setCoordFn)(Widget* w, int left, int top, int width, int height);
     // Returns std::vector<Widget*> by value: hidden result buffer in the second register.
     void* (*loadLayoutFn)(void* manager, void* result, const S* file, const S* prefix, Widget* parent);
 } g_api{};
@@ -117,6 +118,7 @@ bool init() {
     ok &= load(m, g_api.getChildAt, "?getChildAt@Widget@MyGUI@@QEAAPEAV12@_K@Z");
     ok &= load(m, g_api.riseClick, "?_riseMouseButtonClick@WidgetInput@MyGUI@@QEAAXXZ");
     // Optional: only the loading screen needs these.
+    load(m, g_api.setCoordFn, "?setCoord@Widget@MyGUI@@QEAAXHHHH@Z");
     load(m, g_api.getLayoutManager, "?getInstancePtr@?$Singleton@VLayoutManager@MyGUI@@@MyGUI@@SAPEAVLayoutManager@2@XZ");
     load(m, g_api.loadLayoutFn,
          "?loadLayout@LayoutManager@MyGUI@@QEAA?AV?$vector@PEAVWidget@MyGUI@@V?$allocator@PEAVWidget@MyGUI@@@std@@@std@@"
@@ -233,6 +235,10 @@ bool loadLayout(std::string_view file, std::string_view prefix) {
     S f(file), p(prefix);
     g_api.loadLayoutFn(manager, result, &f, &p, nullptr);
     return true;
+}
+
+void setCoord(Widget* w, int left, int top, int width, int height) {
+    if (w && g_api.setCoordFn) g_api.setCoordFn(w, left, top, width, height);
 }
 
 void setVisible(Widget* w, bool visible) { setProperty(w, "Visible", visible ? "true" : "false"); }
