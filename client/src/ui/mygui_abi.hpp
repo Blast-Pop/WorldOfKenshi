@@ -59,7 +59,7 @@ void click(Widget* w);
 void setVisible(Widget* w, bool visible);
 // Loads one of Kenshi's own layout files (e.g. "Kenshi_LoadingScreen.layout"); its widgets are
 // named `prefix` + their layout name. Returns false if MyGUI could not load it.
-bool loadLayout(std::string_view file, std::string_view prefix);
+bool loadLayout(std::string_view file, std::string_view prefix, Widget* parent = nullptr);
 // Pixel coordinates (MyGUI view space), e.g. to make a root widget cover the whole game window.
 void setCoord(Widget* w, int left, int top, int width, int height);
 

@@ -224,7 +224,7 @@ void click(Widget* w) {
     if (w) g_api.riseClick(reinterpret_cast<char*>(w) + kWidgetInputOffset);
 }
 
-bool loadLayout(std::string_view file, std::string_view prefix) {
+bool loadLayout(std::string_view file, std::string_view prefix, Widget* parent) {
     if (!g_api.getLayoutManager || !g_api.loadLayoutFn) return false;
     void* manager = g_api.getLayoutManager();
     if (!manager) return false;
@@ -233,7 +233,7 @@ bool loadLayout(std::string_view file, std::string_view prefix) {
     alignas(16) static uint8_t result[64];
     std::memset(result, 0, sizeof(result));
     S f(file), p(prefix);
-    g_api.loadLayoutFn(manager, result, &f, &p, nullptr);
+    g_api.loadLayoutFn(manager, result, &f, &p, parent);
     return true;
 }
 

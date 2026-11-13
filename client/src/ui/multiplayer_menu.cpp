@@ -23,7 +23,7 @@ constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr const char* kDisconnect = "WokDisconnect";
 constexpr const char* kLoadingPrefix = "WokLoading_";
-constexpr const char* kLoadingRoot = "WokLoading_Root";
+constexpr const char* kLoadingRoot = "WokLoadingCover";
 constexpr float kLoadingTimeoutSec = 60.0f;  // never leave a player stuck behind the cover
 constexpr size_t kMaxRows = 8;
 
@@ -286,34 +286,32 @@ void MultiplayerMenu::onClick(const std::string& name) {
 }
 
 void MultiplayerMenu::showLoading(const std::string& text) {
-    if (!loadingShown_) {
-        // Kenshi's own loading screen (same layout file the game uses), under our widget prefix.
-        if (mygui::loadLayout("Kenshi_LoadingScreen.layout", kLoadingPrefix) && mygui::findWidget(kLoadingRoot)) {
+    if (!mygui::findWidget(kLoadingRoot)) {
+        // Our own cover on "Pointer", Kenshi's topmost MyGUI layer (core_layer.xml order): above the
+        // game's loading screen and the character editor. Sized to the real window (UI scale).
+        mygui::Widget* cover = mygui::createRoot("Widget", "WhiteSkin", {0.0f, 0.0f, 1.0f, 1.0f}, "Pointer", kLoadingRoot);
+        if (!cover) return;
+        mygui::setProperty(cover, "Colour", "0.09 0.08 0.06");
+        RECT rc{};
+        int w = 0, h = 0;
+        if (HWND wnd = GetActiveWindow() ? GetActiveWindow() : GetForegroundWindow(); wnd && GetClientRect(wnd, &rc)) {
+            w = rc.right - rc.left;
+            h = rc.bottom - rc.top;
+            mygui::setCoord(cover, 0, 0, w, h);
+        }
+        // Inside it, Kenshi's own loading layout (from the player's install) for the familiar look.
+        if (mygui::loadLayout("Kenshi_LoadingScreen.layout", kLoadingPrefix, cover)) {
             static const char* kImages[] = {"loading_screen0.dds", "loading_screen1.dds", "loading_screen2.dds",
                                             "loading_screen3.dds", "loading_screen4.dds", "loading_screen5.dds",
                                             "loading_screen6.dds", "loading_screen9.dds", "loading_screen10.dds"};
             const char* image = kImages[GetTickCount64() % std::size(kImages)];
-            // The layout's 0..1 coordinates resolve against Kenshi's UI-scaled space; force the root
-            // to the real window size so the cover hides everything (e.g. the editor's side panel).
-            RECT rc{};
-            if (HWND wnd = GetActiveWindow() ? GetActiveWindow() : GetForegroundWindow(); wnd && GetClientRect(wnd, &rc))
-                mygui::setCoord(mygui::findWidget(kLoadingRoot), 0, 0, rc.right - rc.left, rc.bottom - rc.top);
+            if (w && h) mygui::setCoord(mygui::findWidget(std::string(kLoadingPrefix) + "Root"), 0, 0, w, h);
             mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "BackgroundImage"), "ImageTexture", image);
-            // Title line uses Kenshi's huge font: keep it short; details go in the message box.
-            log("ui: Kenshi loading screen shown (%s)", image);
-        } else {
-            // Fallback: plain opaque cover on the topmost layer.
-            mygui::Widget* cover = mygui::createRoot("Widget", "WhiteSkin", {0.0f, 0.0f, 1.0f, 1.0f}, "Top", kLoadingRoot);
-            if (!cover) return;
-            mygui::setProperty(cover, "Colour", "0.09 0.08 0.06");
-            auto line = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.50f, 1.0f, 0.06f},
-                                           std::string(kLoadingPrefix) + "LoadingText");
-            mygui::setProperty(line, "TextAlign", "Center");
-            mygui::setProperty(line, "TextColour", kRowText);
-            log("ui: fallback loading cover shown");
+            log("ui: loading screen shown (%s)", image);
         }
         loadingShown_ = true;
         loadingTime_ = 0;
+        loadingText_.clear();
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -345,18 +343,9 @@ void MultiplayerMenu::updateLoading(float dt) {
     const char* detail = autoStep_ == 0   ? "Joining the World of Kenshi server."
                          : autoStep_ == 1 ? "Loading the world."
                                           : "Bringing your character back where you left it.";
-    for (mygui::Widget* msg : {mygui::findBySuffixExcept("_MessageText", kLoadingPrefix, 4),
-                               mygui::findWidget(std::string(kLoadingPrefix) + "MessageText")})
-        if (msg) mygui::setProperty(msg, "Caption", detail);
-    // Never two loading screens: while Kenshi shows its own, drop ours and write our step into it.
-    if (mygui::Widget* kenshiText = mygui::findBySuffixExcept("_LoadingText", kLoadingPrefix, 4)) {
-        if (mygui::Widget* ours = mygui::findWidget(kLoadingRoot)) mygui::destroy(ours);
-        mygui::setProperty(kenshiText, "Caption", step);
-        loadingShown_ = true;  // still "covered", by Kenshi's screen
-        loadingText_ = step;
-        return;
-    }
-    if (loadingShown_ && !mygui::findWidget(kLoadingRoot)) loadingShown_ = false;  // Kenshi's screen just closed
+    if (mygui::Widget* msg = mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"))
+        mygui::setProperty(msg, "Caption", detail);
+    // Ours stays up for the whole flow: Kenshi's own loading screen stops at the character editor.
     showLoading(step);
 }
 
