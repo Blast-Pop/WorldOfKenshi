@@ -59,6 +59,7 @@ private:
     bool worldReady_ = false;
     float loadingTime_ = 0;
     std::string loadingText_;
+    const char* lastTip_ = nullptr;
     void updateLoading(float dt);
     void showLoading(const std::string& text);
     void hideLoading();

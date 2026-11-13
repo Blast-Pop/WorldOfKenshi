@@ -338,13 +338,26 @@ void MultiplayerMenu::updateLoading(float dt) {
         return;
     }
     loadingTime_ += dt;
-    // Short title for Kenshi's big LOADING font, details in the message box below it.
-    const char* step = autoStep_ == 0 ? "JOINING..." : autoStep_ == 1 ? "LOADING..." : "RESTORING...";
-    const char* detail = autoStep_ == 0   ? "Joining the World of Kenshi server."
-                         : autoStep_ == 1 ? "Loading the world."
-                                          : "Bringing your character back where you left it.";
-    if (mygui::Widget* msg = mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"))
-        mygui::setProperty(msg, "Caption", detail);
+    // Animated like Kenshi's own screen: dots cycling on a short title (Kenshi's big LOADING font),
+    // and our own World of Kenshi tips rotating in the message box below it.
+    static const char* kSteps[] = {"JOINING", "LOADING", "RESTORING"};
+    static const char* kTips[] = {
+        "Your character lives on the server: you will find it where you left it, even after a crash.",
+        "While you are offline your character stays in the world. Choose a safe place to log out.",
+        "Time never stops on a World of Kenshi server: there is no pause and no speed-up.",
+        "Corpses stay for five minutes before they rot away. Loot fast.",
+        "Other players are real people: trade, team up, or keep your distance.",
+        "Servers can run mods. Everyone on a server uses the same mod list.",
+    };
+    int dots = 1 + static_cast<int>(loadingTime_ * 2.0f) % 3;
+    std::string title = std::string(kSteps[std::min(autoStep_, 2)]) + std::string(dots, '.');
+    const char* tip = kTips[static_cast<size_t>(loadingTime_ / 8.0f) % std::size(kTips)];
+    if (mygui::Widget* msg = mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"); msg && tip != lastTip_) {
+        mygui::setProperty(msg, "Caption", tip);
+        lastTip_ = tip;
+    }
+    const std::string& step = title;
+
     // Ours stays up for the whole flow: Kenshi's own loading screen stops at the character editor.
     showLoading(step);
 }
