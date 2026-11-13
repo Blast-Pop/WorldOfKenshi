@@ -37,6 +37,7 @@ struct Args {
     std::string publicUrl;  // default: http://127.0.0.1:<httpPort>
     float spawn[3] = {-50979.0f, 1533.0f, 2932.0f};  // first place a character was seen in testing
     bool testBots = false;
+    std::vector<SpawnPoint> spawnPoints;
     std::string name = "World of Kenshi server";
     std::string description;
 };
@@ -51,7 +52,18 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.maxPlayers = static_cast<uint32_t>(std::atoi(argv[++i]));
         else if (k == "--ban-file" && hasValue)
             a.banFile = argv[++i];
-        else if (k == "--name" && hasValue)
+        else if (k == "--spawn-point" && hasValue) {  // "Town name:X,Y,Z", repeatable
+            std::string v = argv[++i];
+            size_t colon = v.rfind(':');
+            SpawnPoint sp;
+            if (colon == std::string::npos ||
+                std::sscanf(v.c_str() + colon + 1, "%f,%f,%f", &sp.x, &sp.y, &sp.z) != 3) {
+                std::fprintf(stderr, "bad --spawn-point %s (expected Name:X,Y,Z)\n", v.c_str());
+                return false;
+            }
+            sp.name = v.substr(0, colon);
+            a.spawnPoints.push_back(sp);
+        } else if (k == "--name" && hasValue)
             a.name = argv[++i];
         else if (k == "--description" && hasValue)
             a.description = argv[++i];
@@ -129,6 +141,7 @@ int main(int argc, char** argv) {
     cfg.spawnY = args.spawn[1];
     cfg.spawnZ = args.spawn[2];
     cfg.allowTestBots = args.testBots;
+    cfg.spawnPoints = args.spawnPoints;
     cfg.serverName = args.name;
     cfg.serverDescription = args.description;
 

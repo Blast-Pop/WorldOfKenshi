@@ -30,6 +30,11 @@ struct Outgoing {
     Message msg;
 };
 
+struct SpawnPoint {
+    std::string name;  // e.g. a popular town
+    float x = 0, y = 0, z = 0;
+};
+
 struct SessionConfig {
     uint32_t maxPlayers = 250;
     double timeoutSec = 10.0;
@@ -42,7 +47,9 @@ struct SessionConfig {
     CharacterStore* store = nullptr;
     std::string authUrlBase;                  // e.g. "http://host:27801/auth/start?nonce="
     std::function<AuthToken()> randomToken;   // cryptographically random in production
-    float spawnX = 0, spawnY = 0, spawnZ = 0;  // where new characters appear
+    float spawnX = 0, spawnY = 0, spawnZ = 0;  // fallback spawn when no spawn points are configured
+    std::vector<SpawnPoint> spawnPoints;          // new characters appear at one of these
+    std::function<size_t(size_t count)> pickSpawn;  // index in [0, count); random when empty
     bool allowTestBots = false;  // accept fake ids < kMaxTestBotSteamId without auth (testing only)
 };
 

@@ -2,6 +2,7 @@
 #include <wok/session.hpp>
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace wok {
 
@@ -167,6 +168,14 @@ std::vector<Outgoing> SessionManager::handleCreate(ConnId conn, Conn& c, const C
     d.x = cfg_.spawnX;
     d.y = cfg_.spawnY;
     d.z = cfg_.spawnZ;
+    if (!cfg_.spawnPoints.empty()) {
+        size_t n = cfg_.spawnPoints.size();
+        size_t i = cfg_.pickSpawn ? cfg_.pickSpawn(n) % n : static_cast<size_t>(std::rand()) % n;
+        const SpawnPoint& sp = cfg_.spawnPoints[i];
+        d.x = sp.x;
+        d.y = sp.y;
+        d.z = sp.z;
+    }
     if (!cfg_.store->create(c.steamId, d)) return {};
     c.hasCharacter = true;
     return {Outgoing{conn, d}};

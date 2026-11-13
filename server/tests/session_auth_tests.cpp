@@ -276,3 +276,31 @@ TEST_CASE("new_login_closes_previous_connection_of_same_account") {
     CHECK(std::find(closing.begin(), closing.end(), ConnId{1}) != closing.end());
     CHECK(f.sm.playerCount() == 1);
 }
+
+TEST_CASE("new_character_spawns_at_one_of_the_town_spawn_points") {
+    CharacterStore store(":memory:");
+    SessionConfig c;
+    c.store = &store;
+    c.allowTestBots = false;
+    c.authUrlBase = "http://srv:27801/auth/start?nonce=";
+    c.randomToken = [] {
+        AuthToken t{};
+        t.fill(1);
+        return t;
+    };
+    c.spawnPoints = {{"The Hub", 10.0f, 1.0f, 20.0f}, {"Squin", 30.0f, 2.0f, 40.0f}};
+    c.pickSpawn = [](size_t count) { return count - 1; };  // deterministic for the test: last one
+    SessionManager sm(c);
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 42;
+    std::strcpy(h.name, "p");
+    auto ch = all<AuthChallenge>(sm.onPacket(1, encode(h), 0.0));
+    REQUIRE(ch.size() == 1);
+    sm.onAuthVerified(ch[0].url.substr(ch[0].url.find("nonce=") + 6), 42, 1.0);
+    auto out = sm.onPacket(1, encode(CreateCharacter{"Aeglen", "r", {}}), 2.0);
+    auto chars = all<CharacterData>(out);
+    REQUIRE(chars.size() == 1);
+    CHECK(chars[0].x == 30.0f);
+    CHECK(chars[0].z == 40.0f);
+}
