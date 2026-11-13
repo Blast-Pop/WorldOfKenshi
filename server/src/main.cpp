@@ -36,6 +36,7 @@ struct Args {
     uint16_t httpPort = 27801;
     std::string publicUrl;  // default: http://127.0.0.1:<httpPort>
     float spawn[3] = {-50979.0f, 1533.0f, 2932.0f};  // first place a character was seen in testing
+    bool testBots = false;
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -48,6 +49,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.maxPlayers = static_cast<uint32_t>(std::atoi(argv[++i]));
         else if (k == "--ban-file" && hasValue)
             a.banFile = argv[++i];
+        else if (k == "--test-bots")
+            a.testBots = true;
         else if (k == "--db" && hasValue)
             a.db = argv[++i];
         else if (k == "--http-port" && hasValue)
@@ -119,6 +122,7 @@ int main(int argc, char** argv) {
     cfg.spawnX = args.spawn[0];
     cfg.spawnY = args.spawn[1];
     cfg.spawnZ = args.spawn[2];
+    cfg.allowTestBots = args.testBots;
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);

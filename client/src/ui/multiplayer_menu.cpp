@@ -46,8 +46,9 @@ std::string ownedName(void* w, size_t serverCount) {
 
 }  // namespace
 
-MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig)
-    : cfg_(cfg), net_(net), saveConfig_(std::move(saveConfig)) {}
+MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig,
+                                 std::function<void()> connect)
+    : cfg_(cfg), net_(net), saveConfig_(std::move(saveConfig)), connect_(std::move(connect)) {}
 
 void MultiplayerMenu::ensureButton() {
     if (mygui::findWidget(kButton)) return;
@@ -115,7 +116,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
         cfg_.port = addr->port;
         saveConfig_();
         log("ui: connecting to %s:%u", cfg_.host.c_str(), cfg_.port);
-        net_.start(cfg_);
+        connect_();
     } else if (name.rfind(kServerPrefix, 0) == 0) {
         // Selecting a server only fills the address; "Se connecter" does the rest.
         size_t i = std::stoul(name.substr(std::string(kServerPrefix).size()));
@@ -132,8 +133,11 @@ void MultiplayerMenu::refreshStatus() {
         switch (net_.status()) {
             case ClientNet::Status::Disconnected: s = "Non connecté"; break;
             case ClientNet::Status::Connecting: s = "Connexion..."; break;
+            case ClientNet::Status::AwaitingSteamLogin:
+                s = "Connexion Steam : termine-la dans ton navigateur";
+                break;
             case ClientNet::Status::Connected:
-                s = "Connecté (joueur " + std::to_string(net_.playerId()) + ") - lance ou charge une partie";
+                s = std::string("Connecté - ") + (net_.hasCharacter() ? "personnage trouvé" : "pas encore de personnage");
                 break;
             case ClientNet::Status::Rejected: s = std::string("Refusé : ") + rejectText(net_.rejectReason()); break;
         }

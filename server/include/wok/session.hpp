@@ -20,6 +20,8 @@ namespace wok {
 class CharacterStore;
 
 inline constexpr double kPositionSaveIntervalSec = 10.0;
+// Test bots (wok_testclient) use fake ids below this value; real SteamID64s start at 76561197960265728.
+inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
 
 struct Outgoing {
     ConnId to;
@@ -37,6 +39,7 @@ struct SessionConfig {
     std::string authUrlBase;                  // e.g. "http://host:27801/auth/start?nonce="
     std::function<AuthToken()> randomToken;   // cryptographically random in production
     float spawnX = 0, spawnY = 0, spawnZ = 0;  // where new characters appear
+    bool allowTestBots = false;  // accept fake ids < kMaxTestBotSteamId without auth (testing only)
 };
 
 class SessionManager {

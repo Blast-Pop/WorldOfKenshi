@@ -15,27 +15,36 @@ namespace wok {
 
 class ClientNet {
 public:
-    enum class Status { Disconnected, Connecting, Connected, Rejected };
+    enum class Status { Disconnected, Connecting, AwaitingSteamLogin, Connected, Rejected };
 
-    void start(const ClientConfig& cfg);
+    // `token`: the secret this server gave us earlier (zero on a first visit).
+    void start(const ClientConfig& cfg, uint64_t steamId, const AuthToken& token);
     void stop();
-    void pushLocal(const PlayerState& state);  // game thread
-    std::vector<Message> drainIncoming();      // game thread
+    void pushLocal(const PlayerState& state);         // game thread
+    void createCharacter(const CreateCharacter& c);   // game thread
+    std::vector<Message> drainIncoming();             // game thread
+    std::optional<AuthToken> takeIssuedToken();       // new token to persist, once
+    std::optional<CharacterData> character() const;   // our server-side character, once known
     Status status() const { return status_; }
     RejectReason rejectReason() const { return reject_; }
     PlayerId playerId() const { return playerId_; }
+    bool hasCharacter() const { return hasCharacter_; }
 
 private:
-    void run(ClientConfig cfg);
+    void run(ClientConfig cfg, uint64_t steamId, AuthToken token);
 
     std::thread thread_;
     std::atomic<bool> running_{false};
     std::atomic<Status> status_{Status::Disconnected};
     std::atomic<RejectReason> reject_{RejectReason::None};
     std::atomic<PlayerId> playerId_{0};
-    std::mutex mutex_;
+    std::atomic<bool> hasCharacter_{false};
+    mutable std::mutex mutex_;
     std::optional<PlayerState> outgoing_;
+    std::optional<CreateCharacter> outgoingCreate_;
     std::vector<Message> incoming_;
+    std::optional<AuthToken> issuedToken_;
+    std::optional<CharacterData> character_;
 };
 
 }  // namespace wok

@@ -13,8 +13,8 @@ namespace wok {
 
 class MultiplayerMenu {
 public:
-    // `saveConfig` persists the last used address.
-    MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig);
+    // `saveConfig` persists the last used address; `connect` starts the connection to cfg.host/port.
+    MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect);
     void update(float dt);  // game thread, every frame
 
 private:
@@ -27,6 +27,7 @@ private:
     ClientConfig& cfg_;
     ClientNet& net_;
     std::function<void()> saveConfig_;
+    std::function<void()> connect_;
     float pollTimer_ = 0;
     float statusTimer_ = 0;
     bool mouseWasDown_ = false;

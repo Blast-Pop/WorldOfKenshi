@@ -214,3 +214,31 @@ TEST_CASE("position_persisted_periodically") {
     f.sm.tick(kPositionSaveIntervalSec + 1.0);
     CHECK(f.store.load(42)->x == 11.0f);
 }
+
+TEST_CASE("test_bots_need_the_server_flag") {
+    Fixture f;
+    auto out = f.hello(1, 7);  // fake id in the test-bot range
+    CHECK_FALSE(all<AuthChallenge>(out).empty());  // flag off: treated like anyone else
+}
+
+TEST_CASE("test_bots_accepted_without_auth_when_enabled") {
+    CharacterStore store(":memory:");
+    SessionConfig c;
+    c.store = &store;
+    c.allowTestBots = true;
+    c.randomToken = [] { return AuthToken{}; };
+    SessionManager sm(c);
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 7;
+    std::strcpy(h.name, "Bot");
+    auto out = sm.onPacket(1, encode(h), 0.0);
+    auto acks = all<HelloAck>(out);
+    REQUIRE(acks.size() == 1);
+    CHECK(acks[0].reason == RejectReason::None);
+    CHECK_FALSE(acks[0].hasCharacter);
+    // A real SteamID is never treated as a bot.
+    sm.onConnect(2, 0.0);
+    h.steamId = 76561198000000001ull;
+    CHECK_FALSE(all<AuthChallenge>(sm.onPacket(2, encode(h), 0.0)).empty());
+}

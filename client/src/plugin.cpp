@@ -9,12 +9,14 @@
 #include "input.hpp"
 #include "log.hpp"
 #include "net_client.hpp"
+#include "steam_identity.hpp"
 #include "ui/multiplayer_menu.hpp"
 #include "ui/mygui_abi.hpp"
 
 #include <core/config.hpp>
 #include <core/motion.hpp>
 #include <core/paths.hpp>
+#include <core/tokens.hpp>
 
 #include <wok/protocol.hpp>
 
@@ -53,7 +55,17 @@ struct ClientState {
     wok::AvatarManager avatars;
     bool avatarsOk = false;
     bool wasConnected = false;
+    uint64_t steamId = 0;
 };
+
+std::string tokensPath() { return wok::modFile(wok::modDir(), "tokens.ini"); }
+
+wok::TokenFile loadTokens() {
+    std::ifstream in(tokensPath(), std::ios::binary);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    return wok::parseTokens(ss.str());
+}
 
 void saveConfig(const wok::ClientConfig& cfg) {
     std::ofstream(wok::modFile(wok::modDir(), "wok_client.ini"), std::ios::binary) << wok::serializeConfig(cfg);
@@ -61,18 +73,34 @@ void saveConfig(const wok::ClientConfig& cfg) {
 
 ClientState* g_state = nullptr;
 
+// Connects to cfg.host:port with our SteamID and the token this server gave us earlier (if any).
+void connectToServer() {
+    auto& s = *g_state;
+    if (!s.steamId) s.steamId = wok::localSteamId();
+    auto tokens = loadTokens();
+    auto it = tokens.find(wok::serverKey(s.cfg.host, s.cfg.port));
+    s.net->start(s.cfg, s.steamId, it == tokens.end() ? wok::AuthToken{} : it->second);
+}
+
 void onFrame(float dt) {
     auto& s = *g_state;
     s.now += dt;
     wok::probeTick();
     if (s.menu) s.menu->update(dt);
 
+    if (auto issued = s.net->takeIssuedToken()) {  // first visit verified by Steam: keep our secret
+        auto tokens = loadTokens();
+        tokens[wok::serverKey(s.cfg.host, s.cfg.port)] = *issued;
+        std::ofstream(tokensPath(), std::ios::binary) << wok::serializeTokens(tokens);
+        wok::log("auth: token saved for %s:%u", s.cfg.host.c_str(), s.cfg.port);
+    }
+
     if (wok::keyPressed(VK_F9)) {
         auto st = s.net->status();
         if (st == wok::ClientNet::Status::Connected || st == wok::ClientNet::Status::Connecting)
             wok::log("F9: already %s", st == wok::ClientNet::Status::Connected ? "connected" : "connecting");
         else
-            s.net->start(s.cfg);
+            connectToServer();
     }
 
     if (s.readerOk && s.net->status() == wok::ClientNet::Status::Connected && s.throttle.due(s.now)) {
@@ -130,7 +158,8 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         if (!g_state->readerOk) wok::log("local player reader disabled (signature missing)");
         g_state->avatarsOk = g_state->readerOk && g_state->avatars.init(g_state->reader.gameWorld());
         if (wok::mygui::init())
-            g_state->menu = new wok::MultiplayerMenu(g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); });
+            g_state->menu = new wok::MultiplayerMenu(
+                g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); }, [] { connectToServer(); });
         wok::installFrameHook(onFrame);
         wok::log("Multiplayer button on the main menu (F9 also connects, for development)");
     } catch (...) {

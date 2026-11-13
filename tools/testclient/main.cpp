@@ -61,7 +61,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
         else if (k == "--delay") a.delay = std::atof(v);
         else return false;
     }
-    if (a.steamId == 0) a.steamId = std::hash<std::string>{}(a.name);
+    // Fake id in the server's test-bot range (needs wok_server --test-bots).
+    if (a.steamId == 0) a.steamId = std::hash<std::string>{}(a.name) % 999999 + 1;
     return true;
 }
 

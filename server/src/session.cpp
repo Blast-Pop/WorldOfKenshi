@@ -61,6 +61,11 @@ std::vector<Outgoing> SessionManager::handleHello(ConnId conn, Conn& c, const He
 
     if (!cfg_.store) return accept(conn, c, AuthToken{}, nowSec);
 
+    if (cfg_.allowTestBots && h.steamId != 0 && h.steamId < kMaxTestBotSteamId) {
+        c.steamId = h.steamId;  // test bot: no Steam account, never has a character
+        return accept(conn, c, AuthToken{}, nowSec);
+    }
+
     if (h.token != AuthToken{}) {
         auto known = cfg_.store->tokenFor(h.steamId);
         if (!known || *known != h.token) return reject(conn, RejectReason::BadAuth);
