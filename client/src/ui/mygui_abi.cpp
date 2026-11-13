@@ -44,6 +44,13 @@ struct Api {
     Widget* (*getMouseFocusWidget)(void* input);
     const void* (*editGetCaption)(Widget* edit);
     const void* (*textBoxGetCaption)(Widget* textBox);
+    size_t (*listCount)(Widget* list);
+    const void* (*listNameAt)(Widget* list, size_t index);
+    void (*listBeginTo)(Widget* list, size_t index);
+    Widget* (*listWidgetAt)(Widget* list, size_t index);
+    size_t (*listSelected)(Widget* list);
+    void (*risePressed)(void* widgetInput, int left, int top, int button);
+    void (*riseReleased)(void* widgetInput, int left, int top, int button);
     void (*setKeyFocus)(void* input, Widget* w);
     void (*resetKeyFocus)(void* input);
     bool (*inheritedVisible)(Widget* w);
@@ -125,6 +132,13 @@ bool init() {
     ok &= load(m, g_api.getMouseFocusWidget, "?getMouseFocusWidget@InputManager@MyGUI@@QEBAPEAVWidget@2@XZ");
     ok &= load(m, g_api.editGetCaption, "?getCaption@EditBox@MyGUI@@UEAAAEBVUString@2@XZ");
     load(m, g_api.textBoxGetCaption, "?getCaption@TextBox@MyGUI@@UEAAAEBVUString@2@XZ");
+    load(m, g_api.listCount, "?getItemCount@ListBox@MyGUI@@QEBA_KXZ");
+    load(m, g_api.listNameAt, "?getItemNameAt@ListBox@MyGUI@@QEAAAEBVUString@2@_K@Z");
+    load(m, g_api.listBeginTo, "?beginToItemAt@ListBox@MyGUI@@QEAAX_K@Z");
+    load(m, g_api.listWidgetAt, "?getWidgetByIndex@ListBox@MyGUI@@QEAAPEAVWidget@2@_K@Z");
+    load(m, g_api.listSelected, "?getIndexSelected@ListBox@MyGUI@@QEBA_KXZ");
+    load(m, g_api.risePressed, "?_riseMouseButtonPressed@WidgetInput@MyGUI@@QEAAXHHUMouseButton@2@@Z");
+    load(m, g_api.riseReleased, "?_riseMouseButtonReleased@WidgetInput@MyGUI@@QEAAXHHUMouseButton@2@@Z");
     load(m, g_api.setKeyFocus, "?setKeyFocusWidget@InputManager@MyGUI@@QEAAXPEAVWidget@2@@Z");
     load(m, g_api.resetKeyFocus, "?resetKeyFocusWidget@InputManager@MyGUI@@QEAAXXZ");
     load(m, g_api.inheritedVisible, "?getInheritedVisible@Widget@MyGUI@@QEBA_NXZ");
@@ -330,6 +344,36 @@ std::string injectText(Widget* editBox, std::string_view text) {
 
 bool isShown(Widget* w) { return w && g_api.inheritedVisible && g_api.inheritedVisible(w); }
 
+
+bool pressListItem(Widget* list, std::string_view containing) {
+    if (!list || !mem::isA(reinterpret_cast<uintptr_t>(list), ".?AVListBox@MyGUI@@") || !g_api.listCount ||
+        !g_api.listNameAt || !g_api.listBeginTo || !g_api.listWidgetAt || !g_api.risePressed || !g_api.riseReleased)
+        return false;
+    size_t count = g_api.listCount(list);
+    for (size_t i = 0; i < count && i < 4096; ++i) {
+        const void* u = g_api.listNameAt(list, i);
+        std::string name = u ? g_api.ustringC(u) : "";
+        if (name.find(containing) == std::string::npos) continue;
+        g_api.listBeginTo(list, i);  // scroll it into view: only visible rows have a widget
+        // Left button press/release on a row widget, as the mouse does: the list selects it and
+        // tells its owner (Kenshi's file dialog) which file is chosen. In this MyGUI build
+        // getWidgetByIndex takes the on-screen line (item - first visible item): press line i once,
+        // deduce the first visible item from what got selected, then press the right line.
+        auto press = [&](size_t line) {
+            Widget* row = g_api.listWidgetAt(list, line);
+            if (!row) return SIZE_MAX;
+            g_api.risePressed(reinterpret_cast<char*>(row) + kWidgetInputOffset, 0, 0, 0);
+            g_api.riseReleased(reinterpret_cast<char*>(row) + kWidgetInputOffset, 0, 0, 0);
+            return g_api.listSelected ? g_api.listSelected(list) : SIZE_MAX;
+        };
+        size_t selected = press(0);
+        if (selected != SIZE_MAX && selected <= i && selected != i) selected = press(i - selected);
+        log("mygui: list row %zu '%s' -> selected %zu of %zu", i, name.c_str(), selected, count);
+        return selected == i;
+    }
+    log("mygui: no list row contains '%.*s' (%zu rows)", static_cast<int>(containing.size()), containing.data(), count);
+    return false;
+}
 
 std::string labelText(Widget* textBox) {
     if (!textBox || !g_api.textBoxGetCaption || !mem::isA(reinterpret_cast<uintptr_t>(textBox), ".?AVTextBox@MyGUI@@"))

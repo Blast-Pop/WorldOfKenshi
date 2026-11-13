@@ -9,6 +9,7 @@
 #include <windows.h>
 
 #include <core/appearance.hpp>
+#include <core/paths.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -284,6 +285,10 @@ void MultiplayerMenu::onClick(const std::string& name) {
 }
 
 void MultiplayerMenu::showLoading(const std::string& text) {
+    // Development: a "debug_show_editor" file next to the log keeps the automated editor visible.
+    static const bool showEditor = GetFileAttributesA(modFile(modDir(), "debug_show_editor").c_str()) !=
+                                   INVALID_FILE_ATTRIBUTES;
+    if (showEditor) return;
     if (!mygui::findWidget(kLoadingRoot)) {
         // Our own cover on "Pointer", Kenshi's topmost MyGUI layer (core_layer.xml order): above the
         // game's loading screen and the character editor. Sized to the real window (UI scale).
@@ -315,6 +320,7 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         importStage_ = 0;
         importTries_ = 0;
         genderClicks_ = 0;
+        listTries_ = 0;
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -412,12 +418,22 @@ void MultiplayerMenu::applyConnectedMenu() {
                 for (mygui::Widget* f : mygui::findEditBoxesBySuffix("_EditFileName", 12))
                     if (mygui::isShown(f)) fileName = f;
                 mygui::Widget* open = mygui::findShownBySuffix("_ButtonOpenSave", 12);
-                if (fileName && open) {
-                    std::string typed = mygui::injectText(fileName, importFile_);
-                    log("ui: importing the look '%s' (typed '%s')", importFile_.c_str(), typed.c_str());
-                    mygui::click(open);
-                    importStage_ = 2;
+                mygui::Widget* files = mygui::findShownBySuffix("_ListFiles", 12);
+                if (open && files) {
+                    // Kenshi's dialog loads the file chosen in its list (typing the name is ignored).
+                    std::string stem = importFile_.substr(0, importFile_.rfind('.'));
+                    // The first press may hit a row the list has not redrawn yet after scrolling to
+                    // it: retry on the next polls until our file is the selected one.
+                    bool chosen = mygui::pressListItem(files, stem);
+                    if (chosen || ++listTries_ >= 4) {
+                        log("ui: importing the look '%s': %s", importFile_.c_str(),
+                            chosen ? "selected, opening" : "NOT selected, cancelled");
+                        if (chosen) mygui::click(open);
+                        else if (mygui::Widget* cancel = mygui::findShownBySuffix("_ButtonCancel", 12)) mygui::click(cancel);
+                        importStage_ = 2;
+                    }
                 }
+                (void)fileName;
                 return;
             }
             if (confirm) {
@@ -500,6 +516,9 @@ void MultiplayerMenu::applyConnectedMenu() {
     enteredGame_ = true;
     multiplayerWorld_ = true;
     log("ui: connected, starting the server game (New Game)");
+    // Returning player: cover the screen before Kenshi opens its start selection, so the automated
+    // steps (start, editor) are never seen.
+    if (net_.hasCharacter()) showLoading("Joining the server");
     mygui::click(newGame);
 }
 

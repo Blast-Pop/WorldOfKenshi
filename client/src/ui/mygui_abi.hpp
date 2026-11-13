@@ -49,7 +49,10 @@ Widget* mouseFocus();
 bool isShown(Widget* w);  // visible, parents included
 // Unlocks the edit box and feeds `text` through MyGUI's key input; returns the resulting text.
 std::string injectText(Widget* editBox, std::string_view text);
-std::string labelText(Widget* textBox);  // caption of a plain MyGUI TextBox, empty otherwise
+std::string labelText(Widget* textBox);
+// Presses (left button) the first row of a MyGUI ListBox whose text contains `containing`, like a
+// mouse click. True when the list then has that row selected.
+bool pressListItem(Widget* list, std::string_view containing);  // caption of a plain MyGUI TextBox, empty otherwise
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
 std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own

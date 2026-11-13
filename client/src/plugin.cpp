@@ -14,6 +14,8 @@
 #include "ui/multiplayer_menu.hpp"
 #include "ui/mygui_abi.hpp"
 
+#include <core/appearance.hpp>
+
 #include <core/config.hpp>
 #include <core/motion.hpp>
 #include <core/paths.hpp>
@@ -133,6 +135,15 @@ void onFrame(float dt) {
         if (auto data = s.net->character()) {
             s.characterRestored = true;
             s.avatars.restorePlayer(s.reader.character(), *data);
+            // Check the look really came back (Kenshi's editor Import does the work).
+            if (auto now = wok::readIdentity(s.reader.character())) {
+                auto saved = wok::decodeAppearance(data->appearance);
+                auto got = wok::decodeAppearance(now->appearance);
+                for (const char* key : {"gender", "hair", "beard"})
+                    wok::log("look check: %s saved '%s' in game '%s'%s", key, saved[key].c_str(), got[key].c_str(),
+                             saved[key] == got[key] ? "" : "  <-- DIFFERENT");
+                wok::log("look check: race saved '%s' in game '%s'", data->race.c_str(), now->race.c_str());
+            }
             if (s.menu) s.menu->setWorldReady();  // lift the loading screen
         }
     }
