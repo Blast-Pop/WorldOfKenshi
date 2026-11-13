@@ -284,6 +284,25 @@ void MultiplayerMenu::onClick(const std::string& name) {
 void MultiplayerMenu::applyConnectedMenu() {
     if (net_.status() != ClientNet::Status::Connected) {
         enteredGame_ = false;
+        autoStep_ = 0;
+        return;
+    }
+    // Returning player: Kenshi's start and character-editor screens only load the world, so walk
+    // through them automatically (the server character replaces the start one once in game).
+    if (enteredGame_ && net_.hasCharacter() && !inGame_()) {
+        if (autoStep_ == 0) {
+            if (mygui::Widget* begin = mygui::findBySuffix("_BeginButton", 4)) {
+                autoStep_ = 1;
+                log("ui: returning player, starting the world (Begin)");
+                mygui::click(begin);
+            }
+        } else if (autoStep_ == 1) {
+            if (mygui::Widget* confirm = mygui::findBySuffix("_ConfirmButton", 5)) {
+                autoStep_ = 2;
+                log("ui: returning player, skipping the character editor (Confirm)");
+                mygui::click(confirm);
+            }
+        }
         return;
     }
     if (enteredGame_ || inGame_()) return;

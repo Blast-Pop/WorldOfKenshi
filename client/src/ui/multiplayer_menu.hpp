@@ -50,7 +50,8 @@ private:
     std::string lastStatus_;
     std::string error_;
     bool enteredGame_ = false;
-    bool multiplayerWorld_ = false;  // the loaded world was started from multiplayer (until the title screen)
+    bool multiplayerWorld_ = false;
+    int autoStep_ = 0;  // returning player: 1 = Begin clicked, 2 = editor confirmed  // the loaded world was started from multiplayer (until the title screen)
 };
 
 }  // namespace wok
