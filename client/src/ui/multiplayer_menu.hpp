@@ -50,10 +50,22 @@ private:
     std::string lastStatus_;
     std::string error_;
     bool enteredGame_ = false;
-    bool multiplayerWorld_ = false;
-    int autoStep_ = 0;
+    bool multiplayerWorld_ = false;   // the loaded world was started from multiplayer (until the title screen)
+    int autoStep_ = 0;                // returning player: 1 = Begin clicked, 2 = editor confirmed
     int confirmWaits_ = 0;
-    bool disconnectPending_ = false;  // Disconnect clicked, waiting for Kenshi's exit dialog answer  // returning player: 1 = Begin clicked, 2 = editor confirmed  // the loaded world was started from multiplayer (until the title screen)
+    bool disconnectPending_ = false;  // Disconnect clicked, waiting for Kenshi's exit dialog answer
+    // Loading screen covering the automated steps of a returning player until the world is ready.
+    bool loadingShown_ = false;
+    bool worldReady_ = false;
+    float loadingTime_ = 0;
+    std::string loadingText_;
+    void updateLoading(float dt);
+    void showLoading(const std::string& text);
+    void hideLoading();
+
+public:
+    // Called by the client once the returning player's character is back in place.
+    void setWorldReady() { worldReady_ = true; }
 };
 
 }  // namespace wok

@@ -22,6 +22,9 @@ constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr const char* kDisconnect = "WokDisconnect";
+constexpr const char* kLoading = "WokLoading";
+constexpr const char* kLoadingText = "WokLoadingText";
+constexpr float kLoadingTimeoutSec = 60.0f;  // never leave a player stuck behind the cover
 constexpr size_t kMaxRows = 8;
 
 // Colours ("R G B", 0-1): light text on a paler panel, for contrast with Kenshi's dark window.
@@ -282,6 +285,54 @@ void MultiplayerMenu::onClick(const std::string& name) {
     }
 }
 
+void MultiplayerMenu::showLoading(const std::string& text) {
+    if (!mygui::findWidget(kLoading)) {
+        // Opaque full-screen cover on the topmost layer: hides the automated menus underneath.
+        mygui::Widget* cover = mygui::createRoot("Widget", "WhiteSkin", {0.0f, 0.0f, 1.0f, 1.0f}, "Top", kLoading);
+        if (!cover) return;
+        mygui::setProperty(cover, "Colour", "0.09 0.08 0.06");
+        auto title = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.40f, 1.0f, 0.08f}, "");
+        mygui::setProperty(title, "Caption", "World of Kenshi");
+        mygui::setProperty(title, "TextAlign", "Center");
+        mygui::setProperty(title, "TextColour", kHeaderText);
+        auto line = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.50f, 1.0f, 0.06f},
+                                       kLoadingText);
+        mygui::setProperty(line, "TextAlign", "Center");
+        mygui::setProperty(line, "TextColour", kRowText);
+        loadingShown_ = true;
+        loadingTime_ = 0;
+        log("ui: loading screen shown");
+    }
+    if (text != loadingText_) {
+        mygui::setProperty(mygui::findWidget(kLoadingText), "Caption", text);
+        loadingText_ = text;
+    }
+}
+
+void MultiplayerMenu::hideLoading() {
+    if (mygui::Widget* cover = mygui::findWidget(kLoading)) mygui::destroy(cover);
+    if (loadingShown_) log("ui: loading screen hidden after %.1f s", loadingTime_);
+    loadingShown_ = false;
+    loadingText_.clear();
+}
+
+void MultiplayerMenu::updateLoading(float dt) {
+    bool returning = net_.status() == ClientNet::Status::Connected && net_.hasCharacter() && enteredGame_;
+    if (!returning) {
+        if (loadingShown_) hideLoading();
+        worldReady_ = false;
+        return;
+    }
+    if (worldReady_ || (loadingShown_ && loadingTime_ > kLoadingTimeoutSec)) {
+        if (loadingShown_) hideLoading();
+        return;
+    }
+    loadingTime_ += dt;
+    const char* step = autoStep_ == 0 ? "Joining the server..." : autoStep_ == 1 ? "Loading the world..."
+                                                                                : "Restoring your character...";
+    showLoading(step);
+}
+
 void MultiplayerMenu::applyConnectedMenu() {
     if (net_.status() != ClientNet::Status::Connected) {
         enteredGame_ = false;
@@ -355,6 +406,7 @@ void MultiplayerMenu::update(float dt) {
         ensureButton();
         applyConnectedMenu();
         applyPauseMenu();
+        updateLoading(0.5f);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
             windowOpen_ = false;

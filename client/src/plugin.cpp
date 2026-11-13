@@ -133,6 +133,7 @@ void onFrame(float dt) {
         if (auto data = s.net->character()) {
             s.characterRestored = true;
             s.avatars.restorePlayer(s.reader.character(), *data);
+            if (s.menu) s.menu->setWorldReady();  // lift the loading screen
         }
     }
 
