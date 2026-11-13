@@ -8,6 +8,8 @@
 #include "input.hpp"
 #include "log.hpp"
 #include "net_client.hpp"
+#include "ui/multiplayer_menu.hpp"
+#include "ui/mygui_abi.hpp"
 
 #include <core/config.hpp>
 #include <core/motion.hpp>
@@ -46,7 +48,12 @@ struct ClientState {
     double fpsTimer = 0.0;
     int frames = 0;
     std::map<wok::PlayerId, double> lastRemoteLog;
+    wok::MultiplayerMenu* menu = nullptr;
 };
+
+void saveConfig(const wok::ClientConfig& cfg) {
+    std::ofstream(wok::modFile(wok::modDir(), "wok_client.ini"), std::ios::binary) << wok::serializeConfig(cfg);
+}
 
 ClientState* g_state = nullptr;
 
@@ -54,6 +61,7 @@ void onFrame(float dt) {
     auto& s = *g_state;
     s.now += dt;
     wok::probeTick();
+    if (s.menu) s.menu->update(dt);
 
     if (wok::keyPressed(VK_F9)) {
         auto st = s.net->status();
@@ -107,12 +115,18 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         wok::log("World of Kenshi client loaded (protocol %u)", wok::WOK_PROTOCOL_VERSION);
         g_state = new ClientState;
         g_state->cfg = loadOrCreateConfig();
+        if (g_state->cfg.servers.empty()) {  // until a server browser exists, offer the local test server
+            g_state->cfg.servers.push_back({"Serveur local (test)", "127.0.0.1:27800"});
+            saveConfig(g_state->cfg);
+        }
         wok::log("config: host=%s port=%u name=%s", g_state->cfg.host.c_str(), g_state->cfg.port,
                  g_state->cfg.name.c_str());
         g_state->readerOk = g_state->reader.init();
         if (!g_state->readerOk) wok::log("local player reader disabled (signature missing)");
+        if (wok::mygui::init())
+            g_state->menu = new wok::MultiplayerMenu(g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); });
         wok::installFrameHook(onFrame);
-        wok::log("press F9 in game to connect");
+        wok::log("Multiplayer button on the main menu (F9 also connects, for development)");
     } catch (...) {
         wok::log("dllStartPlugin: unexpected exception");
     }

@@ -5,15 +5,31 @@
 
 #include <cstdint>
 #include <string>
+#include <optional>
 #include <string_view>
+#include <vector>
 
 namespace wok {
+
+struct ServerEntry {
+    std::string name;
+    std::string address;  // "host:port" or "host"
+};
 
 struct ClientConfig {
     std::string host = "127.0.0.1";
     uint16_t port = WOK_DEFAULT_PORT;
     std::string name = "Player";
+    std::vector<ServerEntry> servers;  // "server=Name,host:port" lines (until a server browser exists)
 };
+
+struct Address {
+    std::string host;
+    uint16_t port;
+};
+
+// "host[:port]" with surrounding spaces allowed; nullopt if empty, port invalid or host has spaces.
+std::optional<Address> parseAddress(std::string_view text);
 
 // Unknown keys, comments (# or ;) and malformed lines are ignored; invalid values keep defaults.
 ClientConfig parseConfig(std::string_view text);

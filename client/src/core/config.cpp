@@ -33,6 +33,11 @@ ClientConfig parseConfig(std::string_view text) {
             auto [p, ec] = std::from_chars(value.data(), value.data() + value.size(), v);
             if (ec == std::errc{} && p == value.data() + value.size() && v > 0 && v <= 65535)
                 cfg.port = static_cast<uint16_t>(v);
+        } else if (key == "server") {
+            size_t comma = value.find(',');
+            if (comma == std::string_view::npos) continue;
+            std::string_view n = trim(value.substr(0, comma)), a = trim(value.substr(comma + 1));
+            if (!n.empty() && parseAddress(a)) cfg.servers.push_back({std::string(n), std::string(a)});
         } else if (key == "name") {
             cfg.name = std::string(value.substr(0, 31));  // Hello::name is 32 bytes incl. NUL
         }
@@ -41,8 +46,29 @@ ClientConfig parseConfig(std::string_view text) {
 }
 
 std::string serializeConfig(const ClientConfig& cfg) {
-    return "# World of Kenshi client configuration\n"
-           "host=" + cfg.host + "\nport=" + std::to_string(cfg.port) + "\nname=" + cfg.name + "\n";
+    std::string out = "# World of Kenshi client configuration\n"
+                      "host=" + cfg.host + "\nport=" + std::to_string(cfg.port) + "\nname=" + cfg.name + "\n"
+                      "# Servers shown in the Multiplayer window: server=Name,host:port\n";
+    for (auto& s : cfg.servers) out += "server=" + s.name + "," + s.address + "\n";
+    return out;
+}
+
+std::optional<Address> parseAddress(std::string_view text) {
+    text = trim(text);
+    if (text.empty()) return std::nullopt;
+    Address a{std::string(text), WOK_DEFAULT_PORT};
+    size_t colon = text.rfind(':');
+    if (colon != std::string_view::npos) {
+        std::string_view portText = text.substr(colon + 1);
+        unsigned v = 0;
+        auto [p, ec] = std::from_chars(portText.data(), portText.data() + portText.size(), v);
+        if (portText.empty() || ec != std::errc{} || p != portText.data() + portText.size() || v == 0 || v > 65535)
+            return std::nullopt;
+        a.host = std::string(text.substr(0, colon));
+        a.port = static_cast<uint16_t>(v);
+    }
+    if (a.host.empty() || a.host.find_first_of(" \t") != std::string::npos) return std::nullopt;
+    return a;
 }
 
 }  // namespace wok
