@@ -44,6 +44,33 @@ bool writeFloat(uintptr_t addr, float v) {
 
 }  // namespace
 
+// Health travels with the skills under ids Kenshi never uses (skills are 1..38):
+// 48 = blood (MedicalSystem, character + 0x4c8); 49..55 = the 7 body parts' field +0x40 and
+// 56..62 = their field +0x54 (HealthPartStatus, Kenshi array at character + 0x5e8). docs/re/health.md.
+constexpr uint8_t kBloodId = 48;
+constexpr uint8_t kPartFirstId = 49;
+constexpr uint8_t kPartSecondId = 56;
+constexpr uintptr_t kBlood = 0x4c8;
+constexpr uintptr_t kPartCount = 0x5f0;  // u32
+constexpr uintptr_t kParts = 0x5f8;      // HealthPartStatus**
+constexpr uintptr_t kPartFieldA = 0x40;
+constexpr uintptr_t kPartFieldB = 0x54;
+constexpr uint32_t kMaxParts = 7;
+
+std::vector<std::pair<uint8_t, uintptr_t>> healthSlots(uintptr_t character) {
+    std::vector<std::pair<uint8_t, uintptr_t>> out{{kBloodId, character + kBlood}};
+    uint32_t n = 0;
+    uintptr_t parts = 0;
+    if (!mem::readBytes(character + kPartCount, &n, 4) || !mem::readPtr(character + kParts, parts) || !parts) return out;
+    for (uint32_t i = 0; i < n && i < kMaxParts; ++i) {
+        uintptr_t part = 0;
+        if (!mem::readPtr(parts + i * 8, part) || !part) continue;
+        out.push_back({static_cast<uint8_t>(kPartFirstId + i), part + kPartFieldA});
+        out.push_back({static_cast<uint8_t>(kPartSecondId + i), part + kPartFieldB});
+    }
+    return out;
+}
+
 std::vector<StatValue> readStats(uintptr_t character) {
     std::vector<StatValue> out;
     uintptr_t stats = statsOf(character);
@@ -53,6 +80,11 @@ std::vector<StatValue> readStats(uintptr_t character) {
         if (mem::readBytes(stats + slot.offset, &v, sizeof(v)) && v == v && v > -1e6f && v < 1e6f)
             out.push_back({slot.id, v});
     }
+    if (statsOf(character))
+        for (auto& [id, addr] : healthSlots(character)) {
+            float v = 0;
+            if (mem::readBytes(addr, &v, sizeof(v)) && v == v && v > -1e4f && v < 1e4f) out.push_back({id, v});
+        }
     return out;
 }
 
@@ -60,9 +92,13 @@ int writeStats(uintptr_t character, const std::vector<StatValue>& values) {
     uintptr_t stats = statsOf(character);
     if (!stats) return 0;
     int written = 0;
-    for (const auto& v : values)
+    auto health = healthSlots(character);
+    for (const auto& v : values) {
         for (const auto& slot : kSlots)
             if (slot.id == v.id && writeFloat(stats + slot.offset, v.value)) ++written;
+        for (auto& [id, addr] : health)
+            if (id == v.id && writeFloat(addr, v.value)) ++written;
+    }
     return written;
 }
 

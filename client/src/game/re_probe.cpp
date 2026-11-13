@@ -688,6 +688,83 @@ void clockDump() {
     log("clock: %s |%s", mygui::labelText(mygui::findBySuffix("_TimeText", 12)).c_str(), out.c_str());
 }
 
+void bodyDump(uintptr_t ch) {
+    // Health RE: CharBody (character + 0x648) and what it points to; floats that look like HP.
+    uintptr_t body = 0;
+    if (!readQ(ch + 0x648, body) || !body) return;
+    std::string ptrs, vals;
+    for (uintptr_t off = 8; off < 0x400; off += 8) {
+        uintptr_t v = 0;
+        if (!readQ(body + off, v)) continue;
+        std::string n = v > 0x10000 ? rttiName(v) : "";
+        if (!n.empty()) ptrs += " +" + std::to_string(off) + "=" + n;
+    }
+    for (uintptr_t off = 0; off < 0x400; off += 4) {
+        float f = 0;
+        if (!copyRaw(body + off, &f, 4) || !(f >= 1.0f && f <= 300.0f)) continue;
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), " +%llx=%g", static_cast<unsigned long long>(off), f);
+        vals += buf;
+    }
+    log("body: %s", ptrs.c_str());
+    log("body floats:%s", vals.c_str());
+    // Same float scan on the character itself (the medical state may be embedded there).
+    std::string cv;
+    for (uintptr_t off = 0x400; off < 0x1400; off += 4) {
+        float f = 0;
+        if (!copyRaw(ch + off, &f, 4) || !(f >= 20.0f && f <= 300.0f)) continue;
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), " +%llx=%g", static_cast<unsigned long long>(off), f);
+        cv += buf;
+    }
+    log("char floats:%s", cv.c_str());
+    // Embedded sub-objects (vtable at their start) and a wider float scan.
+    std::string emb, wide;
+    for (uintptr_t off = 8; off < 0x2800; off += 8) {
+        std::string n = rttiName(ch + off);
+        if (!n.empty()) emb += " +" + std::to_string(off) + "=" + n;
+    }
+    for (uintptr_t off = 0x1400; off < 0x2800; off += 4) {
+        float f = 0;
+        if (!copyRaw(ch + off, &f, 4) || !(f >= 20.0f && f <= 400.0f)) continue;
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), " +%llx=%g", static_cast<unsigned long long>(off), f);
+        wide += buf;
+    }
+    log("embedded:%s", emb.c_str());
+    // Health parts: Kenshi array at character + 0x5e8 (vtable, u32 count, u32 cap, HealthPartStatus**).
+    uint32_t n = 0;
+    uintptr_t arr = 0;
+    if (copyRaw(ch + 0x5f0, &n, 4) && readQ(ch + 0x5f8, arr) && n < 32) {
+        for (uint32_t i = 0; i < n; ++i) {
+            uintptr_t part = 0;
+            if (!readQ(arr + i * 8, part) || !part) continue;
+            std::string line;
+            for (uintptr_t off = 8; off < 0x90; off += 4) {
+                float f = 0;
+                uint32_t u = 0;
+                copyRaw(part + off, &f, 4);
+                copyRaw(part + off, &u, 4);
+                std::string str = off % 8 == 0 ? readVc10String(part + off) : "?";
+                char buf[64];
+                if (str != "?" && str.size() >= 3 && str.size() < 24)
+                    std::snprintf(buf, sizeof(buf), " s+%llx='%s'", static_cast<unsigned long long>(off), str.c_str());
+                else if (f > 0.01f && f < 10000.0f)
+                    std::snprintf(buf, sizeof(buf), " f+%llx=%g", static_cast<unsigned long long>(off), f);
+                else if (u > 0 && u < 1000)
+                    std::snprintf(buf, sizeof(buf), " i+%llx=%u", static_cast<unsigned long long>(off), u);
+                else
+                    continue;
+                line += buf;
+            }
+            for (char& c : line)
+                if (static_cast<unsigned char>(c) < 0x20 || static_cast<unsigned char>(c) > 0x7e) c = '.';
+            log("part %u %s:%s", i, rttiName(part).c_str(), line.c_str());
+        }
+    }
+    log("char floats2:%s", wide.c_str());
+}
+
 void onF10() {
     clockDump();
     timeSearch();
@@ -698,6 +775,7 @@ void onF10() {
         return;
     }
     log("comp: character %p", reinterpret_cast<void*>(ch));
+    bodyDump(ch);
     uintptr_t stats = 0;
     for (uintptr_t off = 0; off < 0x1400; off += 8) {
         uintptr_t p = 0;
