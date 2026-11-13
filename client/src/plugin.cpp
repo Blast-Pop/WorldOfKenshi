@@ -5,6 +5,7 @@
 #include "log.hpp"
 
 #include <core/config.hpp>
+#include <core/paths.hpp>
 
 #include <wok/protocol.hpp>
 
@@ -14,7 +15,7 @@
 namespace {
 
 wok::ClientConfig loadOrCreateConfig() {
-    const std::string path = wok::modDir() + "\wok_client.ini";
+    const std::string path = wok::modFile(wok::modDir(), "wok_client.ini");
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         wok::ClientConfig defaults;

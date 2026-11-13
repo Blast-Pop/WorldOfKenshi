@@ -1,5 +1,7 @@
 #include "log.hpp"
 
+#include <core/paths.hpp>
+
 #include <windows.h>
 
 #include <cstdarg>
@@ -18,8 +20,7 @@ const std::string& modDir() {
     static const std::string dir = [] {
         char path[MAX_PATH] = {};
         GetModuleFileNameA(nullptr, path, MAX_PATH);
-        std::string d(path);
-        d = d.substr(0, d.find_last_of("\/")) + "\WorldOfKenshi";
+        std::string d = modDirFromExe(path);
         CreateDirectoryA(d.c_str(), nullptr);
         return d;
     }();
@@ -29,7 +30,7 @@ const std::string& modDir() {
 void logInit() {
     std::lock_guard lock(g_mutex);
     if (g_file) return;
-    g_file = std::fopen((modDir() + "\wok_client.log").c_str(), "w");
+    g_file = std::fopen(modFile(modDir(), "wok_client.log").c_str(), "w");
 }
 
 void log(const char* fmt, ...) {
