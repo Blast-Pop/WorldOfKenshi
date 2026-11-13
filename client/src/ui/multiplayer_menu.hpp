@@ -1,8 +1,9 @@
 #pragma once
-// "Multiplayer" button on Kenshi's main menu + a window with the server address, the known
-// servers (from wok_client.ini for now) and a Connect button.
+// "Multiplayer" button on Kenshi's title screen + a server browser window: one row per server
+// (version, name, description, players, ping), selection, Connect / Unlink / Close.
 
 #include "../net_client.hpp"
+#include "../server_browser.hpp"
 
 #include <core/config.hpp>
 
@@ -13,7 +14,7 @@ namespace wok {
 
 class MultiplayerMenu {
 public:
-    // `saveConfig` persists the last used address; `connect` starts the connection to cfg.host/port.
+    // `saveConfig` persists the last used server; `connect` starts the connection to cfg.host/port.
     // `unlink` forgets this PC's server tokens (next connection asks Steam again).
     // `inGame` tells whether a world is loaded (the pause menu reuses the main menu layout).
     MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect,
@@ -26,6 +27,8 @@ private:
     void closeWindow();
     void onClick(const std::string& widgetName);
     void refreshStatus();
+    void refreshRows();
+    void select(int row);
     void applyConnectedMenu();  // connected on the title screen: start the server game
 
     ClientConfig& cfg_;
@@ -34,6 +37,9 @@ private:
     std::function<void()> connect_;
     std::function<void()> unlink_;
     std::function<bool()> inGame_;
+    ServerBrowser browser_;
+    int selected_ = -1;
+    size_t rowCount_ = 0;
     float pollTimer_ = 0;
     float statusTimer_ = 0;
     bool mouseWasDown_ = false;

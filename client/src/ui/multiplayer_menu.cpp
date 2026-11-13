@@ -14,13 +14,26 @@ namespace {
 
 constexpr const char* kButton = "WokMultiplayerButton";
 constexpr const char* kWindow = "WokMultiplayerWindow";
-constexpr const char* kAddress = "WokAddress";
 constexpr const char* kConnect = "WokConnect";
 constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
-constexpr size_t kMaxServers = 6;
+constexpr size_t kMaxRows = 8;
+
+// Server browser columns, as fractions of the list width (Aeglen's mockup).
+struct Column {
+    const char* suffix;
+    const char* header;
+    float left, width;
+};
+constexpr Column kColumns[] = {
+    {"_ver", "Ver.", 0.00f, 0.07f},     {"_name", "Server name", 0.07f, 0.23f},
+    {"_desc", "Server description", 0.30f, 0.46f}, {"_players", "Players", 0.76f, 0.12f},
+    {"_ping", "Ping", 0.88f, 0.12f},
+};
+constexpr float kListLeft = 0.02f, kListWidth = 0.96f;
+constexpr float kRowTop = 0.09f, kRowHeight = 0.065f, kRowStep = 0.07f;
 
 const char* rejectText(RejectReason r) {
     switch (r) {
@@ -32,16 +45,16 @@ const char* rejectText(RejectReason r) {
     }
 }
 
+std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
+
 // Name of a widget we own if `w` is one of them. Looked up by name, so a stale pointer is never
 // dereferenced: MyGUI widgets are destroyed with their layout.
-std::string ownedName(void* w, size_t serverCount) {
+std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
     for (const char* n : {kButton, kConnect, kClose, kUnlink})
         if (mygui::findWidget(n) == w) return n;
-    for (size_t i = 0; i < serverCount; ++i) {
-        std::string n = kServerPrefix + std::to_string(i);
-        if (mygui::findWidget(n) == w) return n;
-    }
+    for (size_t i = 0; i < rows; ++i)
+        if (mygui::findWidget(rowName(i)) == w) return rowName(i);
     return {};
 }
 
@@ -75,44 +88,79 @@ void MultiplayerMenu::ensureButton() {
 
 void MultiplayerMenu::openWindow() {
     if (mygui::findWidget(kWindow)) return;
-    mygui::Widget* w = mygui::createRoot("Window", "Kenshi_WindowCX", {0.30f, 0.20f, 0.40f, 0.60f}, "Popup", kWindow);
+    mygui::Widget* w = mygui::createRoot("Window", "Kenshi_WindowCX", {0.20f, 0.15f, 0.60f, 0.70f}, "Popup", kWindow);
     if (!w) return;
     mygui::setProperty(w, "Caption", "Multiplayer");
 
-    auto label = [&](const std::string& text, float top) {
-        auto t = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, top, 0.90f, 0.06f}, "");
-        mygui::setProperty(t, "Caption", text);
-    };
-    label("Server address", 0.03f);
-    auto edit = mygui::createChild(w, "EditBox", "Kenshi_EditBox", {0.05f, 0.10f, 0.90f, 0.08f}, kAddress);
-    mygui::setProperty(edit, "Caption", cfg_.host + ":" + std::to_string(cfg_.port));
-
-    label("Available servers", 0.22f);
-    size_t n = std::min(cfg_.servers.size(), kMaxServers);
-    for (size_t i = 0; i < n; ++i) {
-        auto b = mygui::createChild(w, "Button", "Kenshi_Button2", {0.05f, 0.29f + 0.075f * i, 0.90f, 0.065f},
-                                    kServerPrefix + std::to_string(i));
-        mygui::setProperty(b, "Caption", cfg_.servers[i].name + "  (" + cfg_.servers[i].address + ")");
+    for (const Column& c : kColumns) {
+        auto h = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText",
+                                    {kListLeft + c.left * kListWidth + 0.005f, 0.02f, c.width * kListWidth, 0.05f}, "");
+        mygui::setProperty(h, "Caption", c.header);
     }
-    if (n == 0) label("(no server listed in wok_client.ini)", 0.29f);
+    rowCount_ = std::min(cfg_.servers.size(), kMaxRows);
+    for (size_t i = 0; i < rowCount_; ++i) {
+        auto row = mygui::createChild(w, "Button", "Kenshi_Button2",
+                                      {kListLeft, kRowTop + kRowStep * i, kListWidth, kRowHeight}, rowName(i));
+        for (const Column& c : kColumns) {
+            auto cell = mygui::createChild(row, "TextBox", "Kenshi_TextboxStandardText",
+                                           {c.left + 0.005f, 0.0f, c.width - 0.01f, 1.0f}, rowName(i) + c.suffix);
+            mygui::setProperty(cell, "NeedMouse", "false");  // clicks go to the row button
+        }
+    }
+    if (rowCount_ == 0) {
+        auto t = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {kListLeft, kRowTop, kListWidth, 0.06f}, "");
+        mygui::setProperty(t, "Caption", "(no server listed in wok_client.ini)");
+    }
 
-    mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.76f, 0.46f, 0.06f}, kStatus);
+    mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.03f, 0.77f, 0.48f, 0.06f}, kStatus);
     // Unlink lives here, not in Kenshi's Options: Kenshi casts every Options tab to its own panel
     // class when applying settings and crashes on a foreign tab (MyGUI "Bad cast ... DatapanelGUI").
-    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {0.53f, 0.75f, 0.42f, 0.08f}, kUnlink);
+    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {0.53f, 0.76f, 0.44f, 0.07f}, kUnlink);
     mygui::setProperty(unlink, "Caption", "Unlink Steam account");
-    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {0.05f, 0.85f, 0.42f, 0.10f}, kConnect);
+    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {0.03f, 0.86f, 0.46f, 0.10f}, kConnect);
     mygui::setProperty(connect, "Caption", "Connect");
-    auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {0.53f, 0.85f, 0.42f, 0.10f}, kClose);
+    auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {0.53f, 0.86f, 0.44f, 0.10f}, kClose);
     mygui::setProperty(close, "Caption", "Close");
+
     windowOpen_ = true;
     lastStatus_ = "?";
     error_.clear();
+    browser_.start(std::vector<ServerEntry>(cfg_.servers.begin(), cfg_.servers.begin() + rowCount_));
+    // Preselect the last server used.
+    selected_ = -1;
+    for (size_t i = 0; i < rowCount_; ++i)
+        if (auto a = parseAddress(cfg_.servers[i].address); a && a->host == cfg_.host && a->port == cfg_.port)
+            select(static_cast<int>(i));
+    refreshRows();
 }
 
 void MultiplayerMenu::closeWindow() {
+    browser_.stop();
     mygui::destroy(mygui::findWidget(kWindow));
     windowOpen_ = false;
+}
+
+void MultiplayerMenu::select(int row) {
+    selected_ = row;
+    for (size_t i = 0; i < rowCount_; ++i)
+        mygui::setProperty(mygui::findWidget(rowName(i)), "StateSelected", static_cast<int>(i) == row ? "true" : "false");
+}
+
+void MultiplayerMenu::refreshRows() {
+    auto rows = browser_.rows();
+    for (size_t i = 0; i < rows.size() && i < rowCount_; ++i) {
+        const ServerRow& r = rows[i];
+        auto set = [&](const char* suffix, const std::string& text) {
+            mygui::setProperty(mygui::findWidget(rowName(i) + suffix), "Caption", text);
+        };
+        bool online = r.state == ServerRow::State::Online && r.info;
+        set("_ver", online ? "v" + std::to_string(r.info->protocolVersion) : "-");
+        set("_name", online ? r.info->name : r.entry.name);
+        set("_desc", online ? r.info->description
+                            : (r.state == ServerRow::State::Offline ? "Offline (" + r.entry.address + ")" : "Querying..."));
+        set("_players", online ? std::to_string(r.info->players) + " / " + std::to_string(r.info->maxPlayers) : "-");
+        set("_ping", online ? std::to_string(r.pingMs) + " ms" : "-");
+    }
 }
 
 void MultiplayerMenu::onClick(const std::string& name) {
@@ -130,9 +178,13 @@ void MultiplayerMenu::onClick(const std::string& name) {
             log("ui: Connect ignored, a connection is already in progress");
             return;  // never restart a connection (and a Steam login) that is still going
         }
-        auto addr = parseAddress(mygui::editText(mygui::findWidget(kAddress)));
+        if (selected_ < 0 || static_cast<size_t>(selected_) >= rowCount_) {
+            error_ = "Select a server first.";
+            return;
+        }
+        auto addr = parseAddress(cfg_.servers[selected_].address);
         if (!addr) {
-            error_ = "Invalid address (example: 45.32.1.2:27800)";
+            error_ = "Invalid server address in wok_client.ini.";
             return;
         }
         error_.clear();
@@ -142,10 +194,8 @@ void MultiplayerMenu::onClick(const std::string& name) {
         log("ui: connecting to %s:%u", cfg_.host.c_str(), cfg_.port);
         connect_();
     } else if (name.rfind(kServerPrefix, 0) == 0) {
-        // Selecting a server only fills the address; "Connect" does the rest.
-        size_t i = std::stoul(name.substr(std::string(kServerPrefix).size()));
-        if (i < cfg_.servers.size())
-            mygui::setProperty(mygui::findWidget(kAddress), "Caption", cfg_.servers[i].address);
+        select(static_cast<int>(std::stoul(name.substr(std::string(kServerPrefix).size()))));
+        error_.clear();
     }
 }
 
@@ -194,7 +244,11 @@ void MultiplayerMenu::update(float dt) {
         pollTimer_ = 0;
         ensureButton();
         applyConnectedMenu();
-        if (windowOpen_ && !mygui::findWidget(kWindow)) windowOpen_ = false;
+        if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
+            browser_.stop();
+            windowOpen_ = false;
+        }
+        if (windowOpen_) refreshRows();
     }
     if (windowOpen_) {
         statusTimer_ += dt;
@@ -221,7 +275,7 @@ void MultiplayerMenu::update(float dt) {
     if (!down && mouseWasDown_) {
         void* releasedOn = mygui::mouseFocus();
         if (releasedOn && releasedOn == pressedOn_) {
-            std::string name = ownedName(releasedOn, std::min(cfg_.servers.size(), kMaxServers));
+            std::string name = ownedName(releasedOn, rowCount_);
             if (!name.empty()) onClick(name);
         }
         pressedOn_ = nullptr;
