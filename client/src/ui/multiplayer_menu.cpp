@@ -411,8 +411,10 @@ void MultiplayerMenu::applyConnectedMenu() {
                     // the game itself names it: portrait, name tag and everything else follow.
                     if (auto data = net_.character()) {
                         mygui::Widget* panel = mygui::findBySuffixExcept("_NamePanel", kLoadingPrefix, 12);
-                        if (mygui::Widget* name = mygui::findChildBySuffix(panel, "_NameText", 3))
-                            mygui::setProperty(name, "Caption", data->name);
+                        mygui::Widget* name = mygui::findChildBySuffix(panel, "_NameText", 3);
+                        bool typed = mygui::typeInto(name, data->name);
+                        log("ui: editor name field %s -> '%s' (typed: %s)", name ? "found" : "NOT found",
+                            name ? mygui::editText(name) : "", typed ? "yes" : "no");
                     }
                     log("ui: returning player, confirming the character editor (try %d)", confirmWaits_ / 8);
                     mygui::click(confirm);

@@ -30,7 +30,11 @@ const std::string& modDir() {
 void logInit() {
     std::lock_guard lock(g_mutex);
     if (g_file) return;
-    g_file = std::fopen(modFile(modDir(), "wok_client.log").c_str(), "w");
+    // Keep the previous session's log (a test often ends by closing the game).
+    std::string path = modFile(modDir(), "wok_client.log");
+    std::string prev = modFile(modDir(), "wok_client.prev.log");
+    MoveFileExA(path.c_str(), prev.c_str(), MOVEFILE_REPLACE_EXISTING);
+    g_file = std::fopen(path.c_str(), "w");
 }
 
 void log(const char* fmt, ...) {

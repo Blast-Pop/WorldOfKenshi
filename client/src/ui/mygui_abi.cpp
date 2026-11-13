@@ -42,6 +42,10 @@ struct Api {
     void (*destroyWidget)(void* gui, Widget* w);
     Widget* (*getMouseFocusWidget)(void* input);
     const void* (*editGetCaption)(Widget* edit);
+    void (*setKeyFocus)(void* input, Widget* w);
+    void (*resetKeyFocus)(void* input);
+    bool (*injectKeyPress)(void* input, int keyCode, unsigned int ch);
+    bool (*injectKeyRelease)(void* input, int keyCode);
     const char* (*ustringC)(const void* ustring);
     const S* (*getName)(Widget* w);
     size_t (*getChildCount)(Widget* w);
@@ -111,6 +115,10 @@ bool init() {
     ok &= load(m, g_api.destroyWidget, "?destroyWidget@Gui@MyGUI@@QEAAXPEAVWidget@2@@Z");
     ok &= load(m, g_api.getMouseFocusWidget, "?getMouseFocusWidget@InputManager@MyGUI@@QEBAPEAVWidget@2@XZ");
     ok &= load(m, g_api.editGetCaption, "?getCaption@EditBox@MyGUI@@UEAAAEBVUString@2@XZ");
+    load(m, g_api.setKeyFocus, "?setKeyFocusWidget@InputManager@MyGUI@@QEAAXPEAVWidget@2@@Z");
+    load(m, g_api.resetKeyFocus, "?resetKeyFocusWidget@InputManager@MyGUI@@QEAAXXZ");
+    load(m, g_api.injectKeyPress, "?injectKeyPress@InputManager@MyGUI@@QEAA_NUKeyCode@2@I@Z");
+    load(m, g_api.injectKeyRelease, "?injectKeyRelease@InputManager@MyGUI@@QEAA_NUKeyCode@2@@Z");
     ok &= load(m, g_api.ustringC, "?asUTF8_c_str@UString@MyGUI@@QEBAPEBDXZ");
     ok &= load(m, g_api.getName,
                "?getName@Widget@MyGUI@@QEBAAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ");
@@ -252,6 +260,19 @@ std::string nameOf(Widget* w) {
     const S* s = g_api.getName(w);
     if (!s || s->size > 4096) return {};
     return std::string(s->capacity >= 16 ? s->ptr : s->buf, s->size);
+}
+
+bool typeInto(Widget* editBox, std::string_view text) {
+    void* input = g_api.getInput();
+    if (!editBox || !input || !g_api.setKeyFocus || !g_api.injectKeyPress || !g_api.injectKeyRelease) return false;
+    setProperty(editBox, "Caption", "");
+    g_api.setKeyFocus(input, editBox);
+    for (unsigned char c : text) {  // key code 0 (None) + character: the edit box inserts it and fires its events
+        g_api.injectKeyPress(input, 0, c);
+        g_api.injectKeyRelease(input, 0);
+    }
+    if (g_api.resetKeyFocus) g_api.resetKeyFocus(input);
+    return true;
 }
 
 const char* editText(Widget* editBox) {

@@ -45,6 +45,8 @@ Widget* createRoot(std::string_view type, std::string_view skin, FloatCoord coor
 void setProperty(Widget* w, std::string_view key, std::string_view value);
 void destroy(Widget* w);
 Widget* mouseFocus();
+// Types `text` into an edit box like a player would (ASCII), so the game's text-change handlers run.
+bool typeInto(Widget* editBox, std::string_view text);
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
 std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
