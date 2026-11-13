@@ -50,6 +50,8 @@ std::string nameOf(Widget* w);          // full MyGUI name (layout prefix includ
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
 // widgets are found by name suffix, searching the root widgets down to `maxDepth` levels.
 Widget* findBySuffix(std::string_view suffix, int maxDepth);
+// Same, ignoring widgets whose name starts with `excludedPrefix` (e.g. our own copies).
+Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth);
 // Diagnostic: logs the full name of every widget whose name ends with `suffix`.
 void logWidgetsWithSuffix(std::string_view suffix, int maxDepth);
 // Fires the widget's click event exactly like a real mouse click (runs the game's own handler).

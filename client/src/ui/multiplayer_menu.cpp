@@ -338,6 +338,15 @@ void MultiplayerMenu::updateLoading(float dt) {
     loadingTime_ += dt;
     const char* step = autoStep_ == 0 ? "Joining the server..." : autoStep_ == 1 ? "Loading the world..."
                                                                                 : "Restoring your character...";
+    // Never two loading screens: while Kenshi shows its own, drop ours and write our step into it.
+    if (mygui::Widget* kenshiText = mygui::findBySuffixExcept("_LoadingText", kLoadingPrefix, 4)) {
+        if (mygui::Widget* ours = mygui::findWidget(kLoadingRoot)) mygui::destroy(ours);
+        mygui::setProperty(kenshiText, "Caption", step);
+        loadingShown_ = true;  // still "covered", by Kenshi's screen
+        loadingText_ = step;
+        return;
+    }
+    if (loadingShown_ && !mygui::findWidget(kLoadingRoot)) loadingShown_ = false;  // Kenshi's screen just closed
     showLoading(step);
 }
 
@@ -359,15 +368,17 @@ void MultiplayerMenu::applyConnectedMenu() {
                 mygui::click(begin);
             }
         } else if (autoStep_ == 1) {
-            // The editor's Confirm sits deep inside its panels: search well below the root widgets.
-            if (mygui::Widget* confirm = mygui::findBySuffix("_ConfirmButton", 12)) {
+            // The editor's Confirm only works once the editor has finished building: keep clicking it
+            // every ~2 s while it exists; the editor is done once the button is gone.
+            mygui::Widget* confirm = mygui::findBySuffixExcept("_ConfirmButton", kLoadingPrefix, 12);
+            if (confirm) {
+                if (confirmWaits_++ % 4 == 0) {
+                    log("ui: returning player, confirming the character editor ('%s')", mygui::nameOf(confirm).c_str());
+                    mygui::click(confirm);
+                }
+            } else if (confirmWaits_ > 0) {
                 autoStep_ = 2;
-                log("ui: returning player, skipping the character editor (Confirm '%s')",
-                    mygui::nameOf(confirm).c_str());
-                mygui::click(confirm);
-            } else if (++confirmWaits_ == 20) {  // ~10 s without finding it: list candidates once
-                log("ui: Confirm not found yet, editor widgets ending in 'Button':");
-                mygui::logWidgetsWithSuffix("Button", 12);
+                log("ui: character editor closed");
             }
         }
         return;

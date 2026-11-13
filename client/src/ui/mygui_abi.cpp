@@ -65,13 +65,14 @@ bool endsWith(const std::string& s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-Widget* searchChildren(Widget* w, std::string_view suffix, int depth) {
+Widget* searchChildren(Widget* w, std::string_view suffix, int depth, std::string_view exclude = {}) {
     if (!w) return nullptr;
-    if (endsWith(nameOf(w), suffix)) return w;
+    std::string n = nameOf(w);
+    if (endsWith(n, suffix) && (exclude.empty() || n.compare(0, exclude.size(), exclude) != 0)) return w;
     if (depth == 0) return nullptr;
-    size_t n = g_api.getChildCount(w);
-    for (size_t i = 0; i < n && i < 512; ++i)
-        if (Widget* hit = searchChildren(g_api.getChildAt(w, i), suffix, depth - 1)) return hit;
+    size_t k = g_api.getChildCount(w);
+    for (size_t i = 0; i < k && i < 512; ++i)
+        if (Widget* hit = searchChildren(g_api.getChildAt(w, i), suffix, depth - 1, exclude)) return hit;
     return nullptr;
 }
 bool g_ok = false;
@@ -189,6 +190,19 @@ void logWidgetsWithSuffix(std::string_view suffix, int maxDepth) {
         uintptr_t root = 0;
         if (mem::readPtr(it, root)) logMatches(reinterpret_cast<Widget*>(root), suffix, maxDepth, count);
     }
+}
+
+Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth) {
+    auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
+    uintptr_t begin = 0, end = 0;
+    if (!gui || !mem::readPtr(gui + kGuiRootsBegin, begin) || !mem::readPtr(gui + kGuiRootsEnd, end)) return nullptr;
+    if (end < begin || end - begin > 8 * 4096) return nullptr;
+    for (uintptr_t it = begin; it < end; it += 8) {
+        uintptr_t root = 0;
+        if (!mem::readPtr(it, root)) continue;
+        if (Widget* hit = searchChildren(reinterpret_cast<Widget*>(root), suffix, maxDepth, excludedPrefix)) return hit;
+    }
+    return nullptr;
 }
 
 Widget* findBySuffix(std::string_view suffix, int maxDepth) {
