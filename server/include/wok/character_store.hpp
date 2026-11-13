@@ -27,6 +27,7 @@ public:
     bool create(uint64_t steamId, const CharacterData& c);  // false if the player already has one
     void savePosition(uint64_t steamId, float x, float y, float z, float yaw);
     void saveStats(uint64_t steamId, const std::vector<StatValue>& stats);  // replaces all saved skills
+    void saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory);
 
 private:
     sqlite3* db_ = nullptr;

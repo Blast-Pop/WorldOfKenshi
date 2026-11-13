@@ -2,6 +2,7 @@
 
 #include "../log.hpp"
 #include "game_memory.hpp"
+#include "../ui/mygui_abi.hpp"
 
 #include <windows.h>
 
@@ -16,6 +17,8 @@ constexpr uintptr_t kCreateItem = 0x580750;     // (factory, GameData* item, han
 constexpr uint8_t kCreateItemPrologue[] = {0x40, 0x55, 0x53, 0x56};  // push rbp; push rbx; push rsi
 constexpr uintptr_t kNullHand = 0x1e3a5f8;      // a global empty "hand" (object handle); its vtable is reused
 constexpr uintptr_t kCharacterGiveItemVt = 0x168;  // Character vtable slot: giveItem(Item*, bool)
+constexpr uintptr_t kFindByType = 0x6bfe60;    // (GameData manager = GameWorld+0x20, const std::string*, int type)
+constexpr uintptr_t kGameDataManagerOff = 0x20;
 
 // Kenshi's object handle as passed by value-pointer to the factory (vtable + ids).
 struct Hand {
@@ -34,6 +37,14 @@ uintptr_t guardedCreate(CreateItemFn fn, uintptr_t factory, uintptr_t data, cons
                         uintptr_t model) {
     __try {
         return fn(factory, data, h, manufacturer, model, 0, nullptr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
+uintptr_t guardedFind(uintptr_t fn, uintptr_t manager, const mygui::Vc10String* id, int type) {
+    __try {
+        return reinterpret_cast<uintptr_t (*)(uintptr_t, const mygui::Vc10String*, int)>(fn)(manager, id, type);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
     }
@@ -68,6 +79,13 @@ uintptr_t Items::create(uintptr_t itemData, uintptr_t manufacturer, uintptr_t mo
     uintptr_t item = guardedCreate(reinterpret_cast<CreateItemFn>(mem::moduleBase() + kCreateItem), factory, itemData,
                                    &h, manufacturer, model);
     return item && mem::isA(item, ".?AVGameData@@") ? 0 : item;
+}
+
+uintptr_t Items::find(const std::string& stringId, int type) const {
+    if (!ok_ || stringId.empty()) return 0;
+    mygui::Vc10String id(stringId);  // MSVC 2010 std::string layout, read-only for the game
+    uintptr_t gd = guardedFind(mem::moduleBase() + kFindByType, gw_ + kGameDataManagerOff, &id, type);
+    return gd && mem::isA(gd, ".?AVGameData@@") ? gd : 0;
 }
 
 bool Items::give(uintptr_t character, uintptr_t item) const {

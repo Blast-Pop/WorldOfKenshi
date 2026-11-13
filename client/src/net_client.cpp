@@ -49,6 +49,7 @@ void ClientNet::start(const ClientConfig& cfg, uint64_t steamId, const AuthToken
         issuedToken_.reset();
         outgoingCreate_.reset();
         outgoingStats_.clear();
+        outgoingInventory_.reset();
     }
     thread_ = std::thread([this, cfg, steamId, token] { run(cfg, steamId, token); });
 }
@@ -72,6 +73,11 @@ void ClientNet::createCharacter(const CreateCharacter& c) {
 void ClientNet::sendStats(const StatsUpdate& u) {
     std::lock_guard lock(mutex_);
     for (auto& v : u.values) outgoingStats_[v.id] = v.value;
+}
+
+void ClientNet::sendInventory(std::vector<uint8_t> items) {
+    std::lock_guard lock(mutex_);
+    outgoingInventory_ = std::move(items);
 }
 
 std::vector<Message> ClientNet::drainIncoming() {
@@ -170,12 +176,16 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
                 std::optional<PlayerState> out;
                 std::optional<CreateCharacter> create;
                 std::map<uint8_t, float> stats;
+                std::optional<std::vector<uint8_t>> inventory;
                 {
                     std::lock_guard lock(mutex_);
                     out = std::exchange(outgoing_, std::nullopt);
                     create = std::exchange(outgoingCreate_, std::nullopt);
                     // Only after the character exists on the server (it ignores stats before).
-                    if (!create && character_) stats = std::exchange(outgoingStats_, {});
+                    if (!create && character_) {
+                        stats = std::exchange(outgoingStats_, {});
+                        inventory = std::exchange(outgoingInventory_, std::nullopt);
+                    }
                 }
                 if (out) {
                     auto b = encode(*out);
@@ -183,6 +193,10 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
                 }
                 if (create) {
                     auto b = encode(*create);
+                    net.send(b, true);
+                }
+                if (inventory) {
+                    auto b = encode(InventoryUpdate{std::move(*inventory)});
                     net.send(b, true);
                 }
                 if (!stats.empty()) {

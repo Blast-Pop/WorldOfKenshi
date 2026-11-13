@@ -24,6 +24,7 @@ public:
     void pushLocal(const PlayerState& state);         // game thread
     void createCharacter(const CreateCharacter& c);   // game thread
     void sendStats(const StatsUpdate& u);             // game thread; merged until sent (reliable)
+    void sendInventory(std::vector<uint8_t> items);   // game thread; the latest one is sent (reliable)
     std::vector<Message> drainIncoming();             // game thread
     std::optional<AuthToken> takeIssuedToken();       // new token to persist, once
     std::optional<CharacterData> character() const;   // our server-side character, once known
@@ -45,6 +46,7 @@ private:
     std::optional<PlayerState> outgoing_;
     std::optional<CreateCharacter> outgoingCreate_;
     std::map<uint8_t, float> outgoingStats_;
+    std::optional<std::vector<uint8_t>> outgoingInventory_;
     std::vector<Message> incoming_;
     std::optional<AuthToken> issuedToken_;
     std::optional<CharacterData> character_;

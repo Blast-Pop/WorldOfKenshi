@@ -26,6 +26,7 @@ constexpr const char* kSchema =
 constexpr const char* kMigrations[] = {
     "ALTER TABLE characters ADD COLUMN template TEXT NOT NULL DEFAULT '';",
     "ALTER TABLE characters ADD COLUMN stats BLOB NOT NULL DEFAULT x'';",
+    "ALTER TABLE characters ADD COLUMN inventory BLOB NOT NULL DEFAULT x'';",
 };
 
 // Stats on disk: id (1 byte) + value (float, 4 bytes little-endian) per skill.
@@ -130,7 +131,7 @@ void CharacterStore::setToken(uint64_t steamId, const AuthToken& token) {
 }
 
 std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
-    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw, template, stats FROM characters WHERE steam_id = ?1");
+    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw, template, stats, inventory FROM characters WHERE steam_id = ?1");
     s.id(1, steamId);
     if (s.step() != SQLITE_ROW) return std::nullopt;
     CharacterData c;
@@ -145,6 +146,8 @@ std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
     c.templateId = columnText(s.get(), 7);
     c.stats = unpackStats(static_cast<const uint8_t*>(sqlite3_column_blob(s.get(), 8)),
                           static_cast<size_t>(sqlite3_column_bytes(s.get(), 8)));
+    auto inv = static_cast<const uint8_t*>(sqlite3_column_blob(s.get(), 9));
+    if (inv) c.inventory.assign(inv, inv + sqlite3_column_bytes(s.get(), 9));
     return c;
 }
 
@@ -160,6 +163,11 @@ void CharacterStore::saveStats(uint64_t steamId, const std::vector<StatValue>& s
     auto blob = packStats(stats);
     Stmt s(db_, "UPDATE characters SET stats = ?2 WHERE steam_id = ?1");
     s.id(1, steamId).blob(2, blob.data(), blob.size()).step();
+}
+
+void CharacterStore::saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory) {
+    Stmt s(db_, "UPDATE characters SET inventory = ?2 WHERE steam_id = ?1");
+    s.id(1, steamId).blob(2, inventory.data(), inventory.size()).step();
 }
 
 void CharacterStore::savePosition(uint64_t steamId, float x, float y, float z, float yaw) {

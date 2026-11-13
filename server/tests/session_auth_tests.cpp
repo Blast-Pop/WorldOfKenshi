@@ -343,3 +343,21 @@ TEST_CASE("returning_player_gets_saved_stats") {
     REQUIRE(chars.size() == 1);
     CHECK(chars[0].stats == std::vector<StatValue>{{18, 9.0f}});
 }
+
+TEST_CASE("inventory_saved_in_batches_and_returned") {
+    Fixture f;
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    REQUIRE(f.store.create(42, sampleChar()));
+    f.hello(1, 42, t);
+    std::vector<uint8_t> inv{'h', 'i', 'p'};
+    f.sm.onPacket(1, encode(InventoryUpdate{inv}), 0.5);
+    CHECK(f.store.load(42)->inventory.empty());
+    f.sm.tick(kProgressSaveIntervalSec + 1.0);
+    CHECK(f.store.load(42)->inventory == inv);
+    f.sm.onDisconnect(1);
+    auto chars = all<CharacterData>(f.hello(2, 42, t));
+    REQUIRE(chars.size() == 1);
+    CHECK(chars[0].inventory == inv);
+}

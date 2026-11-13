@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 3.
+// World of Kenshi wire protocol, version 4.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 3;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 4;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -22,7 +22,8 @@ constexpr size_t kMaxAppearanceBytes = 16384;  // includes Kenshi's exported bod
 constexpr size_t kMaxUrlBytes = 512;
 constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;
-constexpr size_t kMaxStats = 64;  // skill ids are 1..kMaxStats (docs/re/stats.md)
+constexpr size_t kMaxStats = 64;
+constexpr size_t kMaxInventoryBytes = 32768;  // the client's inventory text (opaque to the server)  // skill ids are 1..kMaxStats (docs/re/stats.md)
 
 using PlayerId = uint32_t;
 using ConnId = uint32_t;  // connection handle assigned by the transport
@@ -40,6 +41,7 @@ enum class MsgType : uint8_t {
     ServerInfoRequest = 9,
     ServerInfo = 10,
     StatsUpdate = 11,
+    InventoryUpdate = 12,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -108,6 +110,7 @@ struct CharacterData {
     std::string templateId;            // FCS stringID of the character template (e.g. a start's character)
     float x = 0, y = 0, z = 0, yaw = 0;
     std::vector<StatValue> stats;      // saved skills (empty for a new character)
+    std::vector<uint8_t> inventory;    // saved inventory, opaque (empty: keep what the game gives)
     bool operator==(const CharacterData&) const = default;
 };
 
@@ -140,8 +143,14 @@ struct StatsUpdate {
     bool operator==(const StatsUpdate&) const = default;
 };
 
+// The character's whole inventory, sent when it changes (client -> server).
+struct InventoryUpdate {
+    std::vector<uint8_t> items;
+    bool operator==(const InventoryUpdate&) const = default;
+};
+
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
-                             CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate>;
+                             CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

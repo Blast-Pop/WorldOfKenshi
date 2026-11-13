@@ -83,6 +83,8 @@ private:
         bool positionDirty = false;
         std::map<uint8_t, float> stats;  // latest known skills of the character
         bool statsDirty = false;
+        std::vector<uint8_t> inventory;  // latest known inventory (opaque)
+        bool inventoryDirty = false;
         double lastSaved = 0.0;
     };
 

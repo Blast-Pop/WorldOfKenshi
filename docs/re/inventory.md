@@ -17,17 +17,20 @@ Found with the Ctrl+Shift+F10 probe (client/src/game/re_probe.cpp).
 Still unknown: the stack quantity and condition fields, and the game's own functions that create
 an item from a GameData and put it in a section (needed to restore an inventory).
 
-## Creating items (in progress, 2026-11-13)
+## Creating, giving and removing items (verified in game 2026-11-13)
 
-- Item factory: RVA `0x580750`, `(factory = GameWorld+0x4a0, GameData* data, hand*, GameData* p4,
-  GameData* p5, int level, void*) -> Item*`. Switches on `GameData + 0x50` (type): it returns null
-  for type 2, and for type 0x33 builds a weapon (`Sword`) from `p4` (weapon) + `data` + `p5`
-  ("weapon models"), so a weapon is created from its manufacturer/model data, not from the type-2
-  weapon record alone. To check next: the exact roles of `data`/`p4`/`p5` for weapons.
-- The game passes a fresh handle `{hand vtable, 0xb, 0, 0, 0}`; the hand vtable can be read from the
-  global empty hand at RVA `0x1e3a5f8`.
-- Character vtable slot `+0x168`: give an item `(Character*, Item*, bool)`; a dialog reward uses it.
-- GameData lookup RVA `0x6bfda0` `(GameWorld+0x20, const std::string*, int type)`: the data is
-  indexed by type. The held Iron Club record is type 2, but looking up "52295-rebirth.mod" with
-  type 2 returned null: to investigate (maybe items need the type-specific lookup RVA `0x6bfe60`).
-- Ctrl+Shift+F2 probe: tries to create a copy of the held weapon and give it.
+- GameData lookup by string ID **and type**: RVA `0x6bfe60` `(GameWorld+0x20, const std::string*, int type)`.
+  The type is at `GameData + 0x50` (weapons 2, armour 3, weapon manufacturer 51, weapon model 50,
+  armour grade 47). RVA `0x6bfda0` did not find item records.
+- Item factory RVA `0x580750` `(factory = *(GameWorld+0x4a0), GameData* data, hand*, GameData* p4,
+  GameData* p5, int level, void*)`. A weapon is created with `data` = manufacturer, `p4` = weapon,
+  `p5` = model (`Item + 0xc0`, `+0x40`, `+0xc8` of an existing weapon); other items with their own
+  record and `p5` = grade/material. Handle: `{hand vtable from RVA 0x1e3a5f8, 0xb, 0, 0, 0}`.
+- `Character` vtable `+0x168`: give an item `(Item*, bool)`; Kenshi equips it in a free matching
+  slot (a second weapon goes to `back` = Weapon II) or puts it in `main`.
+- `Inventory` vtable `+0x30`: remove and destroy an item `(Item*, int qty = -1, bool)`;
+  `+0x38` removes without destroying; `Character` vtable `+0x178` checks an item count.
+- Stack quantity: `Item + 0x12c` (int).
+- World of Kenshi saves the inventory as text lines
+  `section, template id, type, aux1 id, type, aux2 id, type, quantity` and restores it by removing
+  the start kit, then creating and giving every saved item.

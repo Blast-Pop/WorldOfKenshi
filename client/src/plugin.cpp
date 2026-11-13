@@ -5,6 +5,8 @@
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
 #include "game/identity.hpp"
+#include "game/inventory.hpp"
+#include "game/items.hpp"
 #include "game/stats.hpp"
 #include "game/local_player.hpp"
 #include "game/re_probe.hpp"
@@ -65,6 +67,10 @@ struct ClientState {
     bool characterSent = false;  // CreateCharacter already sent during this connection
     bool characterRestored = false;
     std::map<uint8_t, float> statsSent;  // skills the server already has
+    wok::Items items;
+    bool itemsOk = false;
+    std::string inventorySent;           // inventory text the server already has
+    double nextInventoryPoll = 0;
     double nextStatsPoll = 0;  // returning player's server character recreated in this world
 };
 
@@ -142,6 +148,11 @@ void onFrame(float dt) {
             int applied = wok::writeStats(s.reader.character(), data->stats);
             wok::log("stats: %d saved skills applied", applied);
             for (auto& st : data->stats) s.statsSent[st.id] = st.value;
+            if (!s.itemsOk) s.itemsOk = s.items.init(s.reader.gameWorld());
+            std::string savedInventory(data->inventory.begin(), data->inventory.end());
+            if (s.itemsOk && !savedInventory.empty())
+                wok::restoreInventory(s.reader.character(), savedInventory, s.items);
+            s.inventorySent = wok::readInventory(s.reader.character());
             // Check the look really came back (Kenshi's editor Import does the work).
             if (auto now = wok::readIdentity(s.reader.character())) {
                 auto saved = wok::decodeAppearance(data->appearance);
@@ -170,6 +181,17 @@ void onFrame(float dt) {
         }
     }
     if (!connected) s.statsSent.clear();
+    // Same for the inventory, as a whole, every 2 s when it changed.
+    if (connected && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextInventoryPoll) {
+        s.nextInventoryPoll = s.now + 2.0;
+        std::string inv = wok::readInventory(s.reader.character());
+        if (inv != s.inventorySent && inv.size() <= wok::kMaxInventoryBytes) {
+            s.inventorySent = inv;
+            s.net->sendInventory(std::vector<uint8_t>(inv.begin(), inv.end()));
+            wok::log("inventory: sent (%zu bytes)", inv.size());
+        }
+    }
+    if (!connected) s.inventorySent.clear();
 
     // First visit: once the player has made their character with Kenshi's own New Game flow,
     // register it on the server (name, race and look by FCS string ID).

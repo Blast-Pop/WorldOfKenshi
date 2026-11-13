@@ -56,6 +56,13 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
     if (!c.player) return {};  // everything else requires an accepted player
     if (auto* s = std::get_if<PlayerState>(&*msg)) return handleState(conn, c, *s);
     if (auto* cc = std::get_if<CreateCharacter>(&*msg)) return handleCreate(conn, c, *cc);
+    if (auto* iu = std::get_if<InventoryUpdate>(&*msg)) {
+        if (c.hasCharacter) {
+            c.inventory = iu->items;
+            c.inventoryDirty = true;
+        }
+        return {};
+    }
     if (auto* st = std::get_if<StatsUpdate>(&*msg)) {
         handleStats(c, *st);
         return {};
@@ -213,6 +220,10 @@ void SessionManager::savePosition(Conn& c) {
     if (c.lastState && c.positionDirty) {
         cfg_.store->savePosition(c.steamId, c.lastState->x, c.lastState->y, c.lastState->z, c.lastState->yaw);
         c.positionDirty = false;
+    }
+    if (c.inventoryDirty) {
+        cfg_.store->saveInventory(c.steamId, c.inventory);
+        c.inventoryDirty = false;
     }
     if (c.statsDirty) {
         std::vector<StatValue> all;

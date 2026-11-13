@@ -126,7 +126,7 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_3") { CHECK(WOK_PROTOCOL_VERSION == 3); }
+TEST_CASE("protocol_version_is_4") { CHECK(WOK_PROTOCOL_VERSION == 4); }
 
 TEST_CASE("hello_carries_token_roundtrip") {
     Hello h = makeHello();
@@ -264,4 +264,19 @@ TEST_CASE("stats_reject_bad_values") {
     StatsUpdate tooMany;
     for (int i = 0; i < static_cast<int>(kMaxStats) + 1; ++i) tooMany.values.push_back({1, 1.0f});
     CHECK_FALSE(decode(encode(tooMany)).has_value());
+}
+
+TEST_CASE("inventory_roundtrip") {
+    CharacterData c;
+    c.name = "Nine";
+    c.race = "r";
+    c.inventory = {'h', 'i', 'p', '|', 'x', '\n'};
+    InventoryUpdate u{{'m', 'a', 'i', 'n'}};
+    for (const Message& m : std::vector<Message>{c, u}) {
+        auto decoded = decode(encode(m));
+        REQUIRE(decoded.has_value());
+        CHECK(*decoded == m);
+    }
+    InventoryUpdate big{std::vector<uint8_t>(kMaxInventoryBytes + 1, 'x')};
+    CHECK_FALSE(decode(encode(big)).has_value());
 }
