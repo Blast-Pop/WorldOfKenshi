@@ -32,7 +32,7 @@ constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr const char* kLoadingPrefix = "WokLoading_";
 constexpr const char* kLoadingRoot = "WokLoadingCover";
-constexpr float kLoadingTimeoutSec = 60.0f;  // never leave a player stuck behind the cover
+constexpr float kLoadingTimeoutSec = 75.0f;  // never leave a player stuck behind the cover
 constexpr size_t kMaxRows = 8;
 
 // Colours ("R G B", 0-1): light text on a paler panel, for contrast with Kenshi's dark window.
@@ -457,7 +457,7 @@ void MultiplayerMenu::applyConnectedMenu() {
             }
             if (confirm) {
                 ++confirmWaits_;
-                if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 6) {
+                if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 12) {
                     // Kenshi names the character from what is typed in the editor's name field
                     // (NamePanel/NameText), and only real key presses reach its handler: type the
                     // server name with the keyboard, then confirm on the next try.
@@ -483,6 +483,12 @@ void MultiplayerMenu::applyConnectedMenu() {
                         }
                         auto body = base64Decode(look["bod2"]);
                         mygui::Widget* importButton = mygui::findShownBySuffix("_ImportButton", 12);
+                        // The editor sometimes shows up late: wait for it (sex label + Import button)
+                        // rather than confirming a random character; give up only after ~40 s.
+                        if (!body.empty() && (!importButton || shown.empty()) && confirmWaits_ / 8 < 10) {
+                            log("ui: waiting for the character editor before restoring the look");
+                            return;
+                        }
                         importFile_ = "WoK - " + data->name + ".bod2";
                         if (!body.empty() && importButton &&
                             std::ofstream(exportedBodyPath("WoK - " + data->name), std::ios::binary)

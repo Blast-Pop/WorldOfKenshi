@@ -671,7 +671,25 @@ void timeSearch() {
     log("time: candidates%s", hits.c_str());
 }
 
+void clockDump() {
+    // Clock object used by the "Day: N" text: global pointer at RVA 0x21303d0.
+    uintptr_t clk = 0;
+    if (!readQ(g_base + 0x21303d0, clk) || !clk) return;
+    uint32_t raw[16] = {};
+    copyRaw(clk, raw, sizeof(raw));
+    std::string out;
+    for (int i = 0; i < 16; ++i) {
+        float f;
+        std::memcpy(&f, &raw[i], 4);
+        char buf[48];
+        std::snprintf(buf, sizeof(buf), " +%x=%u/%g", i * 4, raw[i], f);
+        out += buf;
+    }
+    log("clock: %s |%s", mygui::labelText(mygui::findBySuffix("_TimeText", 12)).c_str(), out.c_str());
+}
+
 void onF10() {
+    clockDump();
     timeSearch();
     uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
