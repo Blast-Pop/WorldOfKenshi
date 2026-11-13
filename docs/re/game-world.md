@@ -41,3 +41,18 @@ confirmed in game with the F8 probe (`client/src/game/re_probe.cpp`).
   (pause, x1, x2, x5), `SpeedArrowLeft/Right`, and `PausedPanel`.
 - World of Kenshi hides those controls in a multiplayer world and clicks `TimeSpeedButton2`
   whenever the speed is not 1 (keyboard shortcuts included).
+
+## World clock (in progress, 2026-11-13)
+
+- The "Day: N" / "HH:MM" text comes from a clock object reached through the global pointer at RVA
+  `0x21303d0`: `+0` hours, `+4` minutes, `+8` day (ints, a display copy refreshed by the game).
+  Formatter: RVA `0x66d600`, called from RVA `0x728d50` (main panel update).
+- Candidate true time of day: `GameWorld + 0x3504` (float, fraction of a day; read 0.4145 at
+  ~09:57). Not confirmed, and no direct code write to it was found (it is likely written through a
+  pointer or a member function).
+- RVA `0x66e0e0` only drives the SkyX sky (sunrise/sunset from GLOBAL CONSTANTS); it receives the
+  time, it does not own it.
+- Next: find the per-frame time advance (multiplied by the game speed, `GameWorld + 0x700`); the
+  same code is what the Escape menu stops, so it answers both the server clock and the menu pause.
+- Do not write `GameWorld + 0x733c`: it is 1 during normal play and clearing it closes the game.
+  `GameWorld + 0x132c` is only a round-robin counter.
