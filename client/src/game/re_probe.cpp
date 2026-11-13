@@ -356,6 +356,18 @@ void onF5() {
                 if (cls.find("Town") != std::string::npos) ++counts[cls];
                 if (townLike(cls)) addTown(p);
                 if (cls == ".?AVTownList@@") townLists.push_back(p);
+                if (cls == ".?AV?$lektor@PEAVTownBase@@@@") {
+                    // Kenshi's lektor<T*>: element count (uint32) at +0x08, array pointer at +0x10.
+                    uint32_t count = 0;
+                    uintptr_t arr = 0;
+                    if (copyRaw(p + 0x08, &count, sizeof(count)) && readQ(p + 0x10, arr)) {
+                        log("towns: lektor<TownBase*> with %u entries", count);
+                        for (uint32_t i = 0; i < count && i < 4096; ++i) {
+                            uintptr_t t;
+                            if (readQ(arr + 8ull * i, t) && townLike(rttiName(t))) addTown(t);
+                        }
+                    }
+                }
                 next.push_back(p);
             }
         }
