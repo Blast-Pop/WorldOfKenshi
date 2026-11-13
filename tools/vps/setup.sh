@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # Builds and installs the World of Kenshi dedicated server on a fresh Ubuntu/Debian VPS.
-# Run as root from the unpacked source tree:  bash tools/vps/setup.sh "<server name>" "<description>"
+# Run as root from the unpacked source tree:
+#   bash tools/vps/setup.sh "<server name>" "<description>" [master | http://MASTER:27801]
+# "master": this server also hosts the master server list (and lists itself); a URL: announce to it.
 # Opens UDP 27800 (game) and TCP 27801 (Steam login page) and installs a systemd service.
 set -euo pipefail
 NAME="${1:-World of Kenshi}"
 DESCRIPTION="${2:-Dedicated server}"
+LISTING="${3:-}"
 SRC="$(cd "$(dirname "$0")/../.." && pwd)"
 PUBLIC_IP="$(curl -4 -s https://api.ipify.org || hostname -I | awk '{print $1}')"
+case "$LISTING" in
+  master) LIST_ARGS="--master --announce http://${PUBLIC_IP}:27801" ;;
+  http*)  LIST_ARGS="--announce ${LISTING}" ;;
+  *)      LIST_ARGS="" ;;
+esac
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
@@ -39,7 +47,7 @@ Wants=network-online.target
 User=wok
 WorkingDirectory=/var/lib/wok
 ExecStart=/opt/wok/wok_server --db /var/lib/wok/world.sqlite --public-url http://${PUBLIC_IP}:27801 \
-  --name "${NAME}" --description "${DESCRIPTION}" --spawn-file /opt/wok/towns.txt --default-spawn "The Hub"
+  --name "${NAME}" --description "${DESCRIPTION}" --spawn-file /opt/wok/towns.txt --default-spawn "The Hub" ${LIST_ARGS}
 Restart=on-failure
 RestartSec=3
 

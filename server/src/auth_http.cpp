@@ -1,4 +1,8 @@
 #include <wok/auth_http.hpp>
+#include <wok/master_list.hpp>
+
+#include <chrono>
+#include <cstdlib>
 #include <wok/openid.hpp>
 
 #include <httplib.h>
@@ -37,8 +41,30 @@ AuthHttp::~AuthHttp() {
 
 std::string AuthHttp::challengeUrlBase() const { return publicUrl_ + "/auth/start?nonce="; }
 
+void AuthHttp::enableMaster() { master_ = std::make_unique<MasterList>(); }
+
 bool AuthHttp::start() {
     const std::string callback = publicUrl_ + "/auth/callback";
+
+    if (master_) {
+        auto now = [] {
+            return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        };
+        server_->Get("/master/servers", [this, now](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            res.set_content(master_->listText(now()), "text/plain; charset=utf-8");
+        });
+        server_->Post("/master/announce", [this, now](const httplib::Request& req, httplib::Response& res) {
+            long port = std::strtol(req.get_param_value("port").c_str(), nullptr, 10);
+            bool ok = false;
+            if (port > 0 && port < 65536) {
+                std::lock_guard lock(mutex_);
+                ok = master_->announce(req.remote_addr, static_cast<uint16_t>(port), now());
+            }
+            res.status = ok ? 200 : 400;
+            res.set_content(ok ? "ok\n" : "rejected\n", "text/plain");
+        });
+    }
 
     server_->Get("/auth/start", [this, callback](const httplib::Request& req, httplib::Response& res) {
         std::string nonce = req.get_param_value("nonce");

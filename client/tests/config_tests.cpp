@@ -80,3 +80,16 @@ TEST_CASE("config_roundtrip_keeps_servers") {
     CHECK(r.servers[0].name == "Local");
     CHECK(r.servers[0].address == "127.0.0.1:27800");
 }
+
+TEST_CASE("server list from the master is parsed into entries") {
+    auto list = wok::parseServerList("95.179.253.252:27800\n\nbad entry\n1.2.3.4:27900\r\n95.179.253.252:27800\n");
+    REQUIRE(list.size() == 2);
+    CHECK(list[0].address == "95.179.253.252:27800");
+    CHECK(list[1].address == "1.2.3.4:27900");
+}
+
+TEST_CASE("master url is read from the config") {
+    auto cfg = wok::parseConfig("master=http://example.org:27801\n");
+    CHECK(cfg.masterUrl == "http://example.org:27801");
+    CHECK(wok::parseConfig("").masterUrl == wok::kDefaultMasterUrl);
+}

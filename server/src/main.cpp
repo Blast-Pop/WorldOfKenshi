@@ -9,6 +9,8 @@
 #include <wok/spawn_file.hpp>
 #include <wok/transport.hpp>
 
+#include <httplib.h>
+
 #include <memory>
 #include <random>
 
@@ -43,6 +45,8 @@ struct Args {
     std::string defaultSpawn;
     std::string name = "World of Kenshi server";
     std::string description;
+    bool master = false;         // also serve the master server list
+    std::string announceUrl;     // master to announce this server to, e.g. http://1.2.3.4:27801
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -74,6 +78,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.name = argv[++i];
         else if (k == "--description" && hasValue)
             a.description = argv[++i];
+        else if (k == "--master")
+            a.master = true;
+        else if (k == "--announce" && hasValue)
+            a.announceUrl = argv[++i];
         else if (k == "--test-bots")
             a.testBots = true;
         else if (k == "--db" && hasValue)
@@ -91,7 +99,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
                          "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n"
                          "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
                          "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
-                         "                  [--default-spawn Name]\n");
+                         "                  [--default-spawn Name] [--master] [--announce http://MASTER:27801]\n");
             return false;
         }
     }
@@ -131,6 +139,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     AuthHttp http(args.httpPort, args.publicUrl);
+    if (args.master) http.enableMaster();
     if (!http.start()) {
         std::fprintf(stderr, "error: cannot listen on TCP port %u (auth web page)\n", args.httpPort);
         return 1;
@@ -191,6 +200,23 @@ int main(int argc, char** argv) {
             std::printf("auth page %s (TCP %u) - database %s\n", args.publicUrl.c_str(), args.httpPort,
                         args.db.c_str());
             std::fflush(stdout);
+            if (args.master) std::printf("master server list at %s/master/servers\n", args.publicUrl.c_str());
+            // Announce this server to the master list every minute (players' server browsers read it).
+            std::thread announcer;
+            if (!args.announceUrl.empty()) {
+                announcer = std::thread([&args] {
+                    for (int s = 0; g_running; ++s, std::this_thread::sleep_for(std::chrono::seconds(1))) {
+                        if (s % 60 != 0) continue;
+                        httplib::Client master(args.announceUrl);
+                        master.set_connection_timeout(5);
+                        auto r = master.Post("/master/announce", "port=" + std::to_string(args.port),
+                                             "application/x-www-form-urlencoded");
+                        if (s == 0 || !r || r->status != 200)
+                            std::printf("announce to %s: %s\n", args.announceUrl.c_str(),
+                                        r && r->status == 200 ? "ok" : "FAILED");
+                    }
+                });
+            }
             SessionManager session(cfg);
             const auto start = std::chrono::steady_clock::now();
             auto now = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
@@ -227,6 +253,7 @@ int main(int argc, char** argv) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));  // ~60 Hz
             }
             std::printf("shutting down\n");
+            if (announcer.joinable()) announcer.join();
         }
     }
     netShutdown();

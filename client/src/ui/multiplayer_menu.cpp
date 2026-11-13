@@ -133,6 +133,7 @@ void MultiplayerMenu::ensureButton() {
         mygui::createChild(root, "Button", "Kenshi_Button1", {0.260417f, 0.027778f, 0.15625f, 0.0638889f}, kButton);
     mygui::setProperty(b, "Caption", "Multiplayer");
     log("ui: Multiplayer button added to the main menu");
+    master_.start(cfg_.masterUrl);  // the server list is ready by the time the window opens
 }
 
 void MultiplayerMenu::openWindow() {
@@ -171,7 +172,17 @@ void MultiplayerMenu::openWindow() {
     for (size_t c = 1; c < std::size(kColumns); ++c)
         line({kListLeft + kColumns[c].left * kListWidth, kHeaderTop, 0.0015f, listBottom - kHeaderTop});
     line({kListLeft, kRowTop, kListWidth, 0.002f});
-    rowCount_ = std::min(cfg_.servers.size(), kMaxRows);
+    // Servers from wok_client.ini first, then every server announced to the master list.
+    listed_ = cfg_.servers;
+    for (const ServerEntry& m : master_.servers()) {
+        auto ma = parseAddress(m.address);
+        bool known = false;
+        for (const ServerEntry& e : listed_)
+            if (auto ea = parseAddress(e.address); ea && ma && ea->host == ma->host && ea->port == ma->port) known = true;
+        if (!known) listed_.push_back(m);
+    }
+    master_.start(cfg_.masterUrl);  // refresh for the next time the window opens
+    rowCount_ = std::min(listed_.size(), kMaxRows);
     for (size_t i = 0; i < kMaxRows; ++i)
         line({kListLeft, kRowTop + kRowStep * (i + 1), kListWidth, 0.0015f});
 
@@ -188,7 +199,7 @@ void MultiplayerMenu::openWindow() {
     }
     if (rowCount_ == 0) {
         auto t = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {kListLeft, kRowTop, kListWidth, 0.06f}, "");
-        mygui::setProperty(t, "Caption", "(no server listed in wok_client.ini)");
+        mygui::setProperty(t, "Caption", "(no server found: master list unreachable and none in wok_client.ini)");
         mygui::setProperty(t, "TextColour", kRowText);
     }
 
@@ -210,11 +221,11 @@ void MultiplayerMenu::openWindow() {
     windowOpen_ = true;
     lastStatus_ = "?";
     error_.clear();
-    browser_.start(std::vector<ServerEntry>(cfg_.servers.begin(), cfg_.servers.begin() + rowCount_));
+    browser_.start(std::vector<ServerEntry>(listed_.begin(), listed_.begin() + rowCount_));
     // Preselect the last server used.
     selected_ = -1;
     for (size_t i = 0; i < rowCount_; ++i)
-        if (auto a = parseAddress(cfg_.servers[i].address); a && a->host == cfg_.host && a->port == cfg_.port)
+        if (auto a = parseAddress(listed_[i].address); a && a->host == cfg_.host && a->port == cfg_.port)
             select(static_cast<int>(i));
     refreshRows();
 }
@@ -267,7 +278,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
             error_ = "Select a server first.";
             return;
         }
-        auto addr = parseAddress(cfg_.servers[selected_].address);
+        auto addr = parseAddress(listed_[selected_].address);
         if (!addr) {
             error_ = "Invalid server address in wok_client.ini.";
             return;

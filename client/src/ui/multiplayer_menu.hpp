@@ -3,6 +3,7 @@
 // (version, name, description, players, ping), selection, Connect / Unlink / Close.
 
 #include "../net_client.hpp"
+#include "../master_fetch.hpp"
 #include "../server_browser.hpp"
 
 #include <core/config.hpp>
@@ -40,6 +41,8 @@ private:
     std::function<bool()> inGame_;
     std::function<void()> disconnect_;
     ServerBrowser browser_;
+    MasterFetch master_;
+    std::vector<ServerEntry> listed_;  // rows of the open window: wok_client.ini servers + master list
     int selected_ = -1;
     size_t rowCount_ = 0;
     float pollTimer_ = 0;
