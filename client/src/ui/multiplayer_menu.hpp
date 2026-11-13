@@ -15,8 +15,9 @@ class MultiplayerMenu {
 public:
     // `saveConfig` persists the last used address; `connect` starts the connection to cfg.host/port.
     // `unlink` forgets this PC's server tokens (next connection asks Steam again).
+    // `inGame` tells whether a world is loaded (the pause menu reuses the main menu layout).
     MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect,
-                    std::function<void()> unlink);
+                    std::function<void()> unlink, std::function<bool()> inGame);
     void update(float dt);  // game thread, every frame
 
 private:
@@ -25,13 +26,14 @@ private:
     void closeWindow();
     void onClick(const std::string& widgetName);
     void refreshStatus();
-    void applyConnectedMenu();  // connected: hide local-save buttons and start the server game
+    void applyConnectedMenu();  // connected on the title screen: start the server game
 
     ClientConfig& cfg_;
     ClientNet& net_;
     std::function<void()> saveConfig_;
     std::function<void()> connect_;
     std::function<void()> unlink_;
+    std::function<bool()> inGame_;
     float pollTimer_ = 0;
     float statusTimer_ = 0;
     bool mouseWasDown_ = false;

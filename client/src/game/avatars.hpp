@@ -17,6 +17,7 @@ public:
     void onMessage(const Message& msg, double nowSec);
     void update(double nowSec);  // game thread, every frame
     void clear();                // disconnected: forget every remote player
+    bool inGame() const { return spawner_.inGame(); }
 
 private:
     struct Avatar {

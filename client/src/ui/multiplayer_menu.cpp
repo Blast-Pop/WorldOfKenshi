@@ -48,14 +48,20 @@ std::string ownedName(void* w, size_t serverCount) {
 }  // namespace
 
 MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig,
-                                 std::function<void()> connect, std::function<void()> unlink)
+                                 std::function<void()> connect, std::function<void()> unlink,
+                                 std::function<bool()> inGame)
     : cfg_(cfg),
       net_(net),
       saveConfig_(std::move(saveConfig)),
       connect_(std::move(connect)),
-      unlink_(std::move(unlink)) {}
+      unlink_(std::move(unlink)),
+      inGame_(std::move(inGame)) {}
 
 void MultiplayerMenu::ensureButton() {
+    if (inGame_()) {  // pause menu: no Multiplayer button there
+        if (mygui::Widget* b = mygui::findWidget(kButton)) mygui::destroy(b);
+        return;
+    }
     if (mygui::findWidget(kButton)) return;
     // Kenshi prefixes layout widget names, so match "_NewGameButton" (always present, unlike Continue).
     mygui::Widget* root = mygui::parentOf(mygui::findBySuffix("_NewGameButton", 3));
@@ -144,17 +150,13 @@ void MultiplayerMenu::onClick(const std::string& name) {
 }
 
 void MultiplayerMenu::applyConnectedMenu() {
-    bool connected = net_.status() == ClientNet::Status::Connected;
-    // Local saves are never usable in multiplayer: hide every way into a local game while connected.
-    for (const char* suffix : {"_ContinueButton", "_NewGameButton", "_LoadGameButton", "_ImportGameButton"})
-        if (mygui::Widget* b = mygui::findBySuffix(suffix, 3)) mygui::setVisible(b, !connected);
-    if (!connected) {
+    if (net_.status() != ClientNet::Status::Connected) {
         enteredGame_ = false;
         return;
     }
-    if (enteredGame_) return;
+    if (enteredGame_ || inGame_()) return;
     mygui::Widget* newGame = mygui::findBySuffix("_NewGameButton", 3);
-    if (!newGame) return;  // not on the main menu
+    if (!newGame) return;  // not on the title screen
     // Step 1 of entering the server game: let Kenshi run its own New Game action.
     closeWindow();
     enteredGame_ = true;
