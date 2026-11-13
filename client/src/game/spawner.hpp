@@ -20,7 +20,9 @@ public:
     bool isAlive(uintptr_t character) const;  // still a valid CharacterHuman
     void setPosition(uintptr_t character, const float pos[3]) const;  // teleport (physics included)
 
-    uintptr_t findGameData(std::string_view stringId) const;  // by FCS string ID, 0 if unknown
+    // By FCS string ID and GameData type (the game indexes its data by type; GameData + 0x50 holds
+    // it, e.g. 1 for races, 0x33 for weapons). 0 if unknown.
+    uintptr_t findGameData(std::string_view stringId, int type = 1) const;
     // Returning player: turn the character Kenshi's New Game produced into the server character
     // (name, then teleport to the saved position) - no second character is created.
     bool restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const;

@@ -26,7 +26,7 @@ constexpr uintptr_t kPlatoonActive = 0x1d8;
 constexpr uintptr_t kCharPosition = 0x48;
 constexpr uintptr_t kCreatePlatoon = 0x7f4420;
 constexpr uintptr_t kCreateCharacter = 0x5836e0;
-constexpr uintptr_t kFindGameData = 0x6bfda0;      // (GameData manager, const std::string& id, int) -> GameData*
+constexpr uintptr_t kFindGameData = 0x6bfda0;      // (GameData manager, const std::string& id, int type) -> GameData*
 constexpr uint8_t kFindGameDataPrologue[] = {0x48, 0x89, 0x5c, 0x24, 0x10};
 constexpr uintptr_t kGameDataManagerOff = 0x20;    // GameWorld + 0x20
 constexpr uintptr_t kCharActivePlatoon = 0x658;    // Character -> its ActivePlatoon
@@ -61,9 +61,9 @@ uintptr_t guardedCreateCharacter(uintptr_t fn, uintptr_t factory, uintptr_t fact
 using FindGameDataFn = uintptr_t (*)(uintptr_t manager, const mygui::Vc10String* id, int flag);
 using GetFactionFn = uintptr_t (*)(uintptr_t platoon);
 
-uintptr_t guardedFind(uintptr_t fn, uintptr_t manager, const mygui::Vc10String* id) {
+uintptr_t guardedFind(uintptr_t fn, uintptr_t manager, const mygui::Vc10String* id, int type) {
     __try {
-        return reinterpret_cast<FindGameDataFn>(fn)(manager, id, 1);
+        return reinterpret_cast<FindGameDataFn>(fn)(manager, id, type);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
     }
@@ -178,14 +178,14 @@ void Spawner::setPosition(uintptr_t character, const float pos[3]) const {
     guardedTeleport(fn, movement, pos);
 }
 
-uintptr_t Spawner::findGameData(std::string_view stringId) const {
+uintptr_t Spawner::findGameData(std::string_view stringId, int type) const {
     if (!ok_ || stringId.empty()) return 0;
     uint8_t prologue[5];
     if (!mem::readBytes(mem::moduleBase() + kFindGameData, prologue, 5) ||
         std::memcmp(prologue, kFindGameDataPrologue, 5) != 0)
         return 0;
     mygui::Vc10String id(stringId);  // MSVC 2010 std::string layout, read-only for the game
-    uintptr_t gd = guardedFind(mem::moduleBase() + kFindGameData, gw_ + kGameDataManagerOff, &id);
+    uintptr_t gd = guardedFind(mem::moduleBase() + kFindGameData, gw_ + kGameDataManagerOff, &id, type);
     return gd && mem::isA(gd, ".?AVGameData@@") ? gd : 0;
 }
 

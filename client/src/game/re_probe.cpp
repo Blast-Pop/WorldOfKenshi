@@ -2,6 +2,8 @@
 
 #include "../log.hpp"
 #include "../ui/mygui_abi.hpp"
+#include "items.hpp"
+#include "spawner.hpp"
 
 #include <windows.h>
 
@@ -569,28 +571,32 @@ double g_tpUntil = 0;
 double g_tpNextLog = 0;
 
 void onF2() {
-    uintptr_t pi = 0, sel = 0, ch = 0, mv = 0;
+    // Item test: create an Iron Club (rebirth mod template) with Kenshi's factory and give it to
+    // the selected character.
+    uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
-        rttiName(ch) != ".?AVCharacterHuman@@" || !readQ(ch + 0x640, mv) || !mv) {
-        log("tp: select a character in game first");
+        rttiName(ch) != ".?AVCharacterHuman@@") {
+        log("give: select a character in game first");
         return;
     }
-    float pos[3];
-    if (!copyRaw(mv + 0xc4, pos, sizeof(pos))) return;
-    log("tp: movement %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(mv), rttiName(mv).c_str(), pos[0], pos[1],
-        pos[2]);
-    pos[0] += 50.0f;
-    // CharMovement vtable slot +0xc8: copies the Vector3 into +0xc4 and pushes it to the physics
-    // controller (+0x320) - the candidate teleport. Called through the object's own vtable.
-    uintptr_t vt = 0, fn = 0;
-    if (!readQ(mv, vt) || !readQ(vt + 0xc8, fn) || !callTeleport(fn, mv, pos)) {
-        log("tp: teleport call failed");
-        return;
+    Spawner spawner;
+    Items items;
+    if (!spawner.init(g_base + kGameWorld) || !items.init(g_base + kGameWorld)) return;
+    // Template and type of the weapon the character holds (hip section = Weapon I).
+    uintptr_t inv = 0, secs = 0, hip = 0, vb = 0, held = 0, heldData = 0;
+    int type = 0;
+    std::string id;
+    if (readQ(ch + 0x2e8, inv) && readQ(inv + 0x78, secs) && readQ(secs, hip) && readQ(hip + 0x40, vb) &&
+        readQ(vb, held) && held && readQ(held + 0x40, heldData) && heldData) {
+        copyRaw(heldData + 0x50, &type, 4);
+        id = readVc10String(heldData + 0x58);
     }
-    log("tp: teleport called (+50 on x)");
-    g_tpChar = ch;
-    g_tpUntil = GetTickCount64() / 1000.0 + 2.0;
-    g_tpNextLog = 0;
+    log("give: held weapon template %p id '%s' type %d", reinterpret_cast<void*>(heldData), id.c_str(), type);
+    uintptr_t data = spawner.findGameData(id, type);
+    uintptr_t item = items.create(data);
+    bool given = items.give(ch, item);
+    log("give: template %p -> item %p (%s) given: %s", reinterpret_cast<void*>(data), reinterpret_cast<void*>(item),
+        item ? rttiName(item).c_str() : "-", given ? "yes" : "no");
 }
 
 void tpTick() {
