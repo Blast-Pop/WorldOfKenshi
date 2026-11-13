@@ -292,16 +292,22 @@ void MultiplayerMenu::applyConnectedMenu() {
     // through them automatically (the server character replaces the start one once in game).
     if (enteredGame_ && net_.hasCharacter() && !inGame_()) {
         if (autoStep_ == 0) {
-            if (mygui::Widget* begin = mygui::findBySuffix("_BeginButton", 4)) {
+            if (mygui::Widget* begin = mygui::findBySuffix("_BeginButton", 6)) {
                 autoStep_ = 1;
+                confirmWaits_ = 0;
                 log("ui: returning player, starting the world (Begin)");
                 mygui::click(begin);
             }
         } else if (autoStep_ == 1) {
-            if (mygui::Widget* confirm = mygui::findBySuffix("_ConfirmButton", 5)) {
+            // The editor's Confirm sits deep inside its panels: search well below the root widgets.
+            if (mygui::Widget* confirm = mygui::findBySuffix("_ConfirmButton", 12)) {
                 autoStep_ = 2;
-                log("ui: returning player, skipping the character editor (Confirm)");
+                log("ui: returning player, skipping the character editor (Confirm '%s')",
+                    mygui::nameOf(confirm).c_str());
                 mygui::click(confirm);
+            } else if (++confirmWaits_ == 20) {  // ~10 s without finding it: list candidates once
+                log("ui: Confirm not found yet, editor widgets ending in 'Button':");
+                mygui::logWidgetsWithSuffix("Button", 12);
             }
         }
         return;

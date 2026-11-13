@@ -158,6 +158,31 @@ Widget* mouseFocus() {
     return input ? g_api.getMouseFocusWidget(input) : nullptr;
 }
 
+namespace {
+void logMatches(Widget* w, std::string_view suffix, int depth, int& count) {
+    if (!w || count > 200) return;
+    std::string n = nameOf(w);
+    if (n.size() >= suffix.size() && n.compare(n.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        log("ui:   %s", n.c_str());
+        ++count;
+    }
+    if (depth == 0) return;
+    size_t k = g_api.getChildCount(w);
+    for (size_t i = 0; i < k && i < 512; ++i) logMatches(g_api.getChildAt(w, i), suffix, depth - 1, count);
+}
+}  // namespace
+
+void logWidgetsWithSuffix(std::string_view suffix, int maxDepth) {
+    auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
+    uintptr_t begin = 0, end = 0;
+    if (!gui || !mem::readPtr(gui + kGuiRootsBegin, begin) || !mem::readPtr(gui + kGuiRootsEnd, end)) return;
+    int count = 0;
+    for (uintptr_t it = begin; it < end && end - begin <= 8 * 4096; it += 8) {
+        uintptr_t root = 0;
+        if (mem::readPtr(it, root)) logMatches(reinterpret_cast<Widget*>(root), suffix, maxDepth, count);
+    }
+}
+
 Widget* findBySuffix(std::string_view suffix, int maxDepth) {
     auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
     uintptr_t begin = 0, end = 0;
