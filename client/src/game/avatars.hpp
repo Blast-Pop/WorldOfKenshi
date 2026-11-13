@@ -18,7 +18,7 @@ public:
     void update(double nowSec);  // game thread, every frame
     void clear();                // disconnected: forget every remote player
     bool inGame() const { return spawner_.inGame(); }
-    uintptr_t restorePlayer(uintptr_t playerCharacter, const CharacterData& data) const {
+    bool restorePlayer(uintptr_t playerCharacter, const CharacterData& data) const {
         return spawner_.restorePlayerCharacter(playerCharacter, data);
     }
 
@@ -27,6 +27,7 @@ private:
         Interpolator interp;
         uintptr_t character = 0;
         double nextSpawnTry = 0;
+        float lastPos[3] = {0, 0, 0};
     };
     Spawner spawner_;
     std::unordered_map<PlayerId, Avatar> avatars_;

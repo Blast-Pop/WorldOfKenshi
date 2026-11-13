@@ -2,6 +2,8 @@
 
 #include "../log.hpp"
 
+#include <cstring>
+
 namespace wok {
 
 namespace {
@@ -57,7 +59,12 @@ void AvatarManager::update(double nowSec) {
                 pos[0], pos[1], pos[2]);
             continue;
         }
-        spawner_.setPosition(a.character, pos);
+        // Teleport only on a real change (network rate is 10 Hz) to avoid hammering the physics.
+        float dx = pos[0] - a.lastPos[0], dz = pos[2] - a.lastPos[2];
+        if (dx * dx + dz * dz > 0.25f) {
+            spawner_.setPosition(a.character, pos);
+            std::memcpy(a.lastPos, pos, sizeof(pos));
+        }
     }
 }
 

@@ -30,3 +30,15 @@ Selected character "Max", Wanderer start, Greenlander, with hair/beard from the 
 
 GameData `+0x28` = display name, `+0x58` = FCS string ID. Everything is sent by string ID, so modded
 content (here a modded haircut) travels like vanilla content.
+
+## Real position and teleport (verified in game 2026-11-13)
+
+- `Character + 0x640` -> movement object (`CharMovement`, base `AbstractMovementBase`). Its vtable slot
+  `+0x40` returns a pointer to its position (`this + 0xc4`). Every frame Kenshi copies that position into
+  `Character + 0x48` (code at exe+0x5cf3e9..0x5cf403), so writing `+0x48` has no lasting effect; writing
+  `+0xc4` is also undone (the physics controller at `+0x320` drives it).
+- **Teleport**: `CharMovement` vtable slot **`+0xc8`**, called as `(movement, const Vector3* position)`.
+  It stores the position, pushes it to the physics controller (`+0x320`) and refreshes dependants.
+  Verified with the Ctrl+Shift+F2 probe: the selected character jumped 50 units and stayed there.
+- Other slots seen: `+0x30` set orientation (quaternion at `+0xd0`), `+0x38` turn towards a point,
+  `+0x98` reset movement state.

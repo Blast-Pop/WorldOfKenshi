@@ -33,6 +33,8 @@ constexpr uintptr_t kCharActivePlatoon = 0x658;    // Character -> its ActivePla
 constexpr uintptr_t kPlatoonOfActive = 0x78;       // ActivePlatoon -> Platoon
 constexpr uintptr_t kPlatoonGetFactionVt = 0x58;   // Platoon vtable slot: Faction* getFaction()
 constexpr uintptr_t kCharName = 0x18;              // std::string
+constexpr uintptr_t kCharMovement = 0x640;         // Character -> CharMovement
+constexpr uintptr_t kMovementTeleportVt = 0xc8;    // CharMovement vtable slot: teleport(const Vector3*)
 constexpr uint8_t kCreatePlatoonPrologue[] = {0x40, 0x53, 0x55};
 constexpr uint8_t kCreateCharacterPrologue[] = {0x40, 0x55, 0x53};
 
@@ -72,6 +74,15 @@ uintptr_t guardedFaction(uintptr_t fn, uintptr_t platoon) {
         return reinterpret_cast<GetFactionFn>(fn)(platoon);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
+    }
+}
+
+bool guardedTeleport(uintptr_t fn, uintptr_t movement, const float* pos) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, const float*)>(fn)(movement, pos);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
     }
 }
 
@@ -158,8 +169,13 @@ uintptr_t Spawner::spawnCharacter(uintptr_t faction, const float pos[3]) const {
 bool Spawner::isAlive(uintptr_t character) const { return character && mem::isA(character, ".?AVCharacterHuman@@"); }
 
 void Spawner::setPosition(uintptr_t character, const float pos[3]) const {
-    // First version: write the world position directly. To be replaced by move orders (Task 9).
-    guardedWrite(character + kCharPosition, pos, sizeof(float) * 3);
+    // Teleport through the character's own movement object (docs/re/character.md): writing the
+    // position fields directly is undone by the engine every frame.
+    uintptr_t movement = 0, vt = 0, fn = 0;
+    if (!mem::readPtr(character + kCharMovement, movement) || !movement || !mem::readPtr(movement, vt) ||
+        !mem::readPtr(vt + kMovementTeleportVt, fn))
+        return;
+    guardedTeleport(fn, movement, pos);
 }
 
 uintptr_t Spawner::findGameData(std::string_view stringId) const {
@@ -188,32 +204,17 @@ void Spawner::setName(uintptr_t character, std::string_view name) {
     guardedWrite(character + kCharName + 16, &size, sizeof(size));
 }
 
-uintptr_t Spawner::restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const {
-    uintptr_t base = mem::moduleBase(), factory = 0, ap = 0, platoon = 0, vt = 0, getFaction = 0;
-    if (!ok_ || !mem::readPtr(gw_ + kFactoryOff, factory) || !factory ||
-        !mem::readPtr(playerCharacter + kCharActivePlatoon, ap) || !mem::isA(ap, ".?AVActivePlatoon@@") ||
-        !mem::readPtr(ap + kPlatoonOfActive, platoon) || !mem::readPtr(platoon, vt) ||
-        !mem::readPtr(vt + kPlatoonGetFactionVt, getFaction)) {
-        log("restore: player squad not found");
-        return 0;
+bool Spawner::restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const {
+    if (!ok_ || !mem::isA(playerCharacter, ".?AVCharacterHuman@@")) {
+        log("restore: no player character to restore into");
+        return false;
     }
-    uintptr_t faction = guardedFaction(getFaction, platoon);
-    uintptr_t tmpl = findGameData(data.templateId);  // 0 -> the game's default character
+    // The New Game character becomes the server character: same name, back where it was left.
+    setName(playerCharacter, data.name);
     const float pos[3] = {data.x, data.y, data.z};
-    uintptr_t ch = 0;
-    __try {
-        ch = reinterpret_cast<CreateCharacterFn>(base + kCreateCharacter)(factory, faction, pos, ap, tmpl, 0, 1.0f);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        ch = 0;
-    }
-    if (!ch || !mem::isA(ch, ".?AVCharacterHuman@@")) {
-        log("restore: character creation failed");
-        return 0;
-    }
-    setName(ch, data.name);
-    log("restore: '%s' back at (%.1f, %.1f, %.1f), template %s", data.name.c_str(), pos[0], pos[1], pos[2],
-        tmpl ? data.templateId.c_str() : "(default)");
-    return ch;
+    setPosition(playerCharacter, pos);
+    log("restore: '%s' back at (%.1f, %.1f, %.1f)", data.name.c_str(), pos[0], pos[1], pos[2]);
+    return true;
 }
 
 }  // namespace wok

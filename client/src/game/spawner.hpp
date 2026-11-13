@@ -18,12 +18,12 @@ public:
     // New squad of `faction` at `pos` holding one default character. Returns the Character*, 0 on failure.
     uintptr_t spawnCharacter(uintptr_t faction, const float pos[3]) const;
     bool isAlive(uintptr_t character) const;  // still a valid CharacterHuman
-    void setPosition(uintptr_t character, const float pos[3]) const;
+    void setPosition(uintptr_t character, const float pos[3]) const;  // teleport (physics included)
 
     uintptr_t findGameData(std::string_view stringId) const;  // by FCS string ID, 0 if unknown
-    // Returning player: recreate their server character in the squad of `playerCharacter` (the
-    // character Kenshi's New Game produced), at the saved position, with its template and name.
-    uintptr_t restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const;
+    // Returning player: turn the character Kenshi's New Game produced into the server character
+    // (name, then teleport to the saved position) - no second character is created.
+    bool restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const;
     static void setName(uintptr_t character, std::string_view name);
 
 private:
