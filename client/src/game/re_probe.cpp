@@ -4,7 +4,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -326,6 +328,55 @@ void onF6() {
 
 bool g_f6WasDown = false;
 
+// ---- F5: map every town (name + world position) into WorldOfKenshi\towns.txt ----
+// Breadth-first walk over pointers reachable from GameWorld, keeping objects whose RTTI is Town.
+// Each Town is a RootObject: position at +0x48 like characters; its name is the name of the
+// GameData it points to (GameData +0x28).
+void onF5() {
+    std::vector<uintptr_t> frontier{g_base + kGameWorld};
+    std::vector<uintptr_t> towns;
+    std::vector<uintptr_t> visited;  // sorted for binary search
+    auto seen = [&](uintptr_t p) {
+        auto it = std::lower_bound(visited.begin(), visited.end(), p);
+        if (it != visited.end() && *it == p) return true;
+        visited.insert(it, p);
+        return false;
+    };
+    const size_t kMaxNodes = 60000;
+    for (int depth = 0; depth < 5 && !frontier.empty() && visited.size() < kMaxNodes; ++depth) {
+        std::vector<uintptr_t> next;
+        for (uintptr_t obj : frontier) {
+            for (uintptr_t off = 0; off < 0x600 && visited.size() < kMaxNodes; off += 8) {
+                uintptr_t p;
+                if (!readQ(obj + off, p) || seen(p)) continue;
+                std::string cls = rttiName(p);
+                if (cls == ".?AVTown@@") towns.push_back(p);
+                next.push_back(p);
+            }
+        }
+        frontier.swap(next);
+    }
+    std::string path = modDir() + "\\towns.txt";
+    FILE* f = std::fopen(path.c_str(), "w");
+    int written = 0;
+    for (uintptr_t t : towns) {
+        float pos[3];
+        if (!copyRaw(t + 0x48, pos, sizeof(pos))) continue;
+        std::string name;
+        for (uintptr_t off = 0; off < 0x200 && name.empty(); off += 8) {
+            uintptr_t gd;
+            if (readQ(t + off, gd) && rttiName(gd) == ".?AVGameData@@") name = readVc10String(gd + kGameDataName);
+        }
+        if (name.empty()) name = "?";
+        if (f) std::fprintf(f, "%s:%.1f,%.1f,%.1f\n", name.c_str(), pos[0], pos[1], pos[2]);
+        ++written;
+    }
+    if (f) std::fclose(f);
+    log("towns: %d found (visited %zu objects) -> %s", written, visited.size(), path.c_str());
+}
+
+bool g_f5WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -344,6 +395,9 @@ void probeTick() {
     bool f6 = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
     if (f6 && !g_f6WasDown && focused) onF6();
     g_f6WasDown = f6;
+    bool f5 = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
+    if (f5 && !g_f5WasDown && focused) onF5();
+    g_f5WasDown = f5;
 }
 
 }  // namespace wok
