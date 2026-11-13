@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <map>
+#include <unordered_set>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -333,29 +335,46 @@ bool g_f6WasDown = false;
 // Each Town is a RootObject: position at +0x48 like characters; its name is the name of the
 // GameData it points to (GameData +0x28).
 void onF5() {
-    std::vector<uintptr_t> frontier{g_base + kGameWorld};
-    std::vector<uintptr_t> towns;
-    std::vector<uintptr_t> visited;  // sorted for binary search
-    auto seen = [&](uintptr_t p) {
-        auto it = std::lower_bound(visited.begin(), visited.end(), p);
-        if (it != visited.end() && *it == p) return true;
-        visited.insert(it, p);
-        return false;
+    auto townLike = [](const std::string& cls) {
+        return cls == ".?AVTown@@" || cls == ".?AVTownBase@@" || cls == ".?AVTownNull@@";
     };
-    const size_t kMaxNodes = 60000;
+    std::vector<uintptr_t> frontier{g_base + kGameWorld};
+    std::vector<uintptr_t> towns, townLists;
+    std::unordered_set<uintptr_t> visited, townSet;
+    std::map<std::string, int> counts;
+    auto addTown = [&](uintptr_t p) {
+        if (townSet.insert(p).second) towns.push_back(p);
+    };
+    const size_t kMaxNodes = 400000;
     for (int depth = 0; depth < 5 && !frontier.empty() && visited.size() < kMaxNodes; ++depth) {
         std::vector<uintptr_t> next;
         for (uintptr_t obj : frontier) {
-            for (uintptr_t off = 0; off < 0x600 && visited.size() < kMaxNodes; off += 8) {
+            for (uintptr_t off = 0; off < 0x400 && visited.size() < kMaxNodes; off += 8) {
                 uintptr_t p;
-                if (!readQ(obj + off, p) || seen(p)) continue;
+                if (!readQ(obj + off, p) || !visited.insert(p).second) continue;
                 std::string cls = rttiName(p);
-                if (cls == ".?AVTown@@") towns.push_back(p);
+                if (cls.find("Town") != std::string::npos) ++counts[cls];
+                if (townLike(cls)) addTown(p);
+                if (cls == ".?AVTownList@@") townLists.push_back(p);
                 next.push_back(p);
             }
         }
         frontier.swap(next);
     }
+    // The town list itself: look through its fields for arrays of town pointers.
+    for (uintptr_t list : townLists) {
+        for (uintptr_t off = 0; off < 0x200; off += 8) {
+            uintptr_t arr;
+            if (!readQ(list + off, arr)) continue;
+            for (size_t i = 0; i < 2048; ++i) {
+                uintptr_t p;
+                if (!readQ(arr + 8 * i, p)) break;
+                if (townLike(rttiName(p))) addTown(p);
+            }
+        }
+    }
+    for (auto& [cls, n] : counts) log("towns: class %s x%d", cls.c_str(), n);
+    log("towns: %zu TownList object(s)", townLists.size());
     std::string path = modDir() + "\\towns.txt";
     FILE* f = std::fopen(path.c_str(), "w");
     int written = 0;
@@ -372,7 +391,7 @@ void onF5() {
         ++written;
     }
     if (f) std::fclose(f);
-    log("towns: %d found (visited %zu objects) -> %s", written, visited.size(), path.c_str());
+    log("towns: %d written (visited %zu objects) -> %s", written, visited.size(), path.c_str());
 }
 
 bool g_f5WasDown = false;
