@@ -237,6 +237,18 @@ std::string readVc10String(uintptr_t addr) {
     return std::string(buf, size);
 }
 
+// Most-derived RTTI name of a polymorphic object (e.g. ".?AVPlatoon@@"), or "" if not readable.
+std::string rttiName(uintptr_t obj) {
+    uintptr_t vt = 0, col = 0;
+    if (!readQ(obj, vt) || !readQ(vt - 8, col)) return {};
+    uint32_t hdr[4];
+    if (!copyRaw(col, hdr, sizeof(hdr)) || hdr[0] != 1) return {};
+    char name[64] = {};
+    if (!copyRaw(g_base + hdr[3] + 16, name, sizeof(name) - 1)) return {};
+    if (std::strncmp(name, ".?A", 3) != 0) return {};
+    return name;
+}
+
 uintptr_t callCreatePlatoon(CreatePlatoonFn fn, uintptr_t faction, const float* pos) {
     __try {
         return fn(faction, 0, true, pos);
@@ -285,10 +297,27 @@ void onF6() {
     float pos[3];
     std::memcpy(pos, reinterpret_cast<const void*>(ch + 0x48), sizeof(pos));
     pos[0] -= 40.0f;
-    uintptr_t ap = callCreatePlatoon(reinterpret_cast<CreatePlatoonFn>(g_base + kCreatePlatoon), neutral, pos);
-    log("spawn2: createPlatoon -> %p (%s)", reinterpret_cast<void*>(ap),
-        ap > 1 && isClass(ap, ".?AVActivePlatoon@@") ? "ActivePlatoon" : "unexpected");
-    if (ap <= 1 || !isClass(ap, ".?AVActivePlatoon@@")) return;
+    uintptr_t ret = callCreatePlatoon(reinterpret_cast<CreatePlatoonFn>(g_base + kCreatePlatoon), neutral, pos);
+    log("spawn2: createPlatoon -> %p class '%s'", reinterpret_cast<void*>(ret), rttiName(ret).c_str());
+    if (ret <= 1) return;
+    uintptr_t ap = 0;
+    if (isClass(ret, ".?AVActivePlatoon@@")) {
+        ap = ret;
+    } else {
+        // Probably a Platoon: look for the ActivePlatoon among its fields (and log what we see).
+        for (uintptr_t off = 0; off < 0x400; off += 8) {
+            uintptr_t p;
+            if (!readQ(ret + off, p)) continue;
+            std::string cls = rttiName(p);
+            if (cls.empty()) continue;
+            log("spawn2:   +0x%llx -> %s", static_cast<unsigned long long>(off), cls.c_str());
+            if (!ap && cls == ".?AVActivePlatoon@@") ap = p;
+        }
+    }
+    if (!ap) {
+        log("spawn2: no ActivePlatoon found, nothing spawned");
+        return;
+    }
     uintptr_t created =
         callCreate(reinterpret_cast<CreateCharacterFn>(g_base + kCreateCharacter), factory, neutral, pos, ap);
     log("spawn2: created %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(created),
