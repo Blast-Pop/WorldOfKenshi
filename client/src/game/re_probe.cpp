@@ -605,7 +605,41 @@ bool g_f2WasDown = false;
 
 // ---- F10: character components (persistence RE). Lists the character's pointers to stats,
 // inventory, medical and body objects, and dumps the CharStats floats. ----
+void timeSearch() {
+    // Displayed clock, e.g. "Day: 1" + "10:06": find GameWorld values matching it.
+    std::string shown = mygui::labelText(mygui::findBySuffix("_TimeText", 12));
+    int h = -1, m = -1;
+    size_t colon = shown.rfind(':');
+    if (colon != std::string::npos && colon >= 2) std::sscanf(shown.c_str() + colon - 2, "%d:%d", &h, &m);
+    log("time: shown '%s' -> %d:%02d", shown.c_str(), h, m);
+    if (h < 0) return;
+    double hours = h + m / 60.0;
+    std::vector<uint8_t> gw(0x4000);
+    copyRaw(g_base + kGameWorld, gw.data(), gw.size());
+    std::string hits;
+    for (size_t o = 0; o + 8 <= gw.size(); o += 4) {
+        float f;
+        double d;
+        std::memcpy(&f, &gw[o], 4);
+        std::memcpy(&d, &gw[o], 8);
+        char buf[64];
+        for (double target : {hours, hours / 24.0, hours * 60.0, 24.0 + hours, 48.0 + hours})
+            if (std::fabs(f - target) < 0.05 * (target > 1 ? target : 1) / 10) {
+                std::snprintf(buf, sizeof(buf), " f+%zx=%g", o, f);
+                hits += buf;
+            }
+        if (o % 8 == 0)
+            for (double target : {hours, hours / 24.0, hours * 60.0, hours * 3600.0, 24.0 + hours})
+                if (std::fabs(d - target) < 0.02 * (target > 1 ? target : 1)) {
+                    std::snprintf(buf, sizeof(buf), " d+%zx=%g", o, d);
+                    hits += buf;
+                }
+    }
+    log("time: candidates%s", hits.c_str());
+}
+
 void onF10() {
+    timeSearch();
     uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
         rttiName(ch) != ".?AVCharacterHuman@@") {
@@ -794,6 +828,36 @@ void speedTick() {
 
 bool g_f11WasDown = false;
 
+// ---- F1: two-press GameWorld diff (any byte), e.g. to find the pause-menu freeze flag. ----
+std::vector<uint8_t> g_diffSnap;
+bool g_f1WasDown = false;
+void onF1() {
+    std::vector<uint8_t> now(0x4000);
+    copyRaw(g_base + kGameWorld, now.data(), now.size());
+    if (g_diffSnap.empty()) {
+        g_diffSnap = now;
+        log("diff: snapshot taken");
+        return;
+    }
+    std::string out;
+    for (size_t o = 0; o < now.size(); ++o) {
+        if (now[o] == g_diffSnap[o]) continue;
+        size_t a = o & ~size_t{3};
+        uint32_t x, y;
+        std::memcpy(&x, &g_diffSnap[a], 4);
+        std::memcpy(&y, &now[a], 4);
+        // keep small integer/bool changes only (flags), skip timers and positions
+        if (x <= 16 && y <= 16) {
+            char buf[48];
+            std::snprintf(buf, sizeof(buf), " +%zx:%u->%u", a, x, y);
+            out += buf;
+        }
+        o = a + 3;
+    }
+    log("diff:%s", out.c_str());
+    g_diffSnap.clear();
+}
+
 }  // namespace
 
 void probeTick() {
@@ -836,6 +900,9 @@ void probeTick() {
     }
     g_f11WasDown = f11;
     speedTick();
+    bool f1 = (GetAsyncKeyState(VK_F1) & 0x8000) != 0;
+    if (f1 && !g_f1WasDown && focused) onF1();
+    g_f1WasDown = f1;
 }
 
 }  // namespace wok
