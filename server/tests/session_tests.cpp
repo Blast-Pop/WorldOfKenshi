@@ -187,3 +187,23 @@ TEST_CASE("ping_keeps_player_alive_and_is_not_relayed") {
     CHECK(sentOf<PlayerLeft>(sm.tick(21.0)).empty());
     CHECK(sm.playerCount() == 2);
 }
+
+TEST_CASE("server_info_answered_before_hello") {
+    SessionConfig cfg;
+    cfg.maxPlayers = 40;
+    cfg.serverName = "EU #1";
+    cfg.serverDescription = "Vanilla rules";
+    SessionManager sm(cfg);
+    join(sm, 1, 11);  // one player online
+    sm.onConnect(2, 0.0);
+    auto out = sm.onPacket(2, encode(ServerInfoRequest{}), 0.1);
+    auto infos = sentOf<ServerInfo>(out);
+    REQUIRE(infos.size() == 1);
+    CHECK(infos[0].first == 2);
+    CHECK(infos[0].second.name == "EU #1");
+    CHECK(infos[0].second.description == "Vanilla rules");
+    CHECK(infos[0].second.players == 1);
+    CHECK(infos[0].second.maxPlayers == 40);
+    CHECK(infos[0].second.protocolVersion == WOK_PROTOCOL_VERSION);
+    CHECK(sm.playerCount() == 1);  // a query is not a player
+}

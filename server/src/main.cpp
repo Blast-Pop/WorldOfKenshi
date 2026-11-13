@@ -37,6 +37,8 @@ struct Args {
     std::string publicUrl;  // default: http://127.0.0.1:<httpPort>
     float spawn[3] = {-50979.0f, 1533.0f, 2932.0f};  // first place a character was seen in testing
     bool testBots = false;
+    std::string name = "World of Kenshi server";
+    std::string description;
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -49,6 +51,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.maxPlayers = static_cast<uint32_t>(std::atoi(argv[++i]));
         else if (k == "--ban-file" && hasValue)
             a.banFile = argv[++i];
+        else if (k == "--name" && hasValue)
+            a.name = argv[++i];
+        else if (k == "--description" && hasValue)
+            a.description = argv[++i];
         else if (k == "--test-bots")
             a.testBots = true;
         else if (k == "--db" && hasValue)
@@ -123,6 +129,8 @@ int main(int argc, char** argv) {
     cfg.spawnY = args.spawn[1];
     cfg.spawnZ = args.spawn[2];
     cfg.allowTestBots = args.testBots;
+    cfg.serverName = args.name;
+    cfg.serverDescription = args.description;
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);

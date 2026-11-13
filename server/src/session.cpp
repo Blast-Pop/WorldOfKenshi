@@ -43,6 +43,14 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         if (c.player || !c.nonce.empty()) return {};  // duplicate Hello: ignore
         return handleHello(conn, c, *h, nowSec);
     }
+    if (std::holds_alternative<ServerInfoRequest>(*msg)) {  // server browser query, no login needed
+        ServerInfo info;
+        info.name = cfg_.serverName.substr(0, kMaxServerNameBytes);
+        info.description = cfg_.serverDescription.substr(0, kMaxServerDescriptionBytes);
+        info.players = static_cast<uint16_t>(playerCount());
+        info.maxPlayers = static_cast<uint16_t>(cfg_.maxPlayers);
+        return {Outgoing{conn, info}};
+    }
     if (!c.player) return {};  // everything else requires an accepted player
     if (auto* s = std::get_if<PlayerState>(&*msg)) return handleState(conn, c, *s);
     if (auto* cc = std::get_if<CreateCharacter>(&*msg)) return handleCreate(conn, c, *cc);

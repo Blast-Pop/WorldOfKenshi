@@ -20,6 +20,8 @@ constexpr size_t kMaxNameBytes = 31;
 constexpr size_t kMaxStringIdBytes = 64;   // FCS stringIDs ("17-gamedata.quack", "51707-rebirth.mod")
 constexpr size_t kMaxAppearanceBytes = 4096;
 constexpr size_t kMaxUrlBytes = 512;
+constexpr size_t kMaxServerNameBytes = 63;
+constexpr size_t kMaxServerDescriptionBytes = 255;
 
 using PlayerId = uint32_t;
 using ConnId = uint32_t;  // connection handle assigned by the transport
@@ -34,6 +36,8 @@ enum class MsgType : uint8_t {
     AuthChallenge = 6,
     CharacterData = 7,
     CreateCharacter = 8,
+    ServerInfoRequest = 9,
+    ServerInfo = 10,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -104,8 +108,22 @@ struct CreateCharacter {
     bool operator==(const CreateCharacter&) const = default;
 };
 
-using Message =
-    std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData, CreateCharacter>;
+// Server browser: allowed before Hello, answered with ServerInfo (the client measures the ping).
+struct ServerInfoRequest {
+    bool operator==(const ServerInfoRequest&) const = default;
+};
+
+struct ServerInfo {
+    uint16_t protocolVersion = WOK_PROTOCOL_VERSION;
+    std::string name;
+    std::string description;
+    uint16_t players = 0;
+    uint16_t maxPlayers = 0;
+    bool operator==(const ServerInfo&) const = default;
+};
+
+using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
+                             CreateCharacter, ServerInfoRequest, ServerInfo>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

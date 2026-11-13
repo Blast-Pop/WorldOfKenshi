@@ -35,6 +35,8 @@ struct SessionConfig {
     double timeoutSec = 10.0;
     uint32_t maxBadPackets = 3;
     std::unordered_set<uint64_t> bannedSteamIds;
+    std::string serverName = "World of Kenshi server";  // shown in the server browser
+    std::string serverDescription;
 
     // Server-side characters. Without a store, any Hello is accepted (no authentication).
     CharacterStore* store = nullptr;

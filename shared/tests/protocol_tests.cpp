@@ -201,3 +201,32 @@ TEST_CASE("v2_rejects_nonfinite_character_position") {
     c.z = std::numeric_limits<float>::infinity();
     CHECK_FALSE(decode(encode(c)).has_value());
 }
+
+// ---------------------------------------------------------------- server browser
+
+TEST_CASE("server_info_request_roundtrip") {
+    auto m = decode(encode(ServerInfoRequest{}));
+    REQUIRE(m.has_value());
+    CHECK(std::holds_alternative<ServerInfoRequest>(*m));
+}
+
+TEST_CASE("server_info_roundtrip") {
+    ServerInfo info;
+    info.protocolVersion = WOK_PROTOCOL_VERSION;
+    info.name = "World of Kenshi - EU #1";
+    info.description = "Vanilla rules, permanent world, 5 minute corpses.";
+    info.players = 12;
+    info.maxPlayers = 250;
+    auto m = decode(encode(info));
+    REQUIRE(m.has_value());
+    CHECK(std::get<ServerInfo>(*m) == info);
+}
+
+TEST_CASE("server_info_limits") {
+    ServerInfo info;
+    info.name.assign(kMaxServerNameBytes + 1, 'n');
+    CHECK_FALSE(decode(encode(info)).has_value());
+    info.name = "ok";
+    info.description.assign(kMaxServerDescriptionBytes + 1, 'd');
+    CHECK_FALSE(decode(encode(info)).has_value());
+}

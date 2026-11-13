@@ -74,6 +74,15 @@ void write(ByteWriter& w, const CreateCharacter& m) {
     writeBytes(w, m.appearance.data(), m.appearance.size());
 }
 
+void write(ByteWriter&, const ServerInfoRequest&) {}
+void write(ByteWriter& w, const ServerInfo& m) {
+    w.u16(m.protocolVersion);
+    writeString(w, m.name);
+    writeString(w, m.description);
+    w.u16(m.players);
+    w.u16(m.maxPlayers);
+}
+
 constexpr MsgType typeOf(const Hello&) { return MsgType::Hello; }
 constexpr MsgType typeOf(const HelloAck&) { return MsgType::HelloAck; }
 constexpr MsgType typeOf(const PlayerState&) { return MsgType::PlayerState; }
@@ -82,6 +91,8 @@ constexpr MsgType typeOf(const Ping&) { return MsgType::Ping; }
 constexpr MsgType typeOf(const AuthChallenge&) { return MsgType::AuthChallenge; }
 constexpr MsgType typeOf(const CharacterData&) { return MsgType::CharacterData; }
 constexpr MsgType typeOf(const CreateCharacter&) { return MsgType::CreateCharacter; }
+constexpr MsgType typeOf(const ServerInfoRequest&) { return MsgType::ServerInfoRequest; }
+constexpr MsgType typeOf(const ServerInfo&) { return MsgType::ServerInfo; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -153,6 +164,18 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
                 return std::nullopt;
             return m;
         }
+        case MsgType::ServerInfoRequest:
+            return ServerInfoRequest{};
+        case MsgType::ServerInfo: {
+            ServerInfo m;
+            m.protocolVersion = r.u16();
+            if (!readBytes(r, kMaxServerNameBytes, m.name) ||
+                !readBytes(r, kMaxServerDescriptionBytes, m.description))
+                return std::nullopt;
+            m.players = r.u16();
+            m.maxPlayers = r.u16();
+            return m;
+        }
     }
     return std::nullopt;
 }
@@ -174,7 +197,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::CreateCharacter))
+        type > static_cast<uint8_t>(MsgType::ServerInfo))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;
