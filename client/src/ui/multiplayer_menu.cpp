@@ -1,5 +1,6 @@
 #include "multiplayer_menu.hpp"
 
+#include "../game/game_memory.hpp"
 #include "../game/identity.hpp"
 #include "../input.hpp"
 
@@ -563,6 +564,18 @@ void MultiplayerMenu::refreshStatus() {
     }
 }
 
+void MultiplayerMenu::enforceNormalSpeed() {
+    // GameWorld + 0x700: game speed (0 paused, 1 normal, 2 and 5 fast), docs/re/game-world.md.
+    constexpr uintptr_t kGameSpeed = 0x2134110 + 0x700;
+    float speed = 1.0f;
+    if (!mem::readBytes(mem::moduleBase() + kGameSpeed, &speed, sizeof(speed)) || speed == 1.0f) return;
+    // Kenshi's own "normal speed" button keeps its UI (paused banner, button states) consistent.
+    if (mygui::Widget* normal = mygui::findBySuffix("_TimeSpeedButton2", 12)) {
+        mygui::click(normal);
+        log("ui: game speed %.0f refused in multiplayer, back to normal", speed);
+    }
+}
+
 void MultiplayerMenu::update(float dt) {
     if (!mygui::available()) return;
     pollTimer_ += dt;
@@ -571,6 +584,12 @@ void MultiplayerMenu::update(float dt) {
         ensureButton();
         applyConnectedMenu();
         applyPauseMenu();
+        // Players never control a multiplayer world's time (no pause, no speed-up): once the world
+        // is really being played (not in the character editor or behind our loading screen).
+        timeLocked_ = multiplayerWorld_ && inGame_() && net_.status() == ClientNet::Status::Connected &&
+                      !loadingShown_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
+        for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight"})
+            if (mygui::Widget* w = mygui::findBySuffix(suffix, 12)) mygui::setVisible(w, !timeLocked_);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
             windowOpen_ = false;
@@ -578,6 +597,7 @@ void MultiplayerMenu::update(float dt) {
         if (windowOpen_) refreshRows();
     }
     updateLoading(dt);  // every frame: no gap between Kenshi's loading screen and ours
+    if (timeLocked_) enforceNormalSpeed();
     if (windowOpen_) {
         statusTimer_ += dt;
         if (statusTimer_ >= 0.25f) {

@@ -32,3 +32,12 @@ confirmed in game with the F8 probe (`client/src/game/re_probe.cpp`).
 | RootObject | `0x16ef338` |
 | GameWorld | `0x1722608` |
 | PlayerInterface | `0x171a2b8` |
+
+## Game speed (verified in game 2026-11-13)
+
+- `GameWorld + 0x700` (float): game speed. 0 = paused, 1 = normal, 2 and 5 = fast. Found with the
+  Ctrl+Shift+F11 probe, which clicks the speed buttons and diffs the GameWorld object.
+- Speed controls live in `Kenshi_MainPanel.layout`: `SpeedButtonsPanel`, `TimeSpeedButton1..4`
+  (pause, x1, x2, x5), `SpeedArrowLeft/Right`, and `PausedPanel`.
+- World of Kenshi hides those controls in a multiplayer world and clicks `TimeSpeedButton2`
+  whenever the speed is not 1 (keyboard shortcuts included).

@@ -1,6 +1,7 @@
 #include "re_probe.hpp"
 
 #include "../log.hpp"
+#include "../ui/mygui_abi.hpp"
 
 #include <windows.h>
 
@@ -748,6 +749,51 @@ void onF10() {
 
 bool g_f10WasDown = false;
 
+// ---- F11: game speed RE. Clicks Kenshi's speed buttons one after the other and logs which
+// GameWorld fields changed (float view), to find the speed variable. ----
+int g_speedStep = -1;
+int g_speedWait = 0;
+std::vector<uint8_t> g_gwSnap;
+
+void snapGameWorld(std::vector<uint8_t>& out) {
+    out.assign(0x3000, 0);
+    copyRaw(g_base + kGameWorld, out.data(), out.size());
+}
+
+void speedTick() {
+    if (g_speedStep < 0 || --g_speedWait > 0) return;
+    static const char* kButtons[] = {"_TimeSpeedButton3", "_TimeSpeedButton1", "_TimeSpeedButton4", "_TimeSpeedButton2"};
+    if (g_speedStep > 0) {  // diff against the snapshot taken before the previous click
+        std::vector<uint8_t> now;
+        snapGameWorld(now);
+        std::string diff;
+        for (size_t o = 0; o + 4 <= now.size(); o += 4) {
+            if (std::memcmp(&now[o], &g_gwSnap[o], 4) == 0) continue;
+            float a, b;
+            std::memcpy(&a, &g_gwSnap[o], 4);
+            std::memcpy(&b, &now[o], 4);
+            if (std::fabs(a) > 1e6f || std::fabs(b) > 1e6f || (std::fabs(a) < 1e-6f && std::fabs(b) < 1e-6f)) continue;
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), " +%zx:%g->%g", o, a, b);
+            diff += buf;
+            if (diff.size() > 900) break;
+        }
+        log("speed: after %s:%s", kButtons[g_speedStep - 1], diff.c_str());
+    }
+    if (g_speedStep >= 4) {
+        g_speedStep = -1;
+        return;
+    }
+    snapGameWorld(g_gwSnap);
+    mygui::Widget* b = mygui::findBySuffix(kButtons[g_speedStep], 12);
+    log("speed: click %s (%s)", kButtons[g_speedStep], b ? "found" : "missing");
+    if (b) mygui::click(b);
+    ++g_speedStep;
+    g_speedWait = 30;
+}
+
+bool g_f11WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -783,6 +829,13 @@ void probeTick() {
     bool f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
     if (f10 && !g_f10WasDown && focused) onF10();
     g_f10WasDown = f10;
+    bool f11 = (GetAsyncKeyState(VK_F11) & 0x8000) != 0;
+    if (f11 && !g_f11WasDown && focused && g_speedStep < 0) {
+        g_speedStep = 0;
+        g_speedWait = 0;
+    }
+    g_f11WasDown = f11;
+    speedTick();
 }
 
 }  // namespace wok

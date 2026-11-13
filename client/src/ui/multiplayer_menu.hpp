@@ -32,6 +32,8 @@ private:
     void select(int row);
     void applyConnectedMenu();  // connected on the title screen: start the server game
     void applyPauseMenu();      // connected: no local save/load in the pause menu, Disconnect instead
+    void enforceNormalSpeed();  // multiplayer: the game always runs at normal speed
+    bool timeLocked_ = false;
 
     ClientConfig& cfg_;
     ClientNet& net_;
