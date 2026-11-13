@@ -28,8 +28,13 @@ Returns the new Character* (or null). Callers then set the member's squad role w
 
 Prologue bytes `40 55 53` are checked before calling, as a cheap version guard.
 
+## Verified in game (2026-11-12)
+
+Selected character `+0x658` -> its ActivePlatoon. Two calls each created a `CharacterHuman` 40 units
+away in the player's squad, no crash.
+
 ## Status
 
-F7 dev key (`re_probe.cpp`): spawns a default character 40 units from the selected character, into
+Ctrl+Shift+F7 dev key (`re_probe.cpp`): spawns a default character 40 units from the selected character, into
 that character's own squad — an experiment to validate the call, not the final avatar behaviour.
 Next: own squad + neutral faction for remote players, AI off, move orders.

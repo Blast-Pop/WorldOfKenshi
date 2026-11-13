@@ -203,7 +203,9 @@ void probeTick() {
     if (!g_base) g_base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
     DWORD pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-    bool focused = pid == GetCurrentProcessId();
+    // Dev keys use Ctrl+Shift so they never clash with Kenshi's own bindings (F7 hides its UI).
+    bool focused = pid == GetCurrentProcessId() && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                   (GetAsyncKeyState(VK_SHIFT) & 0x8000);
     bool down = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
     if (down && !g_wasDown && focused) onF8();
     g_wasDown = down;
