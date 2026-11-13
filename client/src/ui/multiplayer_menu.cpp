@@ -290,7 +290,8 @@ void MultiplayerMenu::applyConnectedMenu() {
     }
     // Returning player: Kenshi's start and character-editor screens only load the world, so walk
     // through them automatically (the server character replaces the start one once in game).
-    if (enteredGame_ && net_.hasCharacter() && !inGame_()) {
+    // (During the character editor the world already exists, so this must not depend on inGame_.)
+    if (enteredGame_ && net_.hasCharacter() && autoStep_ < 2 && (autoStep_ == 1 || !inGame_())) {
         if (autoStep_ == 0) {
             if (mygui::Widget* begin = mygui::findBySuffix("_BeginButton", 6)) {
                 autoStep_ = 1;

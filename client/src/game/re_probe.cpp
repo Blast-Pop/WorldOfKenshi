@@ -459,6 +459,7 @@ bool g_f4WasDown = false;
 volatile LONG g_watchMode = 0;       // 1 = arm requested, 2 = disarm requested
 uintptr_t g_watchAddr = 0;
 uintptr_t g_writers[64];
+uintptr_t g_writerCallers[64];  // return address on the stack at the write (caller of memcpy-like helpers)
 volatile LONG g_writerCount = 0;
 volatile LONG g_writeHits = 0;
 double g_watchUntil = 0;
@@ -485,7 +486,13 @@ LONG CALLBACK watchHandler(EXCEPTION_POINTERS* e) {
         LONG n = g_writerCount;
         bool known = false;
         for (LONG i = 0; i < n; ++i) known |= g_writers[i] == rip;
-        if (!known && n < 64) g_writers[InterlockedIncrement(&g_writerCount) - 1] = rip;
+        if (!known && n < 64) {
+            LONG slot = InterlockedIncrement(&g_writerCount) - 1;
+            g_writers[slot] = rip;
+            uintptr_t ret = 0;
+            readQ(ctx->Rsp, ret);  // for a leaf helper (memcpy), [rsp] is the return address into the caller
+            g_writerCallers[slot] = ret;
+        }
         ctx->Dr6 = 0;
         return EXCEPTION_CONTINUE_EXECUTION;
     }
@@ -521,8 +528,17 @@ void watchTick() {
     setWatch(2);
     g_watching = false;
     log("watch: %ld writes from %ld code location(s) on the game thread", g_writeHits, g_writerCount);
-    for (LONG i = 0; i < g_writerCount; ++i)
-        log("watch:   writer at exe+0x%llx", static_cast<unsigned long long>(g_writers[i] - g_base));
+    for (LONG i = 0; i < g_writerCount; ++i) {
+        HMODULE mod = nullptr;
+        char name[MAX_PATH] = "?";
+        GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(g_writers[i]), &mod);
+        if (mod) GetModuleFileNameA(mod, name, MAX_PATH);
+        uintptr_t caller = g_writerCallers[i];
+        log("watch:   writer %p in %s (+0x%llx); [rsp] = %p (exe+0x%llx)", reinterpret_cast<void*>(g_writers[i]), name,
+            static_cast<unsigned long long>(g_writers[i] - reinterpret_cast<uintptr_t>(mod)),
+            reinterpret_cast<void*>(caller), static_cast<unsigned long long>(caller - g_base));
+    }
 }
 
 bool g_f3WasDown = false;
