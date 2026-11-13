@@ -543,6 +543,52 @@ void watchTick() {
 
 bool g_f3WasDown = false;
 
+// ---- F2: teleport experiment. The real position lives in the movement object (character +0x640,
+// position at +0xc4; Kenshi copies it into character +0x48 every frame). Write there, then watch. ----
+bool writeRaw(uintptr_t addr, const void* src, size_t n) {
+    __try {
+        std::memcpy(reinterpret_cast<void*>(addr), src, n);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+uintptr_t g_tpChar = 0;
+double g_tpUntil = 0;
+double g_tpNextLog = 0;
+
+void onF2() {
+    uintptr_t pi = 0, sel = 0, ch = 0, mv = 0;
+    if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
+        rttiName(ch) != ".?AVCharacterHuman@@" || !readQ(ch + 0x640, mv) || !mv) {
+        log("tp: select a character in game first");
+        return;
+    }
+    float pos[3];
+    if (!copyRaw(mv + 0xc4, pos, sizeof(pos))) return;
+    log("tp: movement %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(mv), rttiName(mv).c_str(), pos[0], pos[1],
+        pos[2]);
+    pos[0] += 50.0f;
+    if (!writeRaw(mv + 0xc4, pos, sizeof(pos))) {
+        log("tp: write failed");
+        return;
+    }
+    g_tpChar = ch;
+    g_tpUntil = GetTickCount64() / 1000.0 + 2.0;
+    g_tpNextLog = 0;
+}
+
+void tpTick() {
+    double now = GetTickCount64() / 1000.0;
+    if (!g_tpChar || now > g_tpUntil || now < g_tpNextLog) return;
+    g_tpNextLog = now + 0.4;
+    float p[3];
+    if (copyRaw(g_tpChar + 0x48, p, sizeof(p))) log("tp:   character at (%.1f, %.1f, %.1f)", p[0], p[1], p[2]);
+}
+
+bool g_f2WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -571,6 +617,10 @@ void probeTick() {
     if (f3 && !g_f3WasDown && focused) onF3();
     g_f3WasDown = f3;
     watchTick();
+    bool f2 = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
+    if (f2 && !g_f2WasDown && focused) onF2();
+    g_f2WasDown = f2;
+    tpTick();
 }
 
 }  // namespace wok

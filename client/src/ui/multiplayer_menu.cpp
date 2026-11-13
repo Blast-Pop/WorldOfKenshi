@@ -312,6 +312,7 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         loadingShown_ = true;
         loadingTime_ = 0;
         loadingText_.clear();
+        lastSlide_ = -1;
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -357,6 +358,20 @@ void MultiplayerMenu::updateLoading(float dt) {
         lastTip_ = tip;
     }
     const std::string& step = title;
+
+    // Like Kenshi's loading screen: a new random background image every few seconds.
+    static const char* kImages[] = {"loading_screen0.dds", "loading_screen1.dds", "loading_screen2.dds",
+                                    "loading_screen3.dds", "loading_screen4.dds", "loading_screen5.dds",
+                                    "loading_screen6.dds", "loading_screen9.dds", "loading_screen10.dds"};
+    int slide = static_cast<int>(loadingTime_ / 6.0f);
+    if (slide != lastSlide_) {
+        size_t pick = static_cast<size_t>(GetTickCount64() % std::size(kImages));
+        if (pick == lastImage_) pick = (pick + 1) % std::size(kImages);  // never the same twice in a row
+        if (mygui::Widget* bg = mygui::findWidget(std::string(kLoadingPrefix) + "BackgroundImage"))
+            mygui::setProperty(bg, "ImageTexture", kImages[pick]);
+        lastImage_ = pick;
+        lastSlide_ = slide;
+    }
 
     // Ours stays up for the whole flow: Kenshi's own loading screen stops at the character editor.
     showLoading(step);
