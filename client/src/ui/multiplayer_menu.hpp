@@ -14,11 +14,14 @@ namespace wok {
 class MultiplayerMenu {
 public:
     // `saveConfig` persists the last used address; `connect` starts the connection to cfg.host/port.
-    MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect);
+    // `unlink` forgets this PC's server tokens (next connection asks Steam again).
+    MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect,
+                    std::function<void()> unlink);
     void update(float dt);  // game thread, every frame
 
 private:
     void ensureButton();
+    void ensureOptionsTab();  // "Multiplayer" tab in Kenshi's Options panel
     void openWindow();
     void closeWindow();
     void onClick(const std::string& widgetName);
@@ -28,6 +31,7 @@ private:
     ClientNet& net_;
     std::function<void()> saveConfig_;
     std::function<void()> connect_;
+    std::function<void()> unlink_;
     float pollTimer_ = 0;
     float statusTimer_ = 0;
     bool mouseWasDown_ = false;

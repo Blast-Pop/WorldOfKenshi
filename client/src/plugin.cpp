@@ -20,6 +20,7 @@
 
 #include <wok/protocol.hpp>
 
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -159,7 +160,12 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         g_state->avatarsOk = g_state->readerOk && g_state->avatars.init(g_state->reader.gameWorld());
         if (wok::mygui::init())
             g_state->menu = new wok::MultiplayerMenu(
-                g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); }, [] { connectToServer(); });
+                g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); }, [] { connectToServer(); },
+                [] {  // unlink: forget every server token on this PC and disconnect
+                    g_state->net->stop();
+                    std::remove(tokensPath().c_str());
+                    wok::log("auth: tokens forgotten (unlink)");
+                });
         wok::installFrameHook(onFrame);
         wok::log("Multiplayer button on the main menu (F9 also connects, for development)");
     } catch (...) {

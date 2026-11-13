@@ -19,6 +19,9 @@ constexpr const char* kConnect = "WokConnect";
 constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
+constexpr const char* kOptionsTab = "WokOptionsTab";
+constexpr const char* kUnlink = "WokUnlink";
+constexpr const char* kUnlinkStatus = "WokUnlinkStatus";
 constexpr size_t kMaxServers = 6;
 
 const char* rejectText(RejectReason r) {
@@ -35,7 +38,7 @@ const char* rejectText(RejectReason r) {
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t serverCount) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < serverCount; ++i) {
         std::string n = kServerPrefix + std::to_string(i);
@@ -47,8 +50,28 @@ std::string ownedName(void* w, size_t serverCount) {
 }  // namespace
 
 MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig,
-                                 std::function<void()> connect)
-    : cfg_(cfg), net_(net), saveConfig_(std::move(saveConfig)), connect_(std::move(connect)) {}
+                                 std::function<void()> connect, std::function<void()> unlink)
+    : cfg_(cfg),
+      net_(net),
+      saveConfig_(std::move(saveConfig)),
+      connect_(std::move(connect)),
+      unlink_(std::move(unlink)) {}
+
+void MultiplayerMenu::ensureOptionsTab() {
+    if (mygui::findWidget(kOptionsTab)) return;
+    // Kenshi fills its Options TabControl from code; a TabItem child created the same way becomes a tab.
+    mygui::Widget* tabs = mygui::findBySuffix("_OptionsTab", 3);
+    if (!tabs) return;  // Options panel not open
+    mygui::Widget* tab = mygui::createChild(tabs, "TabItem", "", {0.0f, 0.0f, 1.0f, 1.0f}, kOptionsTab);
+    if (!tab) return;
+    mygui::setProperty(tab, "Caption", "Multiplayer");
+    auto text = mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.08f, 0.90f, 0.08f}, "");
+    mygui::setProperty(text, "Caption", "Compte Steam lié à World of Kenshi sur ce PC");
+    auto unlink = mygui::createChild(tab, "Button", "Kenshi_Button1", {0.05f, 0.20f, 0.40f, 0.09f}, kUnlink);
+    mygui::setProperty(unlink, "Caption", "Délier mon compte Steam");
+    mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.33f, 0.90f, 0.08f}, kUnlinkStatus);
+    log("ui: Multiplayer tab added to Options");
+}
 
 void MultiplayerMenu::ensureButton() {
     if (mygui::findWidget(kButton)) return;
@@ -105,6 +128,10 @@ void MultiplayerMenu::onClick(const std::string& name) {
         openWindow();
     } else if (name == kClose) {
         closeWindow();
+    } else if (name == kUnlink) {
+        unlink_();
+        mygui::setProperty(mygui::findWidget(kUnlinkStatus), "Caption",
+                           "Compte délié : la prochaine connexion redemandera Steam.");
     } else if (name == kConnect) {
         auto st = net_.status();
         if (st == ClientNet::Status::Connecting || st == ClientNet::Status::AwaitingSteamLogin ||
@@ -160,6 +187,7 @@ void MultiplayerMenu::update(float dt) {
     if (pollTimer_ >= 0.5f) {
         pollTimer_ = 0;
         ensureButton();
+        ensureOptionsTab();
         if (windowOpen_ && !mygui::findWidget(kWindow)) windowOpen_ = false;
     }
     if (windowOpen_) {
