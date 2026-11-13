@@ -32,6 +32,16 @@ bool readBytes(uintptr_t addr, void* out, size_t n) {
     }
 }
 
+bool writeBytes(uintptr_t addr, const void* src, size_t n) {
+    if (addr < 0x10000 || addr > 0x7FFFFFFFFFFFull - n) return false;
+    __try {
+        std::memcpy(reinterpret_cast<void*>(addr), src, n);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool readPtr(uintptr_t addr, uintptr_t& out) {
     if (addr & 7) return false;
     return readBytes(addr, &out, sizeof(out));
