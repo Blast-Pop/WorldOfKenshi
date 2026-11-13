@@ -59,7 +59,8 @@ if command -v ufw >/dev/null; then
   ufw allow 22/tcp >/dev/null; ufw allow 27800/udp >/dev/null; ufw allow 27801/tcp >/dev/null
 fi
 systemctl daemon-reload
-systemctl enable --now wok-server
+systemctl enable wok-server
+systemctl restart wok-server  # also picks up a new binary on redeploys
 sleep 2
 systemctl --no-pager --lines 5 status wok-server
 echo "World of Kenshi server ready: ${PUBLIC_IP}:27800"
