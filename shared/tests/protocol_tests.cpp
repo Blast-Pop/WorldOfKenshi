@@ -109,3 +109,95 @@ TEST_CASE("ping_roundtrip_and_type_byte") {
     REQUIRE(m.has_value());
     CHECK(std::holds_alternative<Ping>(*m));
 }
+
+// ---------------------------------------------------------------- protocol v2 (M2)
+
+namespace {
+CharacterData makeCharacter() {
+    CharacterData c;
+    c.name = "Aeglen";
+    c.race = "17-gamedata.quack";  // FCS stringID, never a numeric index
+    c.appearance = {1, 2, 3, 250};
+    c.x = -50918.8f;
+    c.y = 1533.1f;
+    c.z = 2932.5f;
+    c.yaw = 45.0f;
+    return c;
+}
+}  // namespace
+
+TEST_CASE("protocol_version_is_2") { CHECK(WOK_PROTOCOL_VERSION == 2); }
+
+TEST_CASE("hello_carries_token_roundtrip") {
+    Hello h = makeHello();
+    for (size_t i = 0; i < h.token.size(); ++i) h.token[i] = static_cast<uint8_t>(i * 7);
+    auto m = decode(encode(h));
+    REQUIRE(m.has_value());
+    CHECK(std::get<Hello>(*m) == h);
+}
+
+TEST_CASE("helloack_v2_roundtrip") {
+    HelloAck a{RejectReason::None, 3};
+    a.hasCharacter = true;
+    a.token[0] = 0xAB;
+    a.token[31] = 0xCD;
+    auto m = decode(encode(a));
+    REQUIRE(m.has_value());
+    CHECK(std::get<HelloAck>(*m) == a);
+}
+
+TEST_CASE("reject_reason_mod_mismatch_decodes") {
+    auto m = decode(encode(HelloAck{RejectReason::ModMismatch, 0}));
+    REQUIRE(m.has_value());
+    CHECK(std::get<HelloAck>(*m).reason == RejectReason::ModMismatch);
+}
+
+TEST_CASE("auth_challenge_roundtrip") {
+    AuthChallenge c{"http://45.32.1.2:27801/auth/start?nonce=abc123"};
+    auto m = decode(encode(c));
+    REQUIRE(m.has_value());
+    CHECK(std::get<AuthChallenge>(*m) == c);
+}
+
+TEST_CASE("character_data_roundtrip") {
+    auto c = makeCharacter();
+    auto m = decode(encode(c));
+    REQUIRE(m.has_value());
+    CHECK(std::get<CharacterData>(*m) == c);
+}
+
+TEST_CASE("create_character_roundtrip") {
+    CreateCharacter c{"Bob", "17-gamedata.quack", {9, 9}};
+    auto m = decode(encode(c));
+    REQUIRE(m.has_value());
+    CHECK(std::get<CreateCharacter>(*m) == c);
+}
+
+TEST_CASE("v2_messages_reject_truncation") {
+    for (const Message& msg : std::vector<Message>{makeCharacter(), CreateCharacter{"Bob", "r", {1}},
+                                                   AuthChallenge{"http://x"}}) {
+        auto bytes = encode(msg);
+        for (size_t n = 0; n < bytes.size(); ++n)
+            CHECK_FALSE(decode(std::span<const uint8_t>(bytes.data(), n)).has_value());
+    }
+}
+
+TEST_CASE("v2_limits_enforced") {
+    auto c = makeCharacter();
+    c.appearance.assign(kMaxAppearanceBytes + 1, 0);
+    CHECK_FALSE(decode(encode(c)).has_value());
+    c = makeCharacter();
+    c.race.assign(kMaxStringIdBytes + 1, 'r');
+    CHECK_FALSE(decode(encode(c)).has_value());
+    c = makeCharacter();
+    c.name.assign(kMaxNameBytes + 1, 'n');
+    CHECK_FALSE(decode(encode(c)).has_value());
+    AuthChallenge a{std::string(kMaxUrlBytes + 1, 'u')};
+    CHECK_FALSE(decode(encode(a)).has_value());
+}
+
+TEST_CASE("v2_rejects_nonfinite_character_position") {
+    auto c = makeCharacter();
+    c.z = std::numeric_limits<float>::infinity();
+    CHECK_FALSE(decode(encode(c)).has_value());
+}

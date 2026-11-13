@@ -72,7 +72,7 @@ TEST_CASE("join_rejected_when_full") {
 
 TEST_CASE("join_rejected_on_version_mismatch") {
     SessionManager sm({});
-    auto ack = join(sm, 1, 11, 2);
+    auto ack = join(sm, 1, 11, WOK_PROTOCOL_VERSION + 1);
     CHECK(ack.reason == RejectReason::VersionMismatch);
     CHECK(sm.playerCount() == 0);
     CHECK(contains(sm.connectionsToClose(), 1));
