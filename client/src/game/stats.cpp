@@ -71,6 +71,18 @@ std::vector<std::pair<uint8_t, uintptr_t>> healthSlots(uintptr_t character) {
     return out;
 }
 
+// Money (the player's, shown as "c.1,000"): int at *(*(PlayerInterface + 0x2a0) + 0x80) + 0x88,
+// PlayerInterface being at GameWorld + 0x580 (the game's reward code adds to it). Saved as id 63.
+constexpr uint8_t kMoneyId = 63;
+uintptr_t moneyAddress() {
+    uintptr_t pi = 0, owner = 0, holder = 0;
+    if (!mem::readPtr(mem::moduleBase() + 0x2134110 + 0x580, pi) || !pi || !mem::readPtr(pi + 0x2a0, owner) || !owner ||
+        !mem::readPtr(owner + 0x80, holder) || !holder)
+        return 0;
+    int v = -1;
+    return mem::readBytes(holder + 0x88, &v, sizeof(v)) && v >= 0 && v < 1000000000 ? holder + 0x88 : 0;
+}
+
 std::vector<StatValue> readStats(uintptr_t character) {
     std::vector<StatValue> out;
     uintptr_t stats = statsOf(character);
@@ -79,6 +91,10 @@ std::vector<StatValue> readStats(uintptr_t character) {
         float v = 0;
         if (mem::readBytes(stats + slot.offset, &v, sizeof(v)) && v == v && v > -1e6f && v < 1e6f)
             out.push_back({slot.id, v});
+    }
+    if (uintptr_t money = statsOf(character) ? moneyAddress() : 0) {
+        int v = 0;
+        if (mem::readBytes(money, &v, sizeof(v))) out.push_back({kMoneyId, static_cast<float>(v)});
     }
     if (statsOf(character))
         for (auto& [id, addr] : healthSlots(character)) {
@@ -98,6 +114,11 @@ int writeStats(uintptr_t character, const std::vector<StatValue>& values) {
             if (slot.id == v.id && writeFloat(stats + slot.offset, v.value)) ++written;
         for (auto& [id, addr] : health)
             if (id == v.id && writeFloat(addr, v.value)) ++written;
+        if (v.id == kMoneyId && v.value >= 0 && v.value < 1e9f)
+            if (uintptr_t money = moneyAddress()) {
+                int amount = static_cast<int>(v.value + 0.5f);
+                if (mem::writeBytes(money, &amount, sizeof(amount))) ++written;
+            }
     }
     return written;
 }
