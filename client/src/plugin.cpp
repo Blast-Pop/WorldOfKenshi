@@ -3,6 +3,7 @@
 // Nothing here may throw into the game or touch OGRE objects beyond registering hooks.
 
 #include "frame_hook.hpp"
+#include "game/avatars.hpp"
 #include "game/local_player.hpp"
 #include "game/re_probe.hpp"
 #include "input.hpp"
@@ -49,6 +50,9 @@ struct ClientState {
     int frames = 0;
     std::map<wok::PlayerId, double> lastRemoteLog;
     wok::MultiplayerMenu* menu = nullptr;
+    wok::AvatarManager avatars;
+    bool avatarsOk = false;
+    bool wasConnected = false;
 };
 
 void saveConfig(const wok::ClientConfig& cfg) {
@@ -84,19 +88,20 @@ void onFrame(float dt) {
         }
     }
 
-    // Task 9 replaces this with avatars; for now prove reception in the log (1 line/s/player).
+    bool connected = s.net->status() == wok::ClientNet::Status::Connected;
+    if (s.wasConnected && !connected) s.avatars.clear();
+    s.wasConnected = connected;
     for (auto& m : s.net->drainIncoming()) {
         if (auto* ps = std::get_if<wok::PlayerState>(&m)) {
-            if (s.now - s.lastRemoteLog[ps->playerId] >= 1.0) {
+            if (s.now - s.lastRemoteLog[ps->playerId] >= 5.0) {  // light trace, 1 line / 5 s / player
                 s.lastRemoteLog[ps->playerId] = s.now;
-                wok::log("remote player %u at (%.1f, %.1f, %.1f) yaw %.0f anim %u", ps->playerId, ps->x, ps->y,
-                         ps->z, ps->yaw, static_cast<unsigned>(ps->anim));
+                wok::log("remote player %u at (%.1f, %.1f, %.1f) anim %u", ps->playerId, ps->x, ps->y, ps->z,
+                         static_cast<unsigned>(ps->anim));
             }
-        } else if (auto* left = std::get_if<wok::PlayerLeft>(&m)) {
-            wok::log("remote player %u left", left->playerId);
-            s.lastRemoteLog.erase(left->playerId);
         }
+        if (s.avatarsOk) s.avatars.onMessage(m, s.now);
     }
+    if (s.avatarsOk) s.avatars.update(s.now);
 
     ++s.frames;
     s.fpsTimer += dt;
@@ -123,6 +128,7 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
                  g_state->cfg.name.c_str());
         g_state->readerOk = g_state->reader.init();
         if (!g_state->readerOk) wok::log("local player reader disabled (signature missing)");
+        g_state->avatarsOk = g_state->readerOk && g_state->avatars.init(g_state->reader.gameWorld());
         if (wok::mygui::init())
             g_state->menu = new wok::MultiplayerMenu(g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); });
         wok::installFrameHook(onFrame);

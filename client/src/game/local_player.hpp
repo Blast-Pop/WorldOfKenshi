@@ -1,6 +1,7 @@
 #pragma once
 #include <wok/protocol.hpp>
 
+#include <cstdint>
 #include <optional>
 
 namespace wok {
@@ -16,6 +17,8 @@ class LocalPlayerReader {
 public:
     bool init();  // resolves signatures; logs and returns false on failure
     std::optional<LocalSnapshot> read(double nowSec);
+    // The PlayerInterface slot found by signature is GameWorld + 0x580 (docs/re/game-world.md).
+    uintptr_t gameWorld() const { return piSlot_ ? piSlot_ - 0x580 : 0; }
 
 private:
     uintptr_t piSlot_ = 0;
