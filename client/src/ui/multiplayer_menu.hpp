@@ -21,7 +21,6 @@ public:
 
 private:
     void ensureButton();
-    void ensureOptionsTab();  // "Multiplayer" tab in Kenshi's Options panel
     void openWindow();
     void closeWindow();
     void onClick(const std::string& widgetName);

@@ -19,9 +19,7 @@ constexpr const char* kConnect = "WokConnect";
 constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
-constexpr const char* kOptionsTab = "WokOptionsTab";
 constexpr const char* kUnlink = "WokUnlink";
-constexpr const char* kUnlinkStatus = "WokUnlinkStatus";
 constexpr size_t kMaxServers = 6;
 
 const char* rejectText(RejectReason r) {
@@ -56,36 +54,6 @@ MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::functio
       saveConfig_(std::move(saveConfig)),
       connect_(std::move(connect)),
       unlink_(std::move(unlink)) {}
-
-void MultiplayerMenu::ensureOptionsTab() {
-    if (mygui::findWidget(kOptionsTab)) return;
-    // Kenshi fills its Options TabControl from code; a TabItem child created the same way becomes a tab.
-    static mygui::Widget* seenTabs = nullptr;
-    static int stablePolls = 0;
-    mygui::Widget* tabs = mygui::findBySuffix("_OptionsTab", 3);
-    if (!tabs) {  // Options panel not open
-        seenTabs = nullptr;
-        stablePolls = 0;
-        return;
-    }
-    // Kenshi adds its own tabs right after the panel appears; add ours only once the panel has
-    // existed for a full second so it lands after "General" and the others instead of over them.
-    if (tabs != seenTabs) {
-        seenTabs = tabs;
-        stablePolls = 0;
-        return;
-    }
-    if (++stablePolls < 2) return;
-    mygui::Widget* tab = mygui::createChild(tabs, "TabItem", "", {0.0f, 0.0f, 1.0f, 1.0f}, kOptionsTab);
-    if (!tab) return;
-    mygui::setProperty(tab, "Caption", "Multiplayer");
-    auto text = mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.08f, 0.90f, 0.08f}, "");
-    mygui::setProperty(text, "Caption", "Steam account linked to World of Kenshi on this PC");
-    auto unlink = mygui::createChild(tab, "Button", "Kenshi_Button1", {0.05f, 0.20f, 0.40f, 0.09f}, kUnlink);
-    mygui::setProperty(unlink, "Caption", "Unlink my Steam account");
-    mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.33f, 0.90f, 0.08f}, kUnlinkStatus);
-    log("ui: Multiplayer tab added to Options");
-}
 
 void MultiplayerMenu::ensureButton() {
     if (mygui::findWidget(kButton)) return;
@@ -122,7 +90,11 @@ void MultiplayerMenu::openWindow() {
     }
     if (n == 0) label("(no server listed in wok_client.ini)", 0.29f);
 
-    mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.76f, 0.90f, 0.06f}, kStatus);
+    mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.76f, 0.46f, 0.06f}, kStatus);
+    // Unlink lives here, not in Kenshi's Options: Kenshi casts every Options tab to its own panel
+    // class when applying settings and crashes on a foreign tab (MyGUI "Bad cast ... DatapanelGUI").
+    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {0.53f, 0.75f, 0.42f, 0.08f}, kUnlink);
+    mygui::setProperty(unlink, "Caption", "Unlink Steam account");
     auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {0.05f, 0.85f, 0.42f, 0.10f}, kConnect);
     mygui::setProperty(connect, "Caption", "Connect");
     auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {0.53f, 0.85f, 0.42f, 0.10f}, kClose);
@@ -144,8 +116,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
         closeWindow();
     } else if (name == kUnlink) {
         unlink_();
-        mygui::setProperty(mygui::findWidget(kUnlinkStatus), "Caption",
-                           "Account unlinked: the next connection will ask Steam again.");
+        error_ = "Account unlinked: the next connection will ask Steam again.";
     } else if (name == kConnect) {
         auto st = net_.status();
         if (st == ClientNet::Status::Connecting || st == ClientNet::Status::AwaitingSteamLogin ||
@@ -220,7 +191,6 @@ void MultiplayerMenu::update(float dt) {
     if (pollTimer_ >= 0.5f) {
         pollTimer_ = 0;
         ensureButton();
-        ensureOptionsTab();
         applyConnectedMenu();
         if (windowOpen_ && !mygui::findWidget(kWindow)) windowOpen_ = false;
     }

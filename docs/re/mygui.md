@@ -38,3 +38,10 @@ Widgets we create ourselves have unprefixed names.
 IDelegateUnlink +0x278, SkinItem/LayerItem +0x288. Calling the exported
 `WidgetInput::_riseMouseButtonClick()` on `widget + 0x80` fires the widget's click event, so Kenshi's
 own handler runs (used to press `…_NewGameButton` once connected). Visibility uses the `Visible` property.
+
+## Do not add tabs to Kenshi's Options panel
+
+Verified crash (2026-11-13): when Kenshi applies its options it reads every TabItem of `…_OptionsTab`
+and casts the item's user data to its own `DatapanelGUI*`. A tab created by a mod has no such data and
+MyGUI aborts with `Bad cast from type 'void' to 'class DatapanelGUI *'`. Our settings live in our own
+Multiplayer window instead.
