@@ -13,3 +13,20 @@ Confirmed in game: snapshots of a selected `CharacterHuman` taken before/after w
 Yaw in degrees = `2 * atan2(q.y, q.w)` converted to degrees, normalised to [0, 360).
 
 Still to find (Task 7, step 3): spawning a character and ordering it to move.
+
+## Identity and appearance (found 2026-11-13 with the Ctrl+Shift+F4 probe)
+
+Selected character "Max", Wanderer start, Greenlander, with hair/beard from the "Ark Haircuts" mod:
+
+| Offset | Type | Meaning | Observed |
+|---|---|---|---|
+| `+0x18` | VC10 `std::string` | **Character name** | `Max` |
+| `+0x40` | `GameData*` | Character template (start) | `Wanderer` [`1533662-rebirth.mod`] |
+| `+0x610` | VC10 `std::string` | Gender | `male` |
+| `+0xb20` | VC10 `std::string` | Body mesh | `human_male.mesh` |
+| `+0xb70` | `GameData*` | **Race** | `Greenlander` [`17-gamedata.quack`] |
+| `+0xb80` | `GameData*` | Hair style | `ark_haircut06b` [`59453-Ark Haircuts.mod`] |
+| `+0xbd0` | `GameData*` | Beard | `ark_beard03` [`59445-Ark Haircuts.mod`] |
+
+GameData `+0x28` = display name, `+0x58` = FCS string ID. Everything is sent by string ID, so modded
+content (here a modded haircut) travels like vanilla content.

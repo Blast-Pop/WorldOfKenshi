@@ -19,6 +19,7 @@ public:
     std::optional<LocalSnapshot> read(double nowSec);
     // The PlayerInterface slot found by signature is GameWorld + 0x580 (docs/re/game-world.md).
     uintptr_t gameWorld() const { return piSlot_ ? piSlot_ - 0x580 : 0; }
+    uintptr_t character() const { return lastChar_; }  // last character read by read(), 0 if none
 
 private:
     uintptr_t piSlot_ = 0;

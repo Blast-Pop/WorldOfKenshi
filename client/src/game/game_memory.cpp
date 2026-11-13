@@ -50,4 +50,22 @@ bool isA(uintptr_t obj, const char* rttiName) {
     return std::memcmp(name, rttiName, len) == 0;
 }
 
+std::string readString(uintptr_t addr, size_t maxLen) {
+    uint8_t raw[32];
+    if (!readBytes(addr, raw, sizeof(raw))) return {};
+    uint64_t size, cap;
+    uintptr_t ptr;
+    std::memcpy(&size, raw + 16, 8);
+    std::memcpy(&cap, raw + 24, 8);
+    std::memcpy(&ptr, raw, 8);
+    if (size > maxLen || cap < size) return {};
+    std::string s(size, '\0');
+    if (cap >= 16) {
+        if (!readBytes(ptr, s.data(), size)) return {};
+    } else {
+        std::memcpy(s.data(), raw, size);
+    }
+    return s;
+}
+
 }  // namespace wok::mem

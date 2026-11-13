@@ -4,6 +4,7 @@
 
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
+#include "game/identity.hpp"
 #include "game/local_player.hpp"
 #include "game/re_probe.hpp"
 #include "input.hpp"
@@ -57,6 +58,7 @@ struct ClientState {
     bool avatarsOk = false;
     bool wasConnected = false;
     uint64_t steamId = 0;
+    bool characterSent = false;  // CreateCharacter already sent during this connection
 };
 
 std::string tokensPath() { return wok::modFile(wok::modDir(), "tokens.ini"); }
@@ -119,6 +121,17 @@ void onFrame(float dt) {
 
     bool connected = s.net->status() == wok::ClientNet::Status::Connected;
     if (s.wasConnected && !connected) s.avatars.clear();
+    if (!connected) s.characterSent = false;
+
+    // First visit: once the player has made their character with Kenshi's own New Game flow,
+    // register it on the server (name, race and look by FCS string ID).
+    if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character()) {
+        if (auto c = wok::readIdentity(s.reader.character())) {
+            s.net->createCharacter(*c);
+            s.characterSent = true;
+            wok::log("character: sent '%s' (%s) to the server", c->name.c_str(), c->race.c_str());
+        }
+    }
     s.wasConnected = connected;
     for (auto& m : s.net->drainIncoming()) {
         if (auto* ps = std::get_if<wok::PlayerState>(&m)) {
