@@ -16,6 +16,7 @@ namespace {
 constexpr uintptr_t kFactoryOff = 0x4a0;
 constexpr uintptr_t kFactionMgrOff = 0x4a8;
 constexpr uintptr_t kPlayerInterfaceOff = 0x580;
+constexpr uintptr_t kPlayerSquadOff = 0x2a8;  // PlayerInterface -> current Platoon (docs/re/game-world.md)
 constexpr uintptr_t kFactionCount = 0x08;
 constexpr uintptr_t kFactionArray = 0x10;
 constexpr uintptr_t kFactionGameData = 0x240;
@@ -88,8 +89,11 @@ bool Spawner::init(uintptr_t gameWorld) {
 }
 
 bool Spawner::inGame() const {
-    uintptr_t pi = 0;
-    return ok_ && mem::readPtr(gw_ + kPlayerInterfaceOff, pi) && pi != 0;
+    // The PlayerInterface already exists on the title screen (its 3D backdrop is a world), so being
+    // "in game" also requires the player to have an active squad (PlayerInterface + 0x2a8).
+    uintptr_t pi = 0, platoon = 0;
+    return ok_ && mem::readPtr(gw_ + kPlayerInterfaceOff, pi) && pi != 0 &&
+           mem::readPtr(pi + kPlayerSquadOff, platoon) && mem::isA(platoon, ".?AVPlatoon@@");
 }
 
 uintptr_t Spawner::findFaction(std::string_view name) const {
