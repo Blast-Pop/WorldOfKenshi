@@ -49,6 +49,7 @@ Widget* mouseFocus();
 bool isShown(Widget* w);  // visible, parents included
 // Unlocks the edit box and feeds `text` through MyGUI's key input; returns the resulting text.
 std::string injectText(Widget* editBox, std::string_view text);
+std::string labelText(Widget* textBox);  // caption of a plain MyGUI TextBox, empty otherwise
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
 std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
@@ -58,6 +59,8 @@ Widget* findBySuffix(std::string_view suffix, int maxDepth);
 Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth);
 // All MyGUI EditBox widgets (checked by RTTI) whose name ends with `suffix`.
 std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth);
+// First visible widget whose name ends with `suffix` (layouts often keep hidden duplicates).
+Widget* findShownBySuffix(std::string_view suffix, int maxDepth);
 // Diagnostic: logs the full name of every widget whose name ends with `suffix`.
 void logWidgetsWithSuffix(std::string_view suffix, int maxDepth);
 // Fires the widget's click event exactly like a real mouse click (runs the game's own handler).

@@ -11,6 +11,7 @@
 #include <core/appearance.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <cstring>
 #include <iterator>
@@ -313,6 +314,7 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         nameTries_ = 0;
         importStage_ = 0;
         importTries_ = 0;
+        genderClicks_ = 0;
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -409,8 +411,8 @@ void MultiplayerMenu::applyConnectedMenu() {
                 mygui::Widget* fileName = nullptr;
                 for (mygui::Widget* f : mygui::findEditBoxesBySuffix("_EditFileName", 12))
                     if (mygui::isShown(f)) fileName = f;
-                mygui::Widget* open = mygui::findBySuffix("_ButtonOpenSave", 12);
-                if (fileName && open && mygui::isShown(open)) {
+                mygui::Widget* open = mygui::findShownBySuffix("_ButtonOpenSave", 12);
+                if (fileName && open) {
                     std::string typed = mygui::injectText(fileName, importFile_);
                     log("ui: importing the look '%s' (typed '%s')", importFile_.c_str(), typed.c_str());
                     mygui::click(open);
@@ -428,8 +430,24 @@ void MultiplayerMenu::applyConnectedMenu() {
                     auto data = net_.character();
                     if (data && importStage_ == 0) {
                         auto look = decodeAppearance(data->appearance);
+                        // Import keeps the editor's current sex (and drops hair/beard that do not fit
+                        // it): set the saved sex first with the editor's own arrows.
+                        auto lower = [](std::string t) {
+                            for (auto& ch : t) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                            return t;
+                        };
+                        std::string wanted = lower(look["gender"]);
+                        std::string shown = lower(mygui::labelText(mygui::findShownBySuffix("_GenderText", 12)));
+                        if (genderClicks_ == 0)
+                            log("ui: editor sex shown '%s', saved '%s'", shown.c_str(), wanted.c_str());
+                        if ((shown == "male" || shown == "female") && !wanted.empty() && shown != wanted && genderClicks_ < 4) {
+                            ++genderClicks_;
+                            log("ui: editor sex is '%s', switching to '%s'", shown.c_str(), wanted.c_str());
+                            if (mygui::Widget* next = mygui::findShownBySuffix("_GenderRightButton", 12)) mygui::click(next);
+                            return;
+                        }
                         auto body = base64Decode(look["bod2"]);
-                        mygui::Widget* importButton = mygui::findBySuffix("_ImportButton", 12);
+                        mygui::Widget* importButton = mygui::findShownBySuffix("_ImportButton", 12);
                         importFile_ = "WoK - " + data->name + ".bod2";
                         if (!body.empty() && importButton &&
                             std::ofstream(exportedBodyPath("WoK - " + data->name), std::ios::binary)
@@ -550,7 +568,7 @@ void MultiplayerMenu::update(float dt) {
         // <name>.bod2), the client then sends it to the server with the new character.
         if (multiplayerWorld_ && pressedOn_ && !net_.hasCharacter() &&
             mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_)).ends_with("_ConfirmButton")) {
-            if (mygui::Widget* exportButton = mygui::findBySuffix("_ExportButton", 12)) {
+            if (mygui::Widget* exportButton = mygui::findShownBySuffix("_ExportButton", 12)) {
                 mygui::click(exportButton);
                 log("ui: new character confirmed, look exported");
             }

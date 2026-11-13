@@ -57,6 +57,7 @@ private:
     int importStage_ = 0;  // returning player's look: 0 to do, 1 file dialog open, 2 done
     std::string importFile_;
     int importTries_ = 0;
+    int genderClicks_ = 0;
     bool exitRenamed_ = false;        // pause menu's Exit Game currently reads "Disconnect"
     bool disconnectPending_ = false;  // Disconnect clicked, waiting for Kenshi's exit dialog answer
     // Loading screen covering the automated steps of a returning player until the world is ready.

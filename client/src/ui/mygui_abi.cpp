@@ -43,6 +43,7 @@ struct Api {
     void (*destroyWidget)(void* gui, Widget* w);
     Widget* (*getMouseFocusWidget)(void* input);
     const void* (*editGetCaption)(Widget* edit);
+    const void* (*textBoxGetCaption)(Widget* textBox);
     void (*setKeyFocus)(void* input, Widget* w);
     void (*resetKeyFocus)(void* input);
     bool (*inheritedVisible)(Widget* w);
@@ -123,6 +124,7 @@ bool init() {
     ok &= load(m, g_api.destroyWidget, "?destroyWidget@Gui@MyGUI@@QEAAXPEAVWidget@2@@Z");
     ok &= load(m, g_api.getMouseFocusWidget, "?getMouseFocusWidget@InputManager@MyGUI@@QEBAPEAVWidget@2@XZ");
     ok &= load(m, g_api.editGetCaption, "?getCaption@EditBox@MyGUI@@UEAAAEBVUString@2@XZ");
+    load(m, g_api.textBoxGetCaption, "?getCaption@TextBox@MyGUI@@UEAAAEBVUString@2@XZ");
     load(m, g_api.setKeyFocus, "?setKeyFocusWidget@InputManager@MyGUI@@QEAAXPEAVWidget@2@@Z");
     load(m, g_api.resetKeyFocus, "?resetKeyFocusWidget@InputManager@MyGUI@@QEAAXXZ");
     load(m, g_api.inheritedVisible, "?getInheritedVisible@Widget@MyGUI@@QEBA_NXZ");
@@ -228,16 +230,15 @@ Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPre
 
 
 namespace {
-void collectEditBoxes(Widget* w, std::string_view suffix, int depth, std::vector<Widget*>& out) {
+void collectBySuffix(Widget* w, std::string_view suffix, int depth, const char* rtti, std::vector<Widget*>& out) {
     if (!w || out.size() > 64) return;
-    if (endsWith(nameOf(w), suffix) && mem::isA(reinterpret_cast<uintptr_t>(w), kEditBoxRtti)) out.push_back(w);
+    if (endsWith(nameOf(w), suffix) && (!rtti || mem::isA(reinterpret_cast<uintptr_t>(w), rtti))) out.push_back(w);
     if (depth == 0) return;
     size_t k = g_api.getChildCount(w);
-    for (size_t i = 0; i < k && i < 512; ++i) collectEditBoxes(g_api.getChildAt(w, i), suffix, depth - 1, out);
+    for (size_t i = 0; i < k && i < 512; ++i) collectBySuffix(g_api.getChildAt(w, i), suffix, depth - 1, rtti, out);
 }
-}  // namespace
 
-std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth) {
+std::vector<Widget*> allBySuffix(std::string_view suffix, int maxDepth, const char* rtti) {
     std::vector<Widget*> out;
     auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
     uintptr_t begin = 0, end = 0;
@@ -245,9 +246,20 @@ std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth
     if (end < begin || end - begin > 8 * 4096) return out;
     for (uintptr_t it = begin; it < end; it += 8) {
         uintptr_t root = 0;
-        if (mem::readPtr(it, root)) collectEditBoxes(reinterpret_cast<Widget*>(root), suffix, maxDepth, out);
+        if (mem::readPtr(it, root)) collectBySuffix(reinterpret_cast<Widget*>(root), suffix, maxDepth, rtti, out);
     }
     return out;
+}
+}  // namespace
+
+std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth) {
+    return allBySuffix(suffix, maxDepth, kEditBoxRtti);
+}
+
+Widget* findShownBySuffix(std::string_view suffix, int maxDepth) {
+    for (Widget* w : allBySuffix(suffix, maxDepth, nullptr))
+        if (isShown(w)) return w;
+    return nullptr;
 }
 
 Widget* findBySuffix(std::string_view suffix, int maxDepth) {
@@ -318,6 +330,13 @@ std::string injectText(Widget* editBox, std::string_view text) {
 
 bool isShown(Widget* w) { return w && g_api.inheritedVisible && g_api.inheritedVisible(w); }
 
+
+std::string labelText(Widget* textBox) {
+    if (!textBox || !g_api.textBoxGetCaption || !mem::isA(reinterpret_cast<uintptr_t>(textBox), ".?AVTextBox@MyGUI@@"))
+        return {};
+    const void* u = g_api.textBoxGetCaption(textBox);
+    return u ? g_api.ustringC(u) : "";
+}
 
 const char* editText(Widget* editBox) {
     if (!editBox) return "";
