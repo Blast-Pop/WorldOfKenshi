@@ -194,6 +194,10 @@ void logWidgetsWithSuffix(std::string_view suffix, int maxDepth) {
     }
 }
 
+Widget* findChildBySuffix(Widget* root, std::string_view suffix, int maxDepth) {
+    return root ? searchChildren(root, suffix, maxDepth) : nullptr;
+}
+
 Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth) {
     auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
     uintptr_t begin = 0, end = 0;

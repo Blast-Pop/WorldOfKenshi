@@ -407,6 +407,13 @@ void MultiplayerMenu::applyConnectedMenu() {
             if (confirm) {
                 ++confirmWaits_;
                 if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 6) {
+                    // Give the character its server name in Kenshi's own editor (NamePanel/NameText), so
+                    // the game itself names it: portrait, name tag and everything else follow.
+                    if (auto data = net_.character()) {
+                        mygui::Widget* panel = mygui::findBySuffixExcept("_NamePanel", kLoadingPrefix, 12);
+                        if (mygui::Widget* name = mygui::findChildBySuffix(panel, "_NameText", 3))
+                            mygui::setProperty(name, "Caption", data->name);
+                    }
                     log("ui: returning player, confirming the character editor (try %d)", confirmWaits_ / 8);
                     mygui::click(confirm);
                 }
