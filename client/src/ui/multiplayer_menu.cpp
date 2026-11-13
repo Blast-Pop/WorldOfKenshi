@@ -51,7 +51,8 @@ MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::functio
 
 void MultiplayerMenu::ensureButton() {
     if (mygui::findWidget(kButton)) return;
-    mygui::Widget* root = mygui::parentOf(mygui::findWidget("ContinueButton"));
+    // Kenshi prefixes layout widget names, so match "_NewGameButton" (always present, unlike Continue).
+    mygui::Widget* root = mygui::parentOf(mygui::findBySuffix("_NewGameButton", 3));
     if (!root) return;  // main menu not shown
     // Same column and size as Kenshi's buttons, one slot above "Continue" (Kenshi_MainMenu.layout).
     mygui::Widget* b =

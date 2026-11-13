@@ -49,6 +49,7 @@ void ClientNet::run(ClientConfig cfg) {
         } else {
             log("net: connecting to %s:%u", cfg.host.c_str(), cfg.port);
         }
+        auto nextPing = std::chrono::steady_clock::now();
         while (running_) {
             for (auto& ev : net.poll()) {
                 if (ev.kind == NetEvent::Connected) {
@@ -78,6 +79,11 @@ void ClientNet::run(ClientConfig cfg) {
                     std::lock_guard lock(mutex_);
                     incoming_.push_back(std::move(*m));
                 }
+            }
+            if (status_ == Status::Connected && std::chrono::steady_clock::now() >= nextPing) {
+                nextPing = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+                auto b = encode(Ping{});
+                net.send(b, false);
             }
             if (status_ == Status::Connected) {
                 std::optional<PlayerState> out;

@@ -174,3 +174,16 @@ TEST_CASE("player_ids_never_reused") {
     auto b = join(sm, 2, 12).playerId;
     CHECK(b != a);
 }
+
+TEST_CASE("ping_keeps_player_alive_and_is_not_relayed") {
+    SessionManager sm({});
+    join(sm, 1, 11, WOK_PROTOCOL_VERSION, 0.0);
+    join(sm, 2, 12, WOK_PROTOCOL_VERSION, 0.0);
+    auto ping = encode(Ping{});
+    for (double t = 2.0; t <= 20.0; t += 2.0) {
+        CHECK(sm.onPacket(1, ping, t).empty());
+        sm.onPacket(2, ping, t);
+    }
+    CHECK(sentOf<PlayerLeft>(sm.tick(21.0)).empty());
+    CHECK(sm.playerCount() == 2);
+}

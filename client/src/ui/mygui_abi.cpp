@@ -1,5 +1,6 @@
 #include "mygui_abi.hpp"
 
+#include "../game/game_memory.hpp"
 #include "../log.hpp"
 
 #include <windows.h>
@@ -42,7 +43,29 @@ struct Api {
     Widget* (*getMouseFocusWidget)(void* input);
     const void* (*editGetCaption)(Widget* edit);
     const char* (*ustringC)(const void* ustring);
+    const S* (*getName)(Widget* w);
+    size_t (*getChildCount)(Widget* w);
+    Widget* (*getChildAt)(Widget* w, size_t index);
 } g_api{};
+
+// Gui keeps its root widgets in a std::vector<Widget*> at +0x28 (begin) / +0x30 (end): seen in
+// Gui::findWidgetT, which iterates exactly that range (docs/re/mygui.md).
+constexpr uintptr_t kGuiRootsBegin = 0x28;
+constexpr uintptr_t kGuiRootsEnd = 0x30;
+
+bool endsWith(const std::string& s, std::string_view suffix) {
+    return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+Widget* searchChildren(Widget* w, std::string_view suffix, int depth) {
+    if (!w) return nullptr;
+    if (endsWith(nameOf(w), suffix)) return w;
+    if (depth == 0) return nullptr;
+    size_t n = g_api.getChildCount(w);
+    for (size_t i = 0; i < n && i < 512; ++i)
+        if (Widget* hit = searchChildren(g_api.getChildAt(w, i), suffix, depth - 1)) return hit;
+    return nullptr;
+}
 bool g_ok = false;
 
 template <class F>
@@ -79,6 +102,10 @@ bool init() {
     ok &= load(m, g_api.getMouseFocusWidget, "?getMouseFocusWidget@InputManager@MyGUI@@QEBAPEAVWidget@2@XZ");
     ok &= load(m, g_api.editGetCaption, "?getCaption@EditBox@MyGUI@@UEAAAEBVUString@2@XZ");
     ok &= load(m, g_api.ustringC, "?asUTF8_c_str@UString@MyGUI@@QEBAPEBDXZ");
+    ok &= load(m, g_api.getName,
+               "?getName@Widget@MyGUI@@QEBAAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ");
+    ok &= load(m, g_api.getChildCount, "?getChildCount@Widget@MyGUI@@QEAA_KXZ");
+    ok &= load(m, g_api.getChildAt, "?getChildAt@Widget@MyGUI@@QEAAPEAV12@_K@Z");
     g_ok = ok;
     log("mygui: %s", ok ? "ready" : "disabled");
     return ok;
@@ -123,6 +150,26 @@ void destroy(Widget* w) {
 Widget* mouseFocus() {
     void* input = g_api.getInput();
     return input ? g_api.getMouseFocusWidget(input) : nullptr;
+}
+
+Widget* findBySuffix(std::string_view suffix, int maxDepth) {
+    auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
+    uintptr_t begin = 0, end = 0;
+    if (!gui || !mem::readPtr(gui + kGuiRootsBegin, begin) || !mem::readPtr(gui + kGuiRootsEnd, end)) return nullptr;
+    if (end < begin || end - begin > 8 * 4096) return nullptr;
+    for (uintptr_t it = begin; it < end; it += 8) {
+        uintptr_t root = 0;
+        if (!mem::readPtr(it, root)) continue;
+        if (Widget* hit = searchChildren(reinterpret_cast<Widget*>(root), suffix, maxDepth)) return hit;
+    }
+    return nullptr;
+}
+
+std::string nameOf(Widget* w) {
+    if (!w) return {};
+    const S* s = g_api.getName(w);
+    if (!s || s->size > 4096) return {};
+    return std::string(s->capacity >= 16 ? s->ptr : s->buf, s->size);
 }
 
 const char* editText(Widget* editBox) {

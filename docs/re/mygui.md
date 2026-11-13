@@ -21,3 +21,12 @@ We only pass strings as `const std::string&` (MyGUI copies them), so our own all
 
 `Align::Default` = Left (2) | Top (8) = 10. Clicks are detected by polling the mouse-focus widget
 (no MyGUI delegates are created from our side).
+
+## Layout name prefix (found in game 2026-11-12)
+
+Kenshi loads its layouts with a per-instance prefix: widget names look like
+`0,000,000,07F,D80,4B0_NewGameButton` (an address formatted with thousands separators), different on
+every run. Exact-name lookups (`findWidgetT("NewGameButton")`) therefore fail. We search the root
+widgets (`Gui + 0x28` .. `Gui + 0x30`, a `std::vector<Widget*>` iterated by `Gui::findWidgetT`)
+and their children (`Widget::getChildCount` / `getChildAt`) for a name **ending** with `_NewGameButton`.
+Widgets we create ourselves have unprefixed names.

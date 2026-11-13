@@ -100,3 +100,12 @@ TEST_CASE("decode_rejects_nonfinite_floats") {
         CHECK_FALSE(decode(encode(s)).has_value());
     }
 }
+
+TEST_CASE("ping_roundtrip_and_type_byte") {
+    auto b = encode(Ping{});
+    CHECK(b.size() == 1);
+    CHECK(b[0] == static_cast<uint8_t>(MsgType::Ping));
+    auto m = decode(b);
+    REQUIRE(m.has_value());
+    CHECK(std::holds_alternative<Ping>(*m));
+}

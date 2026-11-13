@@ -16,7 +16,7 @@ constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 using PlayerId = uint32_t;
 using ConnId = uint32_t;  // connection handle assigned by the transport
 
-enum class MsgType : uint8_t { Hello = 1, HelloAck = 2, PlayerState = 3, PlayerLeft = 4 };
+enum class MsgType : uint8_t { Hello = 1, HelloAck = 2, PlayerState = 3, PlayerLeft = 4, Ping = 5 };
 enum class RejectReason : uint8_t { None = 0, ServerFull = 1, VersionMismatch = 2, Banned = 3, BadAuth = 4 };
 enum class AnimState : uint8_t { Idle = 0, Walk = 1, Run = 2 };
 
@@ -47,7 +47,13 @@ struct PlayerLeft {
     bool operator==(const PlayerLeft&) const = default;
 };
 
-using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft>;
+// Keepalive sent by the client about once per second, so a player who is in a menu or a loading
+// screen (and therefore has no PlayerState to send) is not timed out.
+struct Ping {
+    bool operator==(const Ping&) const = default;
+};
+
+using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes,

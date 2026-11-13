@@ -5,6 +5,7 @@
 // MyGUI copies them, so ownership never crosses the boundary.
 
 #include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace wok::mygui {
@@ -45,5 +46,9 @@ void setProperty(Widget* w, std::string_view key, std::string_view value);
 void destroy(Widget* w);
 Widget* mouseFocus();
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
+std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
+// Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
+// widgets are found by name suffix, searching the root widgets down to `maxDepth` levels.
+Widget* findBySuffix(std::string_view suffix, int maxDepth);
 
 }  // namespace wok::mygui
