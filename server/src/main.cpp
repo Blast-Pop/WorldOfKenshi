@@ -88,7 +88,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
         else {
             std::fprintf(stderr,
                          "usage: wok_server [--port N] [--max-players N] [--ban-file path] [--db path]\n"
-                         "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n");
+                         "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n"
+                         "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
+                         "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
+                         "                  [--default-spawn Name]\n");
             return false;
         }
     }
