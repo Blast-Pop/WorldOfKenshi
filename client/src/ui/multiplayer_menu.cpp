@@ -21,7 +21,6 @@ constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
-constexpr const char* kDisconnect = "WokDisconnect";
 constexpr const char* kLoadingPrefix = "WokLoading_";
 constexpr const char* kLoadingRoot = "WokLoadingCover";
 constexpr float kLoadingTimeoutSec = 60.0f;  // never leave a player stuck behind the cover
@@ -71,7 +70,7 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDisconnect})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -100,16 +99,13 @@ void MultiplayerMenu::applyPauseMenu() {
     for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
         if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
             mygui::setVisible(b, !mp);
-    // Disconnect stays available for the whole multiplayer world: the player may cancel Kenshi's
-    // exit dialog after clicking it and must still be able to leave later.
-    mygui::Widget* disc = mygui::findWidget(kDisconnect);
-    if (mp && !disc) {
-        // Same slot and style as Kenshi's "Save Game" button.
-        disc = mygui::createChild(mygui::parentOf(resume), "Button", "Kenshi_Button1",
-                                  {0.125f, 0.188953f, 0.75f, 0.130814f}, kDisconnect);
-        mygui::setProperty(disc, "Caption", "Disconnect");
-    } else if (!mp && disc) {
-        mygui::destroy(disc);
+    // Kenshi cannot return to the title screen from a world, so leaving means quitting: in a
+    // multiplayer world "Exit Game" becomes "Disconnect" (same button, same exit dialog), and the
+    // server connection is closed when the player confirms.
+    if (mygui::Widget* exitGame = mygui::findBySuffix("_ExitGameButton", 3);
+        exitGame && mygui::parentOf(exitGame) == mygui::parentOf(resume) && mp != exitRenamed_) {
+        mygui::setProperty(exitGame, "Caption", mp ? "Disconnect" : "Exit Game");
+        exitRenamed_ = mp;
     }
 }
 
@@ -249,11 +245,6 @@ void MultiplayerMenu::onClick(const std::string& name) {
         openWindow();
     } else if (name == kClose) {
         closeWindow();
-    } else if (name == kDisconnect) {
-        // Ask first: Kenshi's own exit dialog. We only leave the server if the player confirms.
-        log("ui: Disconnect asked, waiting for the exit confirmation");
-        disconnectPending_ = true;
-        if (mygui::Widget* exitGame = mygui::findBySuffix("_ExitGameButton", 3)) mygui::click(exitGame);
     } else if (name == kUnlink) {
         unlink_();
         error_ = "Account unlinked: the next connection will ask Steam again.";
@@ -410,8 +401,7 @@ void MultiplayerMenu::applyConnectedMenu() {
                     // Give the character its server name in Kenshi's own editor (NamePanel/NameText), so
                     // the game itself names it: portrait, name tag and everything else follow.
                     if (auto data = net_.character()) {
-                        mygui::Widget* panel = mygui::findBySuffixExcept("_NamePanel", kLoadingPrefix, 12);
-                        mygui::Widget* name = mygui::findChildBySuffix(panel, "_NameText", 3);
+                        mygui::Widget* name = mygui::findEditBoxBySuffix("_NameText", 12);
                         bool typed = mygui::typeInto(name, data->name);
                         log("ui: editor name field %s -> '%s' (typed: %s)", name ? "found" : "NOT found",
                             name ? mygui::editText(name) : "", typed ? "yes" : "no");
@@ -498,7 +488,11 @@ void MultiplayerMenu::update(float dt) {
     bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     if (down && !mouseWasDown_) {
         pressedOn_ = mygui::mouseFocus();
-        if (disconnectPending_ && pressedOn_) {
+        if (multiplayerWorld_ && pressedOn_ &&
+            mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_)).ends_with("_ExitGameButton")) {
+            log("ui: Disconnect asked, waiting for the exit confirmation");
+            disconnectPending_ = true;
+        } else if (disconnectPending_ && pressedOn_) {
             // Kenshi's exit dialog: ButtonA = Yes, ButtonC = No (hover recon). Act on the press,
             // before the game handles the click and closes.
             std::string n = mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_));

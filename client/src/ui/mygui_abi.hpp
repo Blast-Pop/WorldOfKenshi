@@ -54,6 +54,8 @@ std::string nameOf(Widget* w);          // full MyGUI name (layout prefix includ
 Widget* findBySuffix(std::string_view suffix, int maxDepth);
 // Same, ignoring widgets whose name starts with `excludedPrefix` (e.g. our own copies).
 Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth);
+// Only MyGUI EditBox widgets (checked by RTTI) whose name ends with `suffix`.
+Widget* findEditBoxBySuffix(std::string_view suffix, int maxDepth);
 // Search only below `root` (e.g. a panel), for a widget whose name ends with `suffix`.
 Widget* findChildBySuffix(Widget* root, std::string_view suffix, int maxDepth);
 // Diagnostic: logs the full name of every widget whose name ends with `suffix`.

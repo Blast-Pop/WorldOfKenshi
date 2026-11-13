@@ -46,7 +46,10 @@ bool isA(uintptr_t obj, const char* rttiName) {
     if (!readBytes(col, sigAndTd, sizeof(sigAndTd)) || sigAndTd[0] != 1 || sigAndTd[1] != 0) return false;
     char name[64] = {};
     size_t len = std::strlen(rttiName) + 1;
-    if (len > sizeof(name) || !readBytes(moduleBase() + sigAndTd[3] + 16, name, len)) return false;
+    // RVAs are relative to the module holding the locator (the game, or a DLL such as MyGUI).
+    PVOID image = nullptr;
+    if (!RtlPcToFileHeader(reinterpret_cast<PVOID>(col), &image) || !image) return false;
+    if (len > sizeof(name) || !readBytes(reinterpret_cast<uintptr_t>(image) + sigAndTd[3] + 16, name, len)) return false;
     return std::memcmp(name, rttiName, len) == 0;
 }
 
