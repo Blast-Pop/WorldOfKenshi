@@ -117,9 +117,12 @@ void MultiplayerMenu::onClick(const std::string& name) {
         log("ui: connecting to %s:%u", cfg_.host.c_str(), cfg_.port);
         net_.start(cfg_);
     } else if (name.rfind(kServerPrefix, 0) == 0) {
+        // Selecting a server connects to it right away (the address field shows which one).
         size_t i = std::stoul(name.substr(std::string(kServerPrefix).size()));
-        if (i < cfg_.servers.size())
+        if (i < cfg_.servers.size()) {
             mygui::setProperty(mygui::findWidget(kAddress), "Caption", cfg_.servers[i].address);
+            onClick(kConnect);
+        }
     }
 }
 
