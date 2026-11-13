@@ -117,17 +117,99 @@ void onF8() {
     g_snapshot = std::move(now);
 }
 
+// ---- F7: spawn experiment (Task 7 step 3). Kenshi 1.0.68 RVAs, see docs/re/spawning.md. ----
+constexpr uintptr_t kFactoryOff = 0x4a0;           // GameWorld + 0x4a0 -> RootObjectFactory*
+constexpr uintptr_t kCreateCharacter = 0x5836e0;   // factory helper: one character at a position
+constexpr uintptr_t kPlatoonOfActive = 0x78;       // ActivePlatoon + 0x78 -> Platoon*
+constexpr uintptr_t kPlatoonGetFactionVt = 0x58;   // Platoon vtable slot: Faction* getFaction()
+constexpr uint8_t kCreateCharacterPrologue[] = {0x40, 0x55, 0x53};  // sanity check before calling
+
+using CreateCharacterFn = uintptr_t (*)(uintptr_t factory, uintptr_t faction, const float* pos, uintptr_t activePlatoon,
+                                        uintptr_t charTemplate, uintptr_t home, float scale);
+using GetFactionFn = uintptr_t (*)(uintptr_t platoon);
+
+bool isClass(uintptr_t obj, const char* rtti) {
+    uintptr_t vt, col;
+    if (!readQ(obj, vt) || !readQ(vt - 8, col)) return false;
+    uint32_t td = 0;
+    __try {
+        td = *reinterpret_cast<const uint32_t*>(col + 12);
+        return std::strcmp(reinterpret_cast<const char*>(g_base + td + 16), rtti) == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+uintptr_t callCreate(CreateCharacterFn fn, uintptr_t factory, uintptr_t faction, const float* pos, uintptr_t ap) {
+    __try {
+        return fn(factory, faction, pos, ap, 0, 0, 1.0f);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;  // sentinel: crashed inside the game function
+    }
+}
+
+void onF7() {
+    uintptr_t gw = g_base + kGameWorld;
+    uintptr_t factory = 0, pi = 0, sel = 0, ch = 0;
+    readQ(gw + kFactoryOff, factory);
+    readQ(gw + kPlayerInterfaceOff, pi);
+    if (!factory || !pi || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) || !isClass(ch, ".?AVCharacterHuman@@")) {
+        log("spawn: need a selected character in game (factory=%p)", reinterpret_cast<void*>(factory));
+        return;
+    }
+    // Find the character's ActivePlatoon among its fields.
+    uintptr_t ap = 0, apOff = 0;
+    for (uintptr_t off = 0; off < 0x1000 && !ap; off += 8) {
+        uintptr_t p;
+        if (readQ(ch + off, p) && isClass(p, ".?AVActivePlatoon@@")) {
+            ap = p;
+            apOff = off;
+        }
+    }
+    uintptr_t platoon = 0, vt = 0, getFaction = 0;
+    if (!ap || !readQ(ap + kPlatoonOfActive, platoon) || !readQ(platoon, vt) ||
+        !readQ(vt + kPlatoonGetFactionVt, getFaction)) {
+        log("spawn: ActivePlatoon/Platoon not found (ap=%p)", reinterpret_cast<void*>(ap));
+        return;
+    }
+    uintptr_t faction = reinterpret_cast<GetFactionFn>(getFaction)(platoon);
+    log("spawn: char+0x%llx -> ActivePlatoon %p, Platoon %p (%s), faction %p", static_cast<unsigned long long>(apOff),
+        reinterpret_cast<void*>(ap), reinterpret_cast<void*>(platoon),
+        isClass(platoon, ".?AVPlatoon@@") ? "Platoon" : "?", reinterpret_cast<void*>(faction));
+
+    auto fn = reinterpret_cast<const uint8_t*>(g_base + kCreateCharacter);
+    if (std::memcmp(fn, kCreateCharacterPrologue, sizeof(kCreateCharacterPrologue)) != 0) {
+        log("spawn: createCharacter prologue mismatch (different Kenshi version?)");
+        return;
+    }
+    float pos[3];
+    std::memcpy(pos, reinterpret_cast<const void*>(ch + 0x48), sizeof(pos));
+    pos[0] += 40.0f;
+    uintptr_t created = callCreate(reinterpret_cast<CreateCharacterFn>(g_base + kCreateCharacter), factory, faction,
+                                   pos, ap);
+    if (created == 1)
+        log("spawn: game function raised an exception");
+    else
+        log("spawn: created %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(created),
+            created && isClass(created, ".?AVCharacterHuman@@") ? "CharacterHuman" : "not a CharacterHuman", pos[0],
+            pos[1], pos[2]);
+}
+
+bool g_f7WasDown = false;
+
 }  // namespace
 
 void probeTick() {
     if (!g_base) g_base = reinterpret_cast<uintptr_t>(GetModuleHandleA(nullptr));
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    bool focused = pid == GetCurrentProcessId();
     bool down = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
-    if (down && !g_wasDown) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-        if (pid == GetCurrentProcessId()) onF8();
-    }
+    if (down && !g_wasDown && focused) onF8();
     g_wasDown = down;
+    bool f7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+    if (f7 && !g_f7WasDown && focused) onF7();
+    g_f7WasDown = f7;
 }
 
 }  // namespace wok
