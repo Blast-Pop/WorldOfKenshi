@@ -104,6 +104,9 @@ Les mods font vivre la communauté : un serveur moddé doit être un cas normal,
 - **Server time (Aeglen, 2026-11-13)**: a player can never control the server's time. In a multiplayer world the pause and speed controls (buttons and keys) are disabled; time always runs at normal speed.
 - **Skills (done 2026-11-13)**: the client sends changed skills once a second (`StatsUpdate`); the server keeps them in memory and writes them every 2 s and on disconnect; a returning player gets them back in `CharacterData` (docs/re/stats.md).
 
+- **World time (decided 2026-11-13)**: the server owns the world clock. It advances from real elapsed time at Kenshi's normal rate, even with nobody online, and is saved in the database. Clients never set it: they align their game clock to the server's every few seconds.
+- **Frozen zones (decided 2026-11-13, answers open question 2)**: a zone nobody simulates is frozen; when it thaws, the elapsed time is applied in summary (crops grow, food rots, wounded NPCs heal, traders restock) instead of being replayed.
+
 ## 8. Premier jalon (M1) : « ça marche »
 
 **Deux joueurs se connectent au même serveur et se voient marcher en jeu.**
