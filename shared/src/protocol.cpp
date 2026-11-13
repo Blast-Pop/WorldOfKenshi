@@ -63,6 +63,7 @@ void write(ByteWriter& w, const CharacterData& m) {
     writeString(w, m.name);
     writeString(w, m.race);
     writeBytes(w, m.appearance.data(), m.appearance.size());
+    writeString(w, m.templateId);
     w.f32(m.x);
     w.f32(m.y);
     w.f32(m.z);
@@ -72,6 +73,7 @@ void write(ByteWriter& w, const CreateCharacter& m) {
     writeString(w, m.name);
     writeString(w, m.race);
     writeBytes(w, m.appearance.data(), m.appearance.size());
+    writeString(w, m.templateId);
 }
 
 void write(ByteWriter&, const ServerInfoRequest&) {}
@@ -148,7 +150,7 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
         case MsgType::CharacterData: {
             CharacterData m;
             if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.race) ||
-                !readBytes(r, kMaxAppearanceBytes, m.appearance))
+                !readBytes(r, kMaxAppearanceBytes, m.appearance) || !readBytes(r, kMaxStringIdBytes, m.templateId))
                 return std::nullopt;
             m.x = r.f32();
             m.y = r.f32();
@@ -160,7 +162,7 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
         case MsgType::CreateCharacter: {
             CreateCharacter m;
             if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.race) ||
-                !readBytes(r, kMaxAppearanceBytes, m.appearance))
+                !readBytes(r, kMaxAppearanceBytes, m.appearance) || !readBytes(r, kMaxStringIdBytes, m.templateId))
                 return std::nullopt;
             return m;
         }

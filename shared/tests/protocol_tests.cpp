@@ -230,3 +230,15 @@ TEST_CASE("server_info_limits") {
     info.description.assign(kMaxServerDescriptionBytes + 1, 'd');
     CHECK_FALSE(decode(encode(info)).has_value());
 }
+
+TEST_CASE("character_template_id_roundtrip") {
+    CharacterData c = makeCharacter();
+    c.templateId = "1533662-rebirth.mod";
+    auto m = decode(encode(c));
+    REQUIRE(m.has_value());
+    CHECK(std::get<CharacterData>(*m).templateId == "1533662-rebirth.mod");
+    CreateCharacter cc{"Pao", "17-gamedata.quack", {}, "1533662-rebirth.mod"};
+    auto m2 = decode(encode(cc));
+    REQUIRE(m2.has_value());
+    CHECK(std::get<CreateCharacter>(*m2) == cc);
+}

@@ -99,3 +99,11 @@ TEST_CASE("store_persists_across_reopen") {
     }
     std::remove(path.c_str());
 }
+
+TEST_CASE("store_keeps_template_id") {
+    CharacterStore s(":memory:");
+    auto c = sample();
+    c.templateId = "1533662-rebirth.mod";
+    s.create(42, c);
+    CHECK(s.load(42)->templateId == "1533662-rebirth.mod");
+}

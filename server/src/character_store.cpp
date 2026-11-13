@@ -18,7 +18,11 @@ constexpr const char* kSchema =
     "  name TEXT NOT NULL,"
     "  race TEXT NOT NULL,"
     "  appearance BLOB NOT NULL,"
-    "  x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL, yaw REAL NOT NULL);";
+    "  x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL, yaw REAL NOT NULL,"
+    "  template TEXT NOT NULL DEFAULT '');";
+
+// Databases created before the template column existed get it added on open (error ignored if present).
+constexpr const char* kMigrations = "ALTER TABLE characters ADD COLUMN template TEXT NOT NULL DEFAULT '';";
 
 // RAII prepared statement.
 class Stmt {
@@ -76,6 +80,7 @@ CharacterStore::CharacterStore(const std::string& path) {
         db_ = nullptr;
         throw std::runtime_error("schema: " + msg);
     }
+    sqlite3_exec(db_, kMigrations, nullptr, nullptr, nullptr);
 }
 
 CharacterStore::~CharacterStore() { sqlite3_close(db_); }
@@ -97,7 +102,7 @@ void CharacterStore::setToken(uint64_t steamId, const AuthToken& token) {
 }
 
 std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
-    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw FROM characters WHERE steam_id = ?1");
+    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw, template FROM characters WHERE steam_id = ?1");
     s.id(1, steamId);
     if (s.step() != SQLITE_ROW) return std::nullopt;
     CharacterData c;
@@ -109,14 +114,15 @@ std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
     c.y = static_cast<float>(sqlite3_column_double(s.get(), 4));
     c.z = static_cast<float>(sqlite3_column_double(s.get(), 5));
     c.yaw = static_cast<float>(sqlite3_column_double(s.get(), 6));
+    c.templateId = columnText(s.get(), 7);
     return c;
 }
 
 bool CharacterStore::create(uint64_t steamId, const CharacterData& c) {
-    Stmt s(db_, "INSERT OR IGNORE INTO characters(steam_id, name, race, appearance, x, y, z, yaw) "
-                "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)");
+    Stmt s(db_, "INSERT OR IGNORE INTO characters(steam_id, name, race, appearance, x, y, z, yaw, template) "
+                "VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)");
     s.id(1, steamId).text(2, c.name).text(3, c.race).blob(4, c.appearance.data(), c.appearance.size());
-    s.real(5, c.x).real(6, c.y).real(7, c.z).real(8, c.yaw);
+    s.real(5, c.x).real(6, c.y).real(7, c.z).real(8, c.yaw).text(9, c.templateId);
     return s.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
 }
 

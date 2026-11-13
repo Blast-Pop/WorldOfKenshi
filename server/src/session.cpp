@@ -165,6 +165,7 @@ std::vector<Outgoing> SessionManager::handleCreate(ConnId conn, Conn& c, const C
     d.name = m.name;
     d.race = m.race;
     d.appearance = m.appearance;
+    d.templateId = m.templateId;
     d.x = cfg_.spawnX;
     d.y = cfg_.spawnY;
     d.z = cfg_.spawnZ;

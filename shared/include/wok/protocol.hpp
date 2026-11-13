@@ -96,6 +96,7 @@ struct CharacterData {
     std::string name;
     std::string race;                  // FCS stringID
     std::vector<uint8_t> appearance;   // opaque, produced by the client from Kenshi's character editor
+    std::string templateId;            // FCS stringID of the character template (e.g. a start's character)
     float x = 0, y = 0, z = 0, yaw = 0;
     bool operator==(const CharacterData&) const = default;
 };
@@ -105,6 +106,7 @@ struct CreateCharacter {
     std::string name;
     std::string race;
     std::vector<uint8_t> appearance;
+    std::string templateId;
     bool operator==(const CreateCharacter&) const = default;
 };
 
