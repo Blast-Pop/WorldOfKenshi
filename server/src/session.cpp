@@ -77,12 +77,15 @@ std::vector<Outgoing> SessionManager::handleHello(ConnId conn, Conn& c, const He
 
     if (h.token != AuthToken{}) {
         auto known = cfg_.store->tokenFor(h.steamId);
-        if (!known || *known != h.token) return reject(conn, RejectReason::BadAuth);
-        c.steamId = h.steamId;
-        return accept(conn, c, AuthToken{}, nowSec);
+        if (known && *known == h.token) {
+            c.steamId = h.steamId;
+            return accept(conn, c, AuthToken{}, nowSec);
+        }
+        // Stale or unknown token (e.g. this server's database was reset): fall back to Steam,
+        // which proves the account and issues a fresh token.
     }
 
-    // First visit on this server: prove the SteamID through Steam OpenID.
+    // First visit on this server (or no valid token): prove the SteamID through Steam OpenID.
     // Reuse a Steam login already in progress for this claimed SteamID (player clicked Connect again).
     if (auto byId = pendingByClaimed_.find(h.steamId); byId != pendingByClaimed_.end()) {
         auto p = pendingAuth_.find(byId->second);

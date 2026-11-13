@@ -122,16 +122,27 @@ TEST_CASE("returning_player_with_token_accepted_without_challenge") {
     CHECK(acks[0].token == AuthToken{});  // no new token issued
 }
 
-TEST_CASE("wrong_token_rejected_badauth") {
+TEST_CASE("wrong_token_asks_steam_again") {
+    // A stale or forged token never lets the player in: Steam must prove the account again.
     Fixture f;
     AuthToken good{}, bad{};
     good.fill(9);
     bad.fill(8);
     f.store.setToken(42, good);
-    auto acks = all<HelloAck>(f.hello(1, 42, bad));
-    REQUIRE(acks.size() == 1);
-    CHECK(acks[0].reason == RejectReason::BadAuth);
+    auto out = f.hello(1, 42, bad);
+    CHECK(all<HelloAck>(out).empty());
+    CHECK(all<AuthChallenge>(out).size() == 1);
     CHECK(f.sm.playerCount() == 0);
+}
+
+TEST_CASE("token_unknown_to_this_server_asks_steam_again") {
+    // E.g. the server's database was reset: the player's saved token means nothing here.
+    Fixture f;
+    AuthToken t{};
+    t.fill(7);
+    auto out = f.hello(1, 42, t);
+    CHECK(all<HelloAck>(out).empty());
+    CHECK(all<AuthChallenge>(out).size() == 1);
 }
 
 TEST_CASE("returning_player_gets_character_data") {
