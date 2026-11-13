@@ -420,6 +420,39 @@ void onF5() {
 
 bool g_f5WasDown = false;
 
+// ---- F4: what identifies the selected character (name, race...) for CreateCharacter ----
+// Logs every plausible VC10 std::string stored inline in the character, and every GameData it
+// points to (with that data's name and FCS string ID), with their offsets.
+bool printable(const std::string& s) {
+    if (s.empty() || s.size() > 64) return false;
+    for (unsigned char c : s)
+        if (c < 0x20 || c > 0x7e) return false;
+    return true;
+}
+
+void onF4() {
+    uintptr_t pi = 0, sel = 0, ch = 0;
+    if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
+        rttiName(ch) != ".?AVCharacterHuman@@") {
+        log("ident: select a character in game first");
+        return;
+    }
+    log("ident: character %p", reinterpret_cast<void*>(ch));
+    for (uintptr_t off = 0; off < 0x1000; off += 8) {
+        std::string inl = readVc10String(ch + off);
+        if (printable(inl)) log("ident: +0x%llx string '%s'", static_cast<unsigned long long>(off), inl.c_str());
+        uintptr_t p;
+        if (!readQ(ch + off, p)) continue;
+        std::string cls = rttiName(p);
+        if (cls == ".?AVGameData@@")
+            log("ident: +0x%llx GameData '%s' [%s]", static_cast<unsigned long long>(off),
+                readVc10String(p + kGameDataName).c_str(), readVc10String(p + kGameDataStringId).c_str());
+    }
+    log("ident: done");
+}
+
+bool g_f4WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -441,6 +474,9 @@ void probeTick() {
     bool f5 = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
     if (f5 && !g_f5WasDown && focused) onF5();
     g_f5WasDown = f5;
+    bool f4 = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
+    if (f4 && !g_f4WasDown && focused) onF4();
+    g_f4WasDown = f4;
 }
 
 }  // namespace wok
