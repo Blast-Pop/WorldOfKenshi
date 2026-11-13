@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <iterator>
 #include <string>
 
 namespace wok {
@@ -20,6 +21,12 @@ constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr size_t kMaxRows = 8;
+
+// Colours ("R G B", 0-1): light text on a paler panel, for contrast with Kenshi's dark window.
+constexpr const char* kHeaderText = "1 0.92 0.72";
+constexpr const char* kRowText = "0.96 0.92 0.84";
+constexpr const char* kStatusText = "0.96 0.92 0.84";
+constexpr const char* kSeparator = "0.85 0.76 0.6";
 
 // Server browser columns, as fractions of the list width (Aeglen's mockup).
 struct Column {
@@ -92,12 +99,37 @@ void MultiplayerMenu::openWindow() {
     if (!w) return;
     mygui::setProperty(w, "Caption", "Multiplayer");
 
+    // Paler panel behind the server list, a slightly darker header band, light text for contrast.
+    const float listBottom = kRowTop + kRowStep * kMaxRows;
+    auto fill = [&](mygui::FloatCoord at, const char* colour, const char* alpha) {
+        auto f = mygui::createChild(w, "Widget", "WhiteSkin", at, "");
+        mygui::setProperty(f, "Colour", colour);
+        mygui::setProperty(f, "Alpha", alpha);
+        mygui::setProperty(f, "NeedMouse", "false");
+    };
+    fill({kListLeft, 0.015f, kListWidth, listBottom - 0.015f}, "0.62 0.55 0.43", "0.35");  // list background
+    fill({kListLeft, 0.015f, kListWidth, 0.06f}, "0.35 0.30 0.22", "0.75");                // header band
+
     for (const Column& c : kColumns) {
         auto h = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText",
                                     {kListLeft + c.left * kListWidth + 0.005f, 0.02f, c.width * kListWidth, 0.05f}, "");
         mygui::setProperty(h, "Caption", c.header);
+        mygui::setProperty(h, "TextColour", kHeaderText);
     }
+    // Separators: vertical lines between columns, horizontal lines under the header and each row.
+    auto line = [&](mygui::FloatCoord at) {
+        auto l = mygui::createChild(w, "Widget", "WhiteSkin", at, "");
+        mygui::setProperty(l, "Colour", kSeparator);
+        mygui::setProperty(l, "Alpha", "0.55");
+        mygui::setProperty(l, "NeedMouse", "false");
+    };
+    for (size_t c = 1; c < std::size(kColumns); ++c)
+        line({kListLeft + kColumns[c].left * kListWidth, 0.015f, 0.0015f, listBottom - 0.015f});
+    line({kListLeft, 0.075f, kListWidth, 0.002f});
     rowCount_ = std::min(cfg_.servers.size(), kMaxRows);
+    for (size_t i = 0; i < kMaxRows; ++i)
+        line({kListLeft, kRowTop + kRowStep * i + kRowHeight + 0.002f, kListWidth, 0.0015f});
+
     for (size_t i = 0; i < rowCount_; ++i) {
         auto row = mygui::createChild(w, "Button", "Kenshi_Button2",
                                       {kListLeft, kRowTop + kRowStep * i, kListWidth, kRowHeight}, rowName(i));
@@ -105,14 +137,17 @@ void MultiplayerMenu::openWindow() {
             auto cell = mygui::createChild(row, "TextBox", "Kenshi_TextboxStandardText",
                                            {c.left + 0.005f, 0.0f, c.width - 0.01f, 1.0f}, rowName(i) + c.suffix);
             mygui::setProperty(cell, "NeedMouse", "false");  // clicks go to the row button
+            mygui::setProperty(cell, "TextColour", kRowText);
         }
     }
     if (rowCount_ == 0) {
         auto t = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {kListLeft, kRowTop, kListWidth, 0.06f}, "");
         mygui::setProperty(t, "Caption", "(no server listed in wok_client.ini)");
+        mygui::setProperty(t, "TextColour", kRowText);
     }
 
-    mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.03f, 0.77f, 0.48f, 0.06f}, kStatus);
+    auto status = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.03f, 0.77f, 0.48f, 0.06f}, kStatus);
+    mygui::setProperty(status, "TextColour", kStatusText);
     // Unlink lives here, not in Kenshi's Options: Kenshi casts every Options tab to its own panel
     // class when applying settings and crashes on a foreign tab (MyGUI "Bad cast ... DatapanelGUI").
     auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {0.53f, 0.76f, 0.44f, 0.07f}, kUnlink);
