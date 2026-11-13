@@ -189,19 +189,27 @@ uintptr_t Spawner::findGameData(std::string_view stringId) const {
     return gd && mem::isA(gd, ".?AVGameData@@") ? gd : 0;
 }
 
-void Spawner::setName(uintptr_t character, std::string_view name) {
-    // Rewrite the name in place, never growing it past its current capacity (no allocation).
+namespace {
+// Rewrite an MSVC std::string in place, never growing it past its capacity (no allocation).
+void writeStringInPlace(uintptr_t str, std::string_view text) {
     uint8_t raw[32];
-    if (!mem::readBytes(character + kCharName, raw, sizeof(raw))) return;
+    if (!mem::readBytes(str, raw, sizeof(raw))) return;
     uint64_t cap;
     uintptr_t ptr;
     std::memcpy(&cap, raw + 24, 8);
     std::memcpy(&ptr, raw, 8);
-    uint64_t size = std::min<uint64_t>(name.size(), cap);
-    uintptr_t buffer = cap >= 16 ? ptr : character + kCharName;
+    uint64_t size = std::min<uint64_t>(text.size(), cap);
+    uintptr_t buffer = cap >= 16 ? ptr : str;
     char terminator = 0;
-    if (!guardedWrite(buffer, name.data(), size) || !guardedWrite(buffer + size, &terminator, 1)) return;
-    guardedWrite(character + kCharName + 16, &size, sizeof(size));
+    if (!guardedWrite(buffer, text.data(), size) || !guardedWrite(buffer + size, &terminator, 1)) return;
+    guardedWrite(str + 16, &size, sizeof(size));
+}
+}  // namespace
+
+void Spawner::setName(uintptr_t character, std::string_view name) {
+    // Only the character's own string: Kenshi caches the name in its name tag and panels, so a
+    // visible rename goes through the character editor instead (see MultiplayerMenu).
+    writeStringInPlace(character + kCharName, name);
 }
 
 bool Spawner::restorePlayerCharacter(uintptr_t playerCharacter, const CharacterData& data) const {
@@ -209,8 +217,9 @@ bool Spawner::restorePlayerCharacter(uintptr_t playerCharacter, const CharacterD
         log("restore: no player character to restore into");
         return false;
     }
-    // The New Game character becomes the server character: same name, back where it was left.
-    setName(playerCharacter, data.name);
+    // The New Game character becomes the server character, back where it was left. Its name is
+    // applied afterwards through Kenshi's own rename (portrait name field), which refreshes the
+    // name tag; writing the string here first would make that rename a no-op.
     const float pos[3] = {data.x, data.y, data.z};
     setPosition(playerCharacter, pos);
     log("restore: '%s' back at (%.1f, %.1f, %.1f)", data.name.c_str(), pos[0], pos[1], pos[2]);

@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace wok::mygui {
 
@@ -45,8 +46,9 @@ Widget* createRoot(std::string_view type, std::string_view skin, FloatCoord coor
 void setProperty(Widget* w, std::string_view key, std::string_view value);
 void destroy(Widget* w);
 Widget* mouseFocus();
-// Types `text` into an edit box like a player would (ASCII), so the game's text-change handlers run.
-bool typeInto(Widget* editBox, std::string_view text);
+bool isShown(Widget* w);  // visible, parents included
+// Unlocks the edit box and feeds `text` through MyGUI's key input; returns the resulting text.
+std::string injectText(Widget* editBox, std::string_view text);
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
 std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
@@ -54,10 +56,8 @@ std::string nameOf(Widget* w);          // full MyGUI name (layout prefix includ
 Widget* findBySuffix(std::string_view suffix, int maxDepth);
 // Same, ignoring widgets whose name starts with `excludedPrefix` (e.g. our own copies).
 Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth);
-// Only MyGUI EditBox widgets (checked by RTTI) whose name ends with `suffix`.
-Widget* findEditBoxBySuffix(std::string_view suffix, int maxDepth);
-// Search only below `root` (e.g. a panel), for a widget whose name ends with `suffix`.
-Widget* findChildBySuffix(Widget* root, std::string_view suffix, int maxDepth);
+// All MyGUI EditBox widgets (checked by RTTI) whose name ends with `suffix`.
+std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth);
 // Diagnostic: logs the full name of every widget whose name ends with `suffix`.
 void logWidgetsWithSuffix(std::string_view suffix, int maxDepth);
 // Fires the widget's click event exactly like a real mouse click (runs the game's own handler).

@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <cstring>
+#include <vector>
 
 namespace wok::mygui {
 
@@ -44,6 +45,8 @@ struct Api {
     const void* (*editGetCaption)(Widget* edit);
     void (*setKeyFocus)(void* input, Widget* w);
     void (*resetKeyFocus)(void* input);
+    bool (*inheritedVisible)(Widget* w);
+    Widget* (*getKeyFocus)(void* input);
     bool (*injectKeyPress)(void* input, int keyCode, unsigned int ch);
     bool (*injectKeyRelease)(void* input, int keyCode);
     const char* (*ustringC)(const void* ustring);
@@ -122,6 +125,8 @@ bool init() {
     ok &= load(m, g_api.editGetCaption, "?getCaption@EditBox@MyGUI@@UEAAAEBVUString@2@XZ");
     load(m, g_api.setKeyFocus, "?setKeyFocusWidget@InputManager@MyGUI@@QEAAXPEAVWidget@2@@Z");
     load(m, g_api.resetKeyFocus, "?resetKeyFocusWidget@InputManager@MyGUI@@QEAAXXZ");
+    load(m, g_api.inheritedVisible, "?getInheritedVisible@Widget@MyGUI@@QEBA_NXZ");
+    load(m, g_api.getKeyFocus, "?getKeyFocusWidget@InputManager@MyGUI@@QEBAPEAVWidget@2@XZ");
     load(m, g_api.injectKeyPress, "?injectKeyPress@InputManager@MyGUI@@QEAA_NUKeyCode@2@I@Z");
     load(m, g_api.injectKeyRelease, "?injectKeyRelease@InputManager@MyGUI@@QEAA_NUKeyCode@2@@Z");
     ok &= load(m, g_api.ustringC, "?asUTF8_c_str@UString@MyGUI@@QEBAPEBDXZ");
@@ -207,9 +212,6 @@ void logWidgetsWithSuffix(std::string_view suffix, int maxDepth) {
     }
 }
 
-Widget* findChildBySuffix(Widget* root, std::string_view suffix, int maxDepth) {
-    return root ? searchChildren(root, suffix, maxDepth) : nullptr;
-}
 
 Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPrefix, int maxDepth) {
     auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
@@ -224,17 +226,28 @@ Widget* findBySuffixExcept(std::string_view suffix, std::string_view excludedPre
     return nullptr;
 }
 
-Widget* findEditBoxBySuffix(std::string_view suffix, int maxDepth) {
+
+namespace {
+void collectEditBoxes(Widget* w, std::string_view suffix, int depth, std::vector<Widget*>& out) {
+    if (!w || out.size() > 64) return;
+    if (endsWith(nameOf(w), suffix) && mem::isA(reinterpret_cast<uintptr_t>(w), kEditBoxRtti)) out.push_back(w);
+    if (depth == 0) return;
+    size_t k = g_api.getChildCount(w);
+    for (size_t i = 0; i < k && i < 512; ++i) collectEditBoxes(g_api.getChildAt(w, i), suffix, depth - 1, out);
+}
+}  // namespace
+
+std::vector<Widget*> findEditBoxesBySuffix(std::string_view suffix, int maxDepth) {
+    std::vector<Widget*> out;
     auto gui = reinterpret_cast<uintptr_t>(g_api.getGui());
     uintptr_t begin = 0, end = 0;
-    if (!gui || !mem::readPtr(gui + kGuiRootsBegin, begin) || !mem::readPtr(gui + kGuiRootsEnd, end)) return nullptr;
-    if (end < begin || end - begin > 8 * 4096) return nullptr;
+    if (!gui || !mem::readPtr(gui + kGuiRootsBegin, begin) || !mem::readPtr(gui + kGuiRootsEnd, end)) return out;
+    if (end < begin || end - begin > 8 * 4096) return out;
     for (uintptr_t it = begin; it < end; it += 8) {
         uintptr_t root = 0;
-        if (!mem::readPtr(it, root)) continue;
-        if (Widget* hit = searchChildren(reinterpret_cast<Widget*>(root), suffix, maxDepth, {}, kEditBoxRtti)) return hit;
+        if (mem::readPtr(it, root)) collectEditBoxes(reinterpret_cast<Widget*>(root), suffix, maxDepth, out);
     }
-    return nullptr;
+    return out;
 }
 
 Widget* findBySuffix(std::string_view suffix, int maxDepth) {
@@ -280,22 +293,31 @@ std::string nameOf(Widget* w) {
     return std::string(s->capacity >= 16 ? s->ptr : s->buf, s->size);
 }
 
-bool typeInto(Widget* editBox, std::string_view text) {
+std::string injectText(Widget* editBox, std::string_view text) {
     void* input = g_api.getInput();
-    if (!editBox || !mem::isA(reinterpret_cast<uintptr_t>(editBox), kEditBoxRtti)) {
-        log("mygui: typeInto refused, not an edit box");
-        return false;
-    }
-    if (!input || !g_api.setKeyFocus || !g_api.injectKeyPress || !g_api.injectKeyRelease) return false;
+    if (!editBox || !input || !mem::isA(reinterpret_cast<uintptr_t>(editBox), kEditBoxRtti) || !g_api.setKeyFocus ||
+        !g_api.injectKeyPress || !g_api.injectKeyRelease)
+        return {};
+    // MyGUI's edit key handler ignores everything while the box is static (+0x5ac) and characters
+    // while it is read-only (+0x5a9); Kenshi keeps its editor name field locked until clicked.
+    uint8_t flags[4] = {};
+    mem::readBytes(reinterpret_cast<uintptr_t>(editBox) + 0x5a9, flags, 4);
+    setProperty(editBox, "Static", "false");
+    setProperty(editBox, "ReadOnly", "false");
     setProperty(editBox, "Caption", "");
     g_api.setKeyFocus(input, editBox);
-    for (unsigned char c : text) {  // key code 0 (None) + character: the edit box inserts it and fires its events
+    for (unsigned char c : text) {
         g_api.injectKeyPress(input, 0, c);
         g_api.injectKeyRelease(input, 0);
     }
     if (g_api.resetKeyFocus) g_api.resetKeyFocus(input);
-    return true;
+    std::string now = editText(editBox);
+    log("mygui: injected text (read-only %d, static %d) -> '%s'", flags[0], flags[3], now.c_str());
+    return now;
 }
+
+bool isShown(Widget* w) { return w && g_api.inheritedVisible && g_api.inheritedVisible(w); }
+
 
 const char* editText(Widget* editBox) {
     if (!editBox) return "";

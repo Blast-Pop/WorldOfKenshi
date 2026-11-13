@@ -136,7 +136,6 @@ void onFrame(float dt) {
             if (s.menu) s.menu->setWorldReady();  // lift the loading screen
         }
     }
-
     // First visit: once the player has made their character with Kenshi's own New Game flow,
     // register it on the server (name, race and look by FCS string ID).
     if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character()) {

@@ -45,3 +45,13 @@ Verified crash (2026-11-13): when Kenshi applies its options it reads every TabI
 and casts the item's user data to its own `DatapanelGUI*`. A tab created by a mod has no such data and
 MyGUI aborts with `Bad cast from type 'void' to 'class DatapanelGUI *'`. Our settings live in our own
 Multiplayer window instead.
+
+## Typing into an edit box (MyGUIEngine_x64.dll shipped with Kenshi 1.0.68)
+
+- `InputManager::setKeyFocusWidget` + `injectKeyPress(KeyCode::None, character)` inserts text into a
+  visible, enabled edit box and runs the game's own handlers, exactly like typing.
+- Several widgets share a name suffix: the character editor's name field and a hidden portrait
+  template are both `*_NameText` EditBoxes. Pick the one with `Widget::getInheritedVisible()`.
+- Kenshi names a new character from what was typed in the editor. Rewriting `Character + 0x18`
+  afterwards leaves the name tag and panels on the old (cached) name.
+- Edit box flags as laid out in this build: read-only at `EditBox + 0x5a9`, static at `+ 0x5ac`.

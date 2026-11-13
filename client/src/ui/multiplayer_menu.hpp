@@ -53,6 +53,7 @@ private:
     bool multiplayerWorld_ = false;   // the loaded world was started from multiplayer (until the title screen)
     int autoStep_ = 0;                // returning player: 1 = Begin clicked, 2 = editor confirmed
     int confirmWaits_ = 0;
+    int nameTries_ = 0;  // editor name typing attempts this connection
     bool exitRenamed_ = false;        // pause menu's Exit Game currently reads "Disconnect"
     bool disconnectPending_ = false;  // Disconnect clicked, waiting for Kenshi's exit dialog answer
     // Loading screen covering the automated steps of a returning player until the world is ready.

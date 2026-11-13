@@ -47,28 +47,31 @@ if ($running) {
     Write-Host "Closing Kenshi..."
     $running | Stop-Process -Force
     $running | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5   # Steam needs a moment to notice the game has stopped
 }
 
 # 2. Install the client build.
 & (Join-Path $PSScriptRoot 'install.ps1') -KenshiDir $KenshiDir
 
-# 3. Start Kenshi through Steam (keeps the Steam overlay and authentication).
-Start-Process 'steam://rungameid/233860'
-
-# 4. Press OK on the launcher dialog.
-$deadline = (Get-Date).AddSeconds($LauncherTimeoutSec)
-while ((Get-Date) -lt $deadline) {
-    $win = [WokWin]::FindTop('Kenshi 1.0')
-    if ($win -ne [IntPtr]::Zero) {
-        $ok = [WokWin]::FindButton($win, 'OK')
-        if ($ok -ne [IntPtr]::Zero) {
-            Start-Sleep -Milliseconds 500   # let the dialog finish initialising
-            [void][WokWin]::SendMessage($ok, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)  # BM_CLICK
-            Write-Host "Launcher: OK pressed ($([WokWin]::Text($win)))"
-            exit 0
+# 3. Start Kenshi through Steam (keeps the Steam overlay and authentication), then press OK on the
+#    launcher dialog. Steam sometimes ignores the request right after the game closed: retry.
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    Start-Process 'steam://rungameid/233860'
+    $deadline = (Get-Date).AddSeconds($LauncherTimeoutSec / 3)
+    while ((Get-Date) -lt $deadline) {
+        $win = [WokWin]::FindTop('Kenshi 1.0')
+        if ($win -ne [IntPtr]::Zero) {
+            $ok = [WokWin]::FindButton($win, 'OK')
+            if ($ok -ne [IntPtr]::Zero) {
+                Start-Sleep -Milliseconds 500   # let the dialog finish initialising
+                [void][WokWin]::SendMessage($ok, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)  # BM_CLICK
+                Write-Host "Launcher: OK pressed ($([WokWin]::Text($win)))"
+                exit 0
+            }
         }
+        Start-Sleep -Milliseconds 300
     }
-    Start-Sleep -Milliseconds 300
+    Write-Host "Launcher not seen (attempt $attempt), asking Steam again..."
 }
-Write-Warning "Launcher window not found within $LauncherTimeoutSec s"
+Write-Warning "Launcher window not found"
 exit 1

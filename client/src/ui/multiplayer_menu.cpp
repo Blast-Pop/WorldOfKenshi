@@ -1,5 +1,7 @@
 #include "multiplayer_menu.hpp"
 
+#include "../input.hpp"
+
 #include "../log.hpp"
 #include "mygui_abi.hpp"
 
@@ -304,6 +306,7 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         loadingTime_ = 0;
         loadingText_.clear();
         lastSlide_ = -1;
+        nameTries_ = 0;
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -398,16 +401,31 @@ void MultiplayerMenu::applyConnectedMenu() {
             if (confirm) {
                 ++confirmWaits_;
                 if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 6) {
-                    // Give the character its server name in Kenshi's own editor (NamePanel/NameText), so
-                    // the game itself names it: portrait, name tag and everything else follow.
+                    // Kenshi names the character from what is typed in the editor's name field
+                    // (NamePanel/NameText), and only real key presses reach its handler: type the
+                    // server name with the keyboard, then confirm on the next try.
+                    bool nameReady = true;
                     if (auto data = net_.character()) {
-                        mygui::Widget* name = mygui::findEditBoxBySuffix("_NameText", 12);
-                        bool typed = mygui::typeInto(name, data->name);
-                        log("ui: editor name field %s -> '%s' (typed: %s)", name ? "found" : "NOT found",
-                            name ? mygui::editText(name) : "", typed ? "yes" : "no");
+                        mygui::Widget* field = nullptr;
+                        for (mygui::Widget* f : mygui::findEditBoxesBySuffix("_NameText", 12)) {
+                            bool shown = mygui::isShown(f);
+                            if (nameTries_ == 0)
+                                log("ui: name field candidate '%s' shown=%d text='%s'", mygui::nameOf(f).c_str(),
+                                    shown ? 1 : 0, mygui::editText(f));
+                            if (shown && !field) field = f;
+                        }
+                        if (field && data->name != mygui::editText(field) && nameTries_ < 2) {
+                            nameReady = false;
+                            std::string now = mygui::injectText(field, data->name);
+                            log("ui: typing the character name '%s' in the editor -> '%s'", data->name.c_str(),
+                                now.c_str());
+                            if (++nameTries_ >= 2) nameReady = true;  // do not block the flow on it
+                        }
                     }
-                    log("ui: returning player, confirming the character editor (try %d)", confirmWaits_ / 8);
-                    mygui::click(confirm);
+                    if (nameReady) {
+                        log("ui: returning player, confirming the character editor (try %d)", confirmWaits_ / 8);
+                        mygui::click(confirm);
+                    }
                 }
             } else if (confirmWaits_ > 0) {
                 autoStep_ = 2;
