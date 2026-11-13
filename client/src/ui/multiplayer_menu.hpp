@@ -71,6 +71,7 @@ private:
     std::string loadingText_;
     const char* lastTip_ = nullptr;
     int lastSlide_ = -1;
+    int lastTipSlot_ = -1;
     size_t lastImage_ = 0;
     void updateLoading(float dt);
     void showLoading(const std::string& text);

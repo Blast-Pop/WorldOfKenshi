@@ -327,6 +327,7 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         loadingTime_ = 0;
         loadingText_.clear();
         lastSlide_ = -1;
+        lastTipSlot_ = -1;
         nameTries_ = 0;
         importStage_ = 0;
         importTries_ = 0;
@@ -371,10 +372,16 @@ void MultiplayerMenu::updateLoading(float dt) {
     };
     int dots = 1 + static_cast<int>(loadingTime_ * 2.0f) % 3;
     std::string title = std::string(kSteps[std::min(autoStep_, 2)]) + std::string(dots, '.');
-    const char* tip = kTips[static_cast<size_t>(loadingTime_ / 8.0f) % std::size(kTips)];
-    if (mygui::Widget* msg = mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"); msg && tip != lastTip_) {
-        mygui::setProperty(msg, "Caption", tip);
-        lastTip_ = tip;
+    // A random tip every 8 s, never the same one twice in a row.
+    int tipSlot = static_cast<int>(loadingTime_ / 8.0f);
+    if (tipSlot != lastTipSlot_) {
+        size_t pick = static_cast<size_t>(GetTickCount64() / 7) % std::size(kTips);
+        if (kTips[pick] == lastTip_) pick = (pick + 1) % std::size(kTips);
+        if (mygui::Widget* msg = mygui::findWidget(std::string(kLoadingPrefix) + "MessageText")) {
+            mygui::setProperty(msg, "Caption", kTips[pick]);
+            lastTip_ = kTips[pick];
+            lastTipSlot_ = tipSlot;
+        }
     }
     const std::string& step = title;
 
