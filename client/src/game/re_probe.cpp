@@ -624,6 +624,111 @@ void onF10() {
         log("comp: +0x%llx -> %s %p", static_cast<unsigned long long>(off), n.c_str(), reinterpret_cast<void*>(p));
         if (n == ".?AVCharStats@@" && !stats) stats = p;
     }
+    // Inventory layout: pointer fields (with RTTI) and pointer vectors (begin/end/capacity).
+    uintptr_t inv = 0;
+    if (readQ(ch + 0x2e8, inv) && inv) {
+        std::string dump;
+        for (uintptr_t off = 0; off < 0x200; off += 8) {
+            uintptr_t v = 0, e = 0;
+            if (!readQ(inv + off, v)) continue;
+            std::string n1 = v > 0x10000 ? rttiName(v) : "";
+            std::string n2 = v > 0x10000 && readQ(v, e) && e > 0x10000 ? rttiName(e) : "";
+            char buf[160];
+            std::snprintf(buf, sizeof(buf), " +%llx=%llx%s%s%s%s", static_cast<unsigned long long>(off),
+                          static_cast<unsigned long long>(v), n1.empty() ? "" : "[", n1.c_str(),
+                          n2.empty() ? "" : "]{*", n2.c_str());
+            dump += buf;
+            if (dump.size() > 200) {
+                log("invdump:%s", dump.c_str());
+                dump.clear();
+            }
+        }
+        if (!dump.empty()) log("invdump:%s", dump.c_str());
+        // Sections: Kenshi array at Inventory+0x68 (vtable, u32 count, u32 capacity, T* data).
+        uint32_t count = 0;
+        uintptr_t data = 0;
+        if (copyRaw(inv + 0x70, &count, 4) && readQ(inv + 0x78, data) && count < 64) {
+            for (uint32_t i = 0; i < count; ++i) {
+                uintptr_t sec = 0;
+                if (!readQ(data + i * 8, sec) || !sec) continue;
+                std::string line;
+                for (uintptr_t off = 8; off < 0x100; off += 8) {
+                    std::string str = readVc10String(sec + off);
+                    if (str != "?" && str.size() >= 2 && str.size() < 40) line += " str+" + std::to_string(off) + "='" + str + "'";
+                    uintptr_t vp = 0, arr = 0;
+                    uint32_t sz[2] = {};
+                    // a Kenshi array: vtable in the image, then count <= capacity, then data
+                    if (readQ(sec + off, vp) && vp > g_base && vp < g_base + 0x4000000 && copyRaw(sec + off + 8, sz, 8) &&
+                        sz[0] <= sz[1] && sz[1] < 4096 && sz[0] > 0 && readQ(sec + off + 16, arr) && arr) {
+                        uintptr_t first = 0;
+                        std::string fn = readQ(arr, first) && first ? rttiName(first) : "";
+                        line += " arr+" + std::to_string(off) + "(" + std::to_string(sz[0]) + "x" + fn + ")";
+                    }
+                }
+                log("invsec %u %p:%s", i, reinterpret_cast<void*>(sec), line.c_str());
+                // Raw layout of the section: value, its RTTI, and the RTTI of what it points to.
+                std::string raw;
+                for (uintptr_t off = 0x28; off < 0xc0; off += 8) {
+                    uintptr_t v = 0, e = 0;
+                    if (!readQ(sec + off, v)) continue;
+                    std::string n1 = v > 0x10000 ? rttiName(v) : "";
+                    std::string n2 = v > 0x10000 && readQ(v, e) && e > 0x10000 ? rttiName(e) : "";
+                    char buf[200];
+                    std::snprintf(buf, sizeof(buf), " +%llx=%llx%s%s%s%s", static_cast<unsigned long long>(off),
+                                  static_cast<unsigned long long>(v), n1.empty() ? "" : "[", n1.c_str(),
+                                  n2.empty() ? "" : "]{*", n2.c_str());
+                    raw += buf;
+                }
+                log("invraw %u:%s", i, raw.c_str());
+                // First item of the section: entries are 16 bytes (Item*, then 8 bytes).
+                uintptr_t vb = 0, ve = 0, item = 0;
+                if (readQ(sec + 0x40, vb) && readQ(sec + 0x48, ve) && ve > vb && readQ(vb, item) && item) {
+                    uint32_t extra[2] = {};
+                    copyRaw(vb + 8, extra, 8);
+                    std::string it = " entry-extra=" + std::to_string(extra[0]) + "," + std::to_string(extra[1]);
+                    for (uintptr_t off = 8; off < 0x200; off += 8) {
+                        uintptr_t v = 0;
+                        if (!readQ(item + off, v)) continue;
+                        std::string n = v > 0x10000 ? rttiName(v) : "";
+                        if (n == ".?AVGameData@@")
+                            it += " gd+" + std::to_string(off) + "='" + readVc10String(v + 0x28) + "'/" + readVc10String(v + 0x58);
+                        else if (!n.empty())
+                            it += " p+" + std::to_string(off) + "=" + n;
+                        std::string str = readVc10String(item + off);
+                        if (str != "?" && str.size() >= 3 && str.size() < 48) it += " s+" + std::to_string(off) + "='" + str + "'";
+                        int32_t iv[2];
+                        float fv[2];
+                        std::memcpy(iv, &v, 8);
+                        std::memcpy(fv, &v, 8);
+                        for (int k = 0; k < 2; ++k) {
+                            if (iv[k] > 0 && iv[k] < 100000 && n.empty())
+                                it += " i+" + std::to_string(off + k * 4) + "=" + std::to_string(iv[k]);
+                            else if (fv[k] > 0.001f && fv[k] < 100000.0f && n.empty() && iv[k] >= 100000)
+                                it += " f+" + std::to_string(off + k * 4) + "=" + std::to_string(fv[k]);
+                        }
+                    }
+                    for (char& ch : it)
+                        if (static_cast<unsigned char>(ch) < 0x20 || static_cast<unsigned char>(ch) > 0x7e) ch = '.';
+                    log("invitem %u %s%s", i, rttiName(item).c_str(), it.c_str());
+                }
+            }
+        }
+        for (uintptr_t off = 8; off < 0x200; off += 8) {
+            uintptr_t a = 0, b = 0, c = 0;
+            if (!readQ(inv + off, a)) continue;
+            std::string n = a > 0x10000 ? rttiName(a) : "";
+            if (!n.empty()) log("inv: +0x%llx -> %s", static_cast<unsigned long long>(off), n.c_str());
+            if (readQ(inv + off + 8, b) && readQ(inv + off + 16, c) && a > 0x10000 && b >= a && c >= b &&
+                b - a < 0x4000 && (b - a) % 8 == 0 && b > a) {
+                std::string first;
+                uintptr_t e0 = 0;
+                if (readQ(a, e0) && e0 > 0x10000) first = rttiName(e0);
+                if (!first.empty())
+                    log("inv: +0x%llx vector of %llu x %s", static_cast<unsigned long long>(off),
+                        static_cast<unsigned long long>((b - a) / 8), first.c_str());
+            }
+        }
+    }
     if (!stats) return;
     float f[256];
     if (!copyRaw(stats, f, sizeof(f))) return;
