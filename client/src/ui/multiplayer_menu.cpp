@@ -60,8 +60,22 @@ MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::functio
 void MultiplayerMenu::ensureOptionsTab() {
     if (mygui::findWidget(kOptionsTab)) return;
     // Kenshi fills its Options TabControl from code; a TabItem child created the same way becomes a tab.
+    static mygui::Widget* seenTabs = nullptr;
+    static int stablePolls = 0;
     mygui::Widget* tabs = mygui::findBySuffix("_OptionsTab", 3);
-    if (!tabs) return;  // Options panel not open
+    if (!tabs) {  // Options panel not open
+        seenTabs = nullptr;
+        stablePolls = 0;
+        return;
+    }
+    // Kenshi adds its own tabs right after the panel appears; add ours only once the panel has
+    // existed for a full second so it lands after "General" and the others instead of over them.
+    if (tabs != seenTabs) {
+        seenTabs = tabs;
+        stablePolls = 0;
+        return;
+    }
+    if (++stablePolls < 2) return;
     mygui::Widget* tab = mygui::createChild(tabs, "TabItem", "", {0.0f, 0.0f, 1.0f, 1.0f}, kOptionsTab);
     if (!tab) return;
     mygui::setProperty(tab, "Caption", "Multiplayer");
