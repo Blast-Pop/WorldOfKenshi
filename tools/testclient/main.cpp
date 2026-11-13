@@ -2,6 +2,9 @@
 // client without a second copy of Kenshi.
 // Usage: wok_testclient [--host 127.0.0.1] [--port 27800] [--name Bot1] [--radius 10]
 //                       [--x 0 --y 0 --z 0] [--steamid N] [--seconds N]
+//                       [--follow 1 [--offset 40] [--delay 0.5]]
+// --follow: instead of circling, copy the first other player's moves `delay` seconds late,
+// shifted by `offset` game units on X - a companion to test the game client alone.
 
 #include <wok/protocol.hpp>
 #include <wok/transport.hpp>
@@ -13,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <map>
 #include <string>
@@ -33,6 +37,9 @@ struct Args {
     float cx = 0, cy = 0, cz = 0;
     uint64_t steamId = 0;
     double seconds = 0;  // 0 = run until Ctrl+C
+    bool follow = false;
+    float offset = 40.0f;
+    double delay = 0.5;
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -49,6 +56,9 @@ bool parseArgs(int argc, char** argv, Args& a) {
         else if (k == "--z") a.cz = static_cast<float>(std::atof(v));
         else if (k == "--steamid") a.steamId = std::strtoull(v, nullptr, 10);
         else if (k == "--seconds") a.seconds = std::atof(v);
+        else if (k == "--follow") a.follow = std::atoi(v) != 0;
+        else if (k == "--offset") a.offset = static_cast<float>(std::atof(v));
+        else if (k == "--delay") a.delay = std::atof(v);
         else return false;
     }
     if (a.steamId == 0) a.steamId = std::hash<std::string>{}(a.name);
@@ -89,6 +99,8 @@ int main(int argc, char** argv) {
         const auto start = std::chrono::steady_clock::now();
         auto now = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
         double nextSend = 0;
+        PlayerId target = 0;
+        std::deque<std::pair<double, PlayerState>> history;  // target's states, by arrival time
 
         while (rc == 0 && g_running && (a.seconds <= 0 || now() < a.seconds)) {
             for (auto& ev : net.poll()) {
@@ -112,6 +124,15 @@ int main(int argc, char** argv) {
                             rc = 3;
                         }
                     } else if (auto* s = std::get_if<PlayerState>(&*m)) {
+                        if (a.follow && target == 0) {
+                            target = s->playerId;
+                            std::printf("following player %u\n", target);
+                        }
+                        if (s->playerId == target) {
+                            history.emplace_back(now(), *s);
+                            while (history.size() > 2 && now() - history.front().first > a.delay + 2.0)
+                                history.pop_front();
+                        }
                         if (now() - lastPrint[s->playerId] >= 1.0) {
                             lastPrint[s->playerId] = now();
                             std::printf("player %u at (%.1f, %.1f, %.1f) yaw %.0f anim %u\n", s->playerId, s->x, s->y,
@@ -120,10 +141,26 @@ int main(int argc, char** argv) {
                     } else if (auto* l = std::get_if<PlayerLeft>(&*m)) {
                         std::printf("player %u left\n", l->playerId);
                         lastPrint.erase(l->playerId);
+                        if (l->playerId == target) {
+                            target = 0;
+                            history.clear();
+                        }
                     }
                 }
             }
-            if (me != 0 && now() >= nextSend) {
+            if (me != 0 && a.follow && now() >= nextSend) {
+                nextSend = now() + 0.1;  // 10 Hz
+                const PlayerState* src = nullptr;
+                for (auto& [t, st] : history)
+                    if (t <= now() - a.delay) src = &st;
+                if (src) {
+                    PlayerState s = *src;
+                    s.tick = ++tick;
+                    s.x += a.offset;
+                    auto b = encode(s);
+                    net.send(b, false);
+                }
+            } else if (me != 0 && now() >= nextSend) {
                 nextSend = now() + 0.1;    // 10 Hz
                 const float speed = 3.0f;  // m/s along the circle
                 float angle = a.radius > 0 ? static_cast<float>(now()) * speed / a.radius : 0.0f;
