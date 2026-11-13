@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cstring>
 #include <iterator>
 #include <string>
 
@@ -246,9 +247,9 @@ void MultiplayerMenu::onClick(const std::string& name) {
     } else if (name == kClose) {
         closeWindow();
     } else if (name == kDisconnect) {
-        log("ui: Disconnect from the pause menu");
-        disconnect_();
-        // Leave the game through Kenshi's own exit action (no local save is involved).
+        // Ask first: Kenshi's own exit dialog. We only leave the server if the player confirms.
+        log("ui: Disconnect asked, waiting for the exit confirmation");
+        disconnectPending_ = true;
         if (mygui::Widget* exitGame = mygui::findBySuffix("_ExitGameButton", 3)) mygui::click(exitGame);
     } else if (name == kUnlink) {
         unlink_();
@@ -374,7 +375,26 @@ void MultiplayerMenu::update(float dt) {
 
     // A click is the left button pressed and released over the same widget we own.
     bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-    if (down && !mouseWasDown_) pressedOn_ = mygui::mouseFocus();
+    if (down && !mouseWasDown_) {
+        pressedOn_ = mygui::mouseFocus();
+        if (disconnectPending_ && pressedOn_) {
+            // Kenshi's exit dialog: ButtonA = Yes, ButtonC = No (hover recon). Act on the press,
+            // before the game handles the click and closes.
+            std::string n = mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_));
+            auto endsWith = [&](const char* suf) {
+                size_t l = std::strlen(suf);
+                return n.size() >= l && n.compare(n.size() - l, l, suf) == 0;
+            };
+            if (endsWith("_ButtonA")) {
+                log("ui: exit confirmed, disconnecting from the server");
+                disconnectPending_ = false;
+                disconnect_();
+            } else if (endsWith("_ButtonC")) {
+                log("ui: exit cancelled, staying connected");
+                disconnectPending_ = false;
+            }
+        }
+    }
     if (!down && mouseWasDown_) {
         void* releasedOn = mygui::mouseFocus();
         if (releasedOn && releasedOn == pressedOn_) {

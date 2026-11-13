@@ -51,7 +51,8 @@ private:
     std::string error_;
     bool enteredGame_ = false;
     bool multiplayerWorld_ = false;
-    int autoStep_ = 0;  // returning player: 1 = Begin clicked, 2 = editor confirmed  // the loaded world was started from multiplayer (until the title screen)
+    int autoStep_ = 0;
+    bool disconnectPending_ = false;  // Disconnect clicked, waiting for Kenshi's exit dialog answer  // returning player: 1 = Begin clicked, 2 = editor confirmed  // the loaded world was started from multiplayer (until the title screen)
 };
 
 }  // namespace wok
