@@ -18,7 +18,7 @@ constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
 constexpr size_t kMaxStringIdBytes = 64;   // FCS stringIDs ("17-gamedata.quack", "51707-rebirth.mod")
-constexpr size_t kMaxAppearanceBytes = 4096;
+constexpr size_t kMaxAppearanceBytes = 16384;  // includes Kenshi's exported body file (base64)
 constexpr size_t kMaxUrlBytes = 512;
 constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;

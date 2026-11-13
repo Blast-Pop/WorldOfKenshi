@@ -42,3 +42,13 @@ content (here a modded haircut) travels like vanilla content.
   Verified with the Ctrl+Shift+F2 probe: the selected character jumped 50 units and stayed there.
 - Other slots seen: `+0x30` set orientation (quaternion at `+0xd0`), `+0x38` turn towards a point,
   `+0x98` reset movement state.
+
+## Look (verified in game 2026-11-13)
+
+- The character editor's **Export** button writes the whole look to
+  `<Kenshi>/data/character/bodies/export/<name>.bod2` without a dialog (race, sex, every face/body
+  slider, hair, beard; about 1.5-3 KB). **Import** opens a file dialog (`Kenshi_OpenSaveFileDialog`:
+  `EditFileName`, `ButtonOpenSave`, `ListFiles`) and applies the chosen file to the edited character.
+- World of Kenshi stores that file (base64, `bod2` key of the appearance text) with the character:
+  exported when a new player confirms the editor, imported by the returning player flow before
+  Confirm (file `WoK - <name>.bod2`).

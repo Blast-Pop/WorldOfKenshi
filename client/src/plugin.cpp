@@ -142,7 +142,7 @@ void onFrame(float dt) {
         if (auto c = wok::readIdentity(s.reader.character())) {
             s.net->createCharacter(*c);
             s.characterSent = true;
-            wok::log("character: sent '%s' (%s) to the server", c->name.c_str(), c->race.c_str());
+            wok::log("character: sent '%s' (%s, look %zu bytes) to the server", c->name.c_str(), c->race.c_str(), c->appearance.size());
         }
     }
     s.wasConnected = connected;

@@ -1,5 +1,6 @@
 #include "multiplayer_menu.hpp"
 
+#include "../game/identity.hpp"
 #include "../input.hpp"
 
 #include "../log.hpp"
@@ -7,7 +8,10 @@
 
 #include <windows.h>
 
+#include <core/appearance.hpp>
+
 #include <algorithm>
+#include <fstream>
 #include <cstring>
 #include <iterator>
 #include <string>
@@ -307,6 +311,8 @@ void MultiplayerMenu::showLoading(const std::string& text) {
         loadingText_.clear();
         lastSlide_ = -1;
         nameTries_ = 0;
+        importStage_ = 0;
+        importTries_ = 0;
     }
     if (text != loadingText_) {
         mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
@@ -398,6 +404,20 @@ void MultiplayerMenu::applyConnectedMenu() {
                 return;
             }
             mygui::Widget* confirm = mygui::findBySuffixExcept("_ConfirmButton", kLoadingPrefix, 12);
+            // Look: Kenshi's editor Import opens a file dialog; type our file name and open it.
+            if (confirm && importStage_ == 1) {
+                mygui::Widget* fileName = nullptr;
+                for (mygui::Widget* f : mygui::findEditBoxesBySuffix("_EditFileName", 12))
+                    if (mygui::isShown(f)) fileName = f;
+                mygui::Widget* open = mygui::findBySuffix("_ButtonOpenSave", 12);
+                if (fileName && open && mygui::isShown(open)) {
+                    std::string typed = mygui::injectText(fileName, importFile_);
+                    log("ui: importing the look '%s' (typed '%s')", importFile_.c_str(), typed.c_str());
+                    mygui::click(open);
+                    importStage_ = 2;
+                }
+                return;
+            }
             if (confirm) {
                 ++confirmWaits_;
                 if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 6) {
@@ -405,7 +425,27 @@ void MultiplayerMenu::applyConnectedMenu() {
                     // (NamePanel/NameText), and only real key presses reach its handler: type the
                     // server name with the keyboard, then confirm on the next try.
                     bool nameReady = true;
-                    if (auto data = net_.character()) {
+                    auto data = net_.character();
+                    if (data && importStage_ == 0) {
+                        auto look = decodeAppearance(data->appearance);
+                        auto body = base64Decode(look["bod2"]);
+                        mygui::Widget* importButton = mygui::findBySuffix("_ImportButton", 12);
+                        importFile_ = "WoK - " + data->name + ".bod2";
+                        if (!body.empty() && importButton &&
+                            std::ofstream(exportedBodyPath("WoK - " + data->name), std::ios::binary)
+                                .write(reinterpret_cast<const char*>(body.data()), body.size())) {
+                            importStage_ = 1;
+                            log("ui: restoring the look (%zu bytes), opening Import", body.size());
+                            mygui::click(importButton);
+                            return;
+                        }
+                        if (body.empty() || ++importTries_ >= 3) {
+                            importStage_ = 2;  // give up on the look, keep the flow going
+                            log("ui: look not restored (saved look %zu bytes, appearance %zu bytes, Import button %s)",
+                                body.size(), data->appearance.size(), importButton ? "found" : "missing");
+                        }
+                    }
+                    if (data) {
                         mygui::Widget* field = nullptr;
                         for (mygui::Widget* f : mygui::findEditBoxesBySuffix("_NameText", 12)) {
                             bool shown = mygui::isShown(f);
@@ -506,6 +546,15 @@ void MultiplayerMenu::update(float dt) {
     bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     if (down && !mouseWasDown_) {
         pressedOn_ = mygui::mouseFocus();
+        // New player confirming Kenshi's character editor: export the look first (Kenshi writes
+        // <name>.bod2), the client then sends it to the server with the new character.
+        if (multiplayerWorld_ && pressedOn_ && !net_.hasCharacter() &&
+            mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_)).ends_with("_ConfirmButton")) {
+            if (mygui::Widget* exportButton = mygui::findBySuffix("_ExportButton", 12)) {
+                mygui::click(exportButton);
+                log("ui: new character confirmed, look exported");
+            }
+        }
         if (multiplayerWorld_ && pressedOn_ &&
             mygui::nameOf(static_cast<mygui::Widget*>(pressedOn_)).ends_with("_ExitGameButton")) {
             log("ui: Disconnect asked, waiting for the exit confirmation");

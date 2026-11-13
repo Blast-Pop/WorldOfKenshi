@@ -2,7 +2,12 @@
 
 #include "game_memory.hpp"
 
+#include "../log.hpp"
+
 #include <core/appearance.hpp>
+
+#include <fstream>
+#include <iterator>
 
 namespace wok {
 
@@ -36,9 +41,24 @@ std::optional<CreateCharacter> readIdentity(uintptr_t character) {
     if (auto gender = mem::readString(character + kCharGender, 16); !gender.empty()) look["gender"] = gender;
     if (auto hair = stringIdAt(character + kCharHair); !hair.empty()) look["hair"] = hair;
     if (auto beard = stringIdAt(character + kCharBeard); !beard.empty()) look["beard"] = beard;
+    if (auto body = readExportedBody(c.name); !body.empty()) look["bod2"] = base64Encode(body);
     c.appearance = encodeAppearance(look);
     c.templateId = stringIdAt(character + kCharTemplate);
     return c;
+}
+
+std::string exportedBodyPath(std::string_view characterName) {
+    std::string dir = modDir();  // <Kenshi>/WorldOfKenshi
+    dir = dir.substr(0, dir.find_last_of("\\/"));
+    return dir + "\\data\\character\\bodies\\export\\" + std::string(characterName) + ".bod2";
+}
+
+std::vector<uint8_t> readExportedBody(std::string_view characterName) {
+    std::ifstream f(exportedBodyPath(characterName), std::ios::binary);
+    if (!f) return {};
+    std::vector<uint8_t> data((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (data.size() > 8192) return {};  // not a body file
+    return data;
 }
 
 }  // namespace wok
