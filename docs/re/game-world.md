@@ -1,0 +1,34 @@
+# Game world and player (Kenshi 1.0.68)
+
+All addresses are RVAs in `kenshi_x64.exe` (image base 0x140000000 on disk; ASLR applies at runtime,
+so always add the runtime module base). Found 2026-11-12 with RTTI + our own xref scanner, then
+confirmed in game with the F8 probe (`client/src/game/re_probe.cpp`).
+
+## GameWorld
+
+- Class `GameWorld`, vtable RVA `0x1722608`.
+- It is a **static global object** (not a pointer) at RVA **`0x2134110`**: a dynamic initializer
+  does `lea rcx, [GameWorld]` then jumps to the constructor.
+- Probe check: `*(base + 0x2134110) == base + 0x1722608` → "GameWorld vtable OK".
+
+## PlayerInterface
+
+- Class `PlayerInterface`, vtable RVA `0x171a2b8`, object size `0x2f8` (allocation size seen at its `new`).
+- Stored at **`GameWorld + 0x580`** (pointer), assigned during world initialisation.
+- `PlayerInterface + 0x2a8` → `Platoon*` (squad of the current selection).
+- `PlayerInterface + 0x2c0` → pointer to an array of `Character*`; element `[0]` is the **selected
+  character**. The element count is not yet identified (TODO), so the client validates the
+  pointer with the vtable check below and caches the last valid character.
+
+## Known vtables (RVA)
+
+| Class | vtable |
+|---|---|
+| CharacterHuman | `0x16f2848` |
+| Character | `0x16f9eb8` |
+| CharacterAnimal | `0x16f2208` |
+| Platoon | `0x1718808` |
+| ActivePlatoon | `0x16e2e08` |
+| RootObject | `0x16ef338` |
+| GameWorld | `0x1722608` |
+| PlayerInterface | `0x171a2b8` |

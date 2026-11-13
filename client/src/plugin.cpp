@@ -3,14 +3,20 @@
 // Nothing here may throw into the game or touch OGRE objects beyond registering hooks.
 
 #include "frame_hook.hpp"
+#include "game/local_player.hpp"
+#include "game/re_probe.hpp"
+#include "input.hpp"
 #include "log.hpp"
+#include "net_client.hpp"
 
 #include <core/config.hpp>
+#include <core/motion.hpp>
 #include <core/paths.hpp>
 
 #include <wok/protocol.hpp>
 
 #include <fstream>
+#include <map>
 #include <sstream>
 
 namespace {
@@ -29,25 +35,84 @@ wok::ClientConfig loadOrCreateConfig() {
     return wok::parseConfig(ss.str());
 }
 
+struct ClientState {
+    wok::ClientConfig cfg;
+    wok::LocalPlayerReader reader;
+    bool readerOk = false;
+    wok::ClientNet* net = new wok::ClientNet;  // intentionally leaked: never torn down during process exit
+    wok::SendThrottle throttle{10.0};
+    double now = 0.0;
+    uint32_t tick = 0;
+    double fpsTimer = 0.0;
+    int frames = 0;
+    std::map<wok::PlayerId, double> lastRemoteLog;
+};
+
+ClientState* g_state = nullptr;
+
+void onFrame(float dt) {
+    auto& s = *g_state;
+    s.now += dt;
+    wok::probeTick();
+
+    if (wok::keyPressed(VK_F9)) {
+        auto st = s.net->status();
+        if (st == wok::ClientNet::Status::Connected || st == wok::ClientNet::Status::Connecting)
+            wok::log("F9: already %s", st == wok::ClientNet::Status::Connected ? "connected" : "connecting");
+        else
+            s.net->start(s.cfg);
+    }
+
+    if (s.readerOk && s.net->status() == wok::ClientNet::Status::Connected && s.throttle.due(s.now)) {
+        if (auto snap = s.reader.read(s.now)) {
+            wok::PlayerState ps{};
+            ps.tick = ++s.tick;
+            ps.x = snap->x;
+            ps.y = snap->y;
+            ps.z = snap->z;
+            ps.yaw = snap->yaw;
+            ps.anim = snap->anim;
+            s.net->pushLocal(ps);
+        }
+    }
+
+    // Task 9 replaces this with avatars; for now prove reception in the log (1 line/s/player).
+    for (auto& m : s.net->drainIncoming()) {
+        if (auto* ps = std::get_if<wok::PlayerState>(&m)) {
+            if (s.now - s.lastRemoteLog[ps->playerId] >= 1.0) {
+                s.lastRemoteLog[ps->playerId] = s.now;
+                wok::log("remote player %u at (%.1f, %.1f, %.1f) yaw %.0f anim %u", ps->playerId, ps->x, ps->y,
+                         ps->z, ps->yaw, static_cast<unsigned>(ps->anim));
+            }
+        } else if (auto* left = std::get_if<wok::PlayerLeft>(&m)) {
+            wok::log("remote player %u left", left->playerId);
+            s.lastRemoteLog.erase(left->playerId);
+        }
+    }
+
+    ++s.frames;
+    s.fpsTimer += dt;
+    if (s.fpsTimer >= 60.0) {
+        wok::log("frame hook alive: %.1f fps", s.frames / s.fpsTimer);
+        s.frames = 0;
+        s.fpsTimer = 0.0;
+    }
+}
+
 }  // namespace
 
 extern "C" __declspec(dllexport) void dllStartPlugin() {
     try {
         wok::logInit();
         wok::log("World of Kenshi client loaded (protocol %u)", wok::WOK_PROTOCOL_VERSION);
-        auto cfg = loadOrCreateConfig();
-        wok::log("config: host=%s port=%u name=%s", cfg.host.c_str(), cfg.port, cfg.name.c_str());
-
-        // Temporary diagnostic (Task 6): log the frame rate every 5 s to prove the hook runs.
-        wok::installFrameHook([frames = 0, elapsed = 0.0f](float dt) mutable {
-            ++frames;
-            elapsed += dt;
-            if (elapsed >= 5.0f) {
-                wok::log("frame hook alive: %.1f fps", frames / elapsed);
-                frames = 0;
-                elapsed = 0.0f;
-            }
-        });
+        g_state = new ClientState;
+        g_state->cfg = loadOrCreateConfig();
+        wok::log("config: host=%s port=%u name=%s", g_state->cfg.host.c_str(), g_state->cfg.port,
+                 g_state->cfg.name.c_str());
+        g_state->readerOk = g_state->reader.init();
+        if (!g_state->readerOk) wok::log("local player reader disabled (signature missing)");
+        wok::installFrameHook(onFrame);
+        wok::log("press F9 in game to connect");
     } catch (...) {
         wok::log("dllStartPlugin: unexpected exception");
     }
