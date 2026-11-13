@@ -22,6 +22,8 @@ class CharacterStore;
 inline constexpr double kPositionSaveIntervalSec = 10.0;
 // Test bots (wok_testclient) use fake ids below this value; real SteamID64s start at 76561197960265728.
 inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
+// A Steam login in progress survives reconnects of the same claimed SteamID for this long.
+inline constexpr double kPendingAuthTtlSec = 300.0;
 
 struct Outgoing {
     ConnId to;
@@ -82,7 +84,15 @@ private:
 
     SessionConfig cfg_;
     std::unordered_map<ConnId, Conn> conns_;
-    std::unordered_map<std::string, ConnId> pendingAuth_;
+    struct PendingAuth {
+        ConnId conn = 0;                  // 0 while the player is not connected
+        uint64_t claimedSteamId = 0;
+        double created = 0.0;
+        uint64_t verifiedSteamId = 0;     // set if Steam answered while the player was away
+    };
+    std::unordered_map<std::string, PendingAuth> pendingAuth_;     // by nonce
+    std::unordered_map<uint64_t, std::string> pendingByClaimed_;   // claimed SteamID -> nonce
+    std::vector<Outgoing> completeAuth(ConnId conn, Conn& c, uint64_t steamId, double nowSec);
     std::vector<ConnId> toClose_;
     PlayerId nextPlayerId_ = 1;
 };

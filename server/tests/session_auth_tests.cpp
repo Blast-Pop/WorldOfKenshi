@@ -3,6 +3,7 @@
 #include <wok/character_store.hpp>
 #include <wok/session.hpp>
 
+#include <algorithm>
 #include <cstring>
 
 using namespace wok;
@@ -241,4 +242,37 @@ TEST_CASE("test_bots_accepted_without_auth_when_enabled") {
     sm.onConnect(2, 0.0);
     h.steamId = 76561198000000001ull;
     CHECK_FALSE(all<AuthChallenge>(sm.onPacket(2, encode(h), 0.0)).empty());
+}
+
+TEST_CASE("reconnect_during_steam_login_reuses_the_challenge") {
+    Fixture f;
+    auto first = nonceOf(f.hello(1, 42));
+    f.sm.onDisconnect(1);                     // the player clicked Connect again
+    auto second = nonceOf(f.hello(2, 42));    // same claimed SteamID
+    CHECK(second == first);                   // same Steam page, no new tab
+    auto acks = all<HelloAck>(f.sm.onAuthVerified(first, 42, 5.0));
+    REQUIRE(acks.size() == 1);                // login from the first tab completes the new connection
+    CHECK(acks[0].reason == RejectReason::None);
+    CHECK(f.store.tokenFor(42).has_value());
+}
+
+TEST_CASE("pending_challenge_expires") {
+    Fixture f;
+    auto first = nonceOf(f.hello(1, 42));
+    f.sm.onDisconnect(1);
+    f.sm.tick(kPendingAuthTtlSec + 1.0);
+    auto second = nonceOf(f.hello(2, 42));
+    CHECK(second != first);
+}
+
+TEST_CASE("new_login_closes_previous_connection_of_same_account") {
+    Fixture f;
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    f.hello(1, 42, t);
+    f.hello(2, 42, t);  // same account logs in again
+    auto closing = f.sm.connectionsToClose();
+    CHECK(std::find(closing.begin(), closing.end(), ConnId{1}) != closing.end());
+    CHECK(f.sm.playerCount() == 1);
 }

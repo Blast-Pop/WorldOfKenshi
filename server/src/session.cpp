@@ -74,19 +74,43 @@ std::vector<Outgoing> SessionManager::handleHello(ConnId conn, Conn& c, const He
     }
 
     // First visit on this server: prove the SteamID through Steam OpenID.
+    // Reuse a Steam login already in progress for this claimed SteamID (player clicked Connect again).
+    if (auto byId = pendingByClaimed_.find(h.steamId); byId != pendingByClaimed_.end()) {
+        auto p = pendingAuth_.find(byId->second);
+        if (p != pendingAuth_.end() && nowSec - p->second.created <= kPendingAuthTtlSec) {
+            if (p->second.verifiedSteamId) {  // Steam already confirmed while the player was away
+                uint64_t id = p->second.verifiedSteamId;
+                pendingByClaimed_.erase(byId);
+                pendingAuth_.erase(p);
+                return completeAuth(conn, c, id, nowSec);
+            }
+            c.nonce = p->first;
+            p->second.conn = conn;
+            return {Outgoing{conn, AuthChallenge{cfg_.authUrlBase + c.nonce}}};
+        }
+    }
     c.nonce = toHex(cfg_.randomToken());
-    pendingAuth_[c.nonce] = conn;
+    pendingAuth_[c.nonce] = PendingAuth{conn, h.steamId, nowSec, 0};
+    pendingByClaimed_[h.steamId] = c.nonce;
     return {Outgoing{conn, AuthChallenge{cfg_.authUrlBase + c.nonce}}};
 }
 
 std::vector<Outgoing> SessionManager::onAuthVerified(const std::string& nonce, uint64_t steamId, double nowSec) {
     auto p = pendingAuth_.find(nonce);
-    if (p == pendingAuth_.end()) return {};
-    ConnId conn = p->second;
+    if (p == pendingAuth_.end() || !cfg_.store) return {};
+    auto it = p->second.conn ? conns_.find(p->second.conn) : conns_.end();
+    if (it == conns_.end() || it->second.player) {
+        p->second.verifiedSteamId = steamId;  // player away: finish on their next Hello
+        p->second.conn = 0;
+        return {};
+    }
+    pendingByClaimed_.erase(p->second.claimedSteamId);
     pendingAuth_.erase(p);
-    auto it = conns_.find(conn);
-    if (it == conns_.end() || it->second.player || !cfg_.store) return {};
-    Conn& c = it->second;
+    it->second.nonce.clear();
+    return completeAuth(it->first, it->second, steamId, nowSec);
+}
+
+std::vector<Outgoing> SessionManager::completeAuth(ConnId conn, Conn& c, uint64_t steamId, double nowSec) {
     c.nonce.clear();
     if (cfg_.bannedSteamIds.contains(steamId)) return reject(conn, RejectReason::Banned);
     if (playerCount() >= cfg_.maxPlayers) return reject(conn, RejectReason::ServerFull);
@@ -97,6 +121,18 @@ std::vector<Outgoing> SessionManager::onAuthVerified(const std::string& nonce, u
 }
 
 std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthToken& newToken, double nowSec) {
+    // One connection per account: a new login closes the previous ones (saving their position first).
+    std::vector<Outgoing> kicked;
+    if (c.steamId != 0) {
+        std::vector<ConnId> previous;
+        for (auto& [otherId, other] : conns_)
+            if (otherId != conn && other.player && other.steamId == c.steamId) previous.push_back(otherId);
+        for (ConnId old : previous) {
+            auto left = dropConn(old);
+            kicked.insert(kicked.end(), left.begin(), left.end());
+            requestClose(old);
+        }
+    }
     c.player = nextPlayerId_++;
     c.lastSaved = nowSec;
     std::optional<CharacterData> character;
@@ -110,6 +146,7 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
     if (character) out.push_back({conn, *character});
     for (auto& [otherId, other] : conns_)
         if (otherId != conn && other.player && other.lastState) out.push_back({conn, *other.lastState});
+    out.insert(out.end(), kicked.begin(), kicked.end());
     return out;
 }
 
@@ -147,7 +184,8 @@ std::vector<Outgoing> SessionManager::dropConn(ConnId conn) {
     auto it = conns_.find(conn);
     if (it == conns_.end()) return {};
     savePosition(it->second);
-    if (!it->second.nonce.empty()) pendingAuth_.erase(it->second.nonce);
+    if (auto p = pendingAuth_.find(it->second.nonce); p != pendingAuth_.end() && p->second.conn == conn)
+        p->second.conn = 0;  // keep the Steam login alive for a reconnect
     std::optional<PlayerId> player = it->second.player;
     conns_.erase(it);
     std::vector<Outgoing> out;
@@ -167,6 +205,14 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
         } else if (nowSec - c.lastSaved >= kPositionSaveIntervalSec) {
             savePosition(c);
             c.lastSaved = nowSec;
+        }
+    }
+    for (auto p = pendingAuth_.begin(); p != pendingAuth_.end();) {
+        if (nowSec - p->second.created > kPendingAuthTtlSec) {
+            pendingByClaimed_.erase(p->second.claimedSteamId);
+            p = pendingAuth_.erase(p);
+        } else {
+            ++p;
         }
     }
     std::vector<Outgoing> out;

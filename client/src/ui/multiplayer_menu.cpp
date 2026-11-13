@@ -106,6 +106,12 @@ void MultiplayerMenu::onClick(const std::string& name) {
     } else if (name == kClose) {
         closeWindow();
     } else if (name == kConnect) {
+        auto st = net_.status();
+        if (st == ClientNet::Status::Connecting || st == ClientNet::Status::AwaitingSteamLogin ||
+            st == ClientNet::Status::Connected) {
+            log("ui: Connect ignored, a connection is already in progress");
+            return;  // never restart a connection (and a Steam login) that is still going
+        }
         auto addr = parseAddress(mygui::editText(mygui::findWidget(kAddress)));
         if (!addr) {
             error_ = "Adresse invalide (exemple : 45.32.1.2:27800)";
@@ -134,7 +140,7 @@ void MultiplayerMenu::refreshStatus() {
             case ClientNet::Status::Disconnected: s = "Non connecté"; break;
             case ClientNet::Status::Connecting: s = "Connexion..."; break;
             case ClientNet::Status::AwaitingSteamLogin:
-                s = "Connexion Steam : termine-la dans ton navigateur";
+                s = "Connexion Steam en cours dans ton navigateur (onglet steamcommunity.com)";
                 break;
             case ClientNet::Status::Connected:
                 s = std::string("Connecté - ") + (net_.hasCharacter() ? "personnage trouvé" : "pas encore de personnage");

@@ -21,6 +21,16 @@ void openInBrowser(const std::string& url) {
         log("net: refusing to open non-web URL from server");
         return;
     }
+    // The server reuses the same login link while a Steam login is in progress: open it only once.
+    static std::string lastUrl;
+    static auto lastTime = std::chrono::steady_clock::time_point{};
+    auto now = std::chrono::steady_clock::now();
+    if (url == lastUrl && now - lastTime < std::chrono::minutes(5)) {
+        log("net: Steam login page already open in the browser");
+        return;
+    }
+    lastUrl = url;
+    lastTime = now;
     ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
