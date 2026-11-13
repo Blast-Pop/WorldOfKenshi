@@ -4,3 +4,4 @@ out/
 vcpkg_installed/
 .vs/
 *.user
+/vcpkg/
