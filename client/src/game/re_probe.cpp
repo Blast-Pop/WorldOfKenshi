@@ -453,6 +453,80 @@ void onF4() {
 
 bool g_f4WasDown = false;
 
+// ---- F3: who writes a character's position? Hardware write-watch on character+0x48 ----
+// Debug registers are per thread: this watches the game (frame) thread only. A vectored exception
+// handler arms/disarms them on a deliberate breakpoint and records the code addresses that write.
+volatile LONG g_watchMode = 0;       // 1 = arm requested, 2 = disarm requested
+uintptr_t g_watchAddr = 0;
+uintptr_t g_writers[64];
+volatile LONG g_writerCount = 0;
+volatile LONG g_writeHits = 0;
+double g_watchUntil = 0;
+bool g_watching = false;
+PVOID g_veh = nullptr;
+
+LONG CALLBACK watchHandler(EXCEPTION_POINTERS* e) {
+    auto* ctx = e->ContextRecord;
+    if (e->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT && g_watchMode != 0) {
+        if (g_watchMode == 1) {
+            ctx->Dr0 = g_watchAddr;
+            ctx->Dr7 = 1ull | (1ull << 16) | (3ull << 18);  // L0, break on write, 4 bytes
+        } else {
+            ctx->Dr0 = 0;
+            ctx->Dr7 = 0;
+        }
+        g_watchMode = 0;
+        ctx->Rip += 1;  // skip our int3
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    if (e->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP && (ctx->Dr6 & 1)) {
+        InterlockedIncrement(&g_writeHits);
+        uintptr_t rip = reinterpret_cast<uintptr_t>(e->ExceptionRecord->ExceptionAddress);
+        LONG n = g_writerCount;
+        bool known = false;
+        for (LONG i = 0; i < n; ++i) known |= g_writers[i] == rip;
+        if (!known && n < 64) g_writers[InterlockedIncrement(&g_writerCount) - 1] = rip;
+        ctx->Dr6 = 0;
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+__declspec(noinline) void setWatch(LONG mode) {
+    g_watchMode = mode;
+    __debugbreak();  // handled by watchHandler, which updates this thread's debug registers
+}
+
+void onF3() {
+    if (g_watching) return;
+    uintptr_t pi = 0, sel = 0, ch = 0;
+    if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
+        rttiName(ch) != ".?AVCharacterHuman@@") {
+        log("watch: select a character in game first");
+        return;
+    }
+    if (!g_veh) g_veh = AddVectoredExceptionHandler(1, watchHandler);
+    g_watchAddr = ch + 0x48;
+    g_writerCount = 0;
+    g_writeHits = 0;
+    setWatch(1);
+    g_watching = true;
+    g_watchUntil = GetTickCount64() / 1000.0 + 3.0;
+    log("watch: watching writes to %p (character %p + 0x48) for 3 s - move the character",
+        reinterpret_cast<void*>(g_watchAddr), reinterpret_cast<void*>(ch));
+}
+
+void watchTick() {
+    if (!g_watching || GetTickCount64() / 1000.0 < g_watchUntil) return;
+    setWatch(2);
+    g_watching = false;
+    log("watch: %ld writes from %ld code location(s) on the game thread", g_writeHits, g_writerCount);
+    for (LONG i = 0; i < g_writerCount; ++i)
+        log("watch:   writer at exe+0x%llx", static_cast<unsigned long long>(g_writers[i] - g_base));
+}
+
+bool g_f3WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -477,6 +551,10 @@ void probeTick() {
     bool f4 = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
     if (f4 && !g_f4WasDown && focused) onF4();
     g_f4WasDown = f4;
+    bool f3 = (GetAsyncKeyState(VK_F3) & 0x8000) != 0;
+    if (f3 && !g_f3WasDown && focused) onF3();
+    g_f3WasDown = f3;
+    watchTick();
 }
 
 }  // namespace wok
