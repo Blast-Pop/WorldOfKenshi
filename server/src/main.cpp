@@ -1,8 +1,15 @@
 // wok_server — World of Kenshi dedicated server.
 // Usage: wok_server [--port 27800] [--max-players 250] [--ban-file bans.txt]
+//                   [--db world.sqlite] [--http-port 27801] [--public-url http://HOST:27801]
+//                   [--spawn X,Y,Z]
 
+#include <wok/auth_http.hpp>
+#include <wok/character_store.hpp>
 #include <wok/session.hpp>
 #include <wok/transport.hpp>
+
+#include <memory>
+#include <random>
 
 #include <atomic>
 #include <chrono>
@@ -25,6 +32,10 @@ struct Args {
     uint16_t port = WOK_DEFAULT_PORT;
     uint32_t maxPlayers = 250;
     std::string banFile;
+    std::string db = "world.sqlite";
+    uint16_t httpPort = 27801;
+    std::string publicUrl;  // default: http://127.0.0.1:<httpPort>
+    float spawn[3] = {-50979.0f, 1533.0f, 2932.0f};  // first place a character was seen in testing
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -37,12 +48,25 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.maxPlayers = static_cast<uint32_t>(std::atoi(argv[++i]));
         else if (k == "--ban-file" && hasValue)
             a.banFile = argv[++i];
+        else if (k == "--db" && hasValue)
+            a.db = argv[++i];
+        else if (k == "--http-port" && hasValue)
+            a.httpPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        else if (k == "--public-url" && hasValue)
+            a.publicUrl = argv[++i];
+        else if (k == "--spawn" && hasValue &&
+                 std::sscanf(argv[++i], "%f,%f,%f", &a.spawn[0], &a.spawn[1], &a.spawn[2]) == 3)
+            continue;
         else {
-            std::fprintf(stderr, "usage: wok_server [--port N] [--max-players N] [--ban-file path]\n");
+            std::fprintf(stderr,
+                         "usage: wok_server [--port N] [--max-players N] [--ban-file path] [--db path]\n"
+                         "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n");
             return false;
         }
     }
-    return a.port != 0 && a.maxPlayers != 0;
+    if (a.publicUrl.empty()) a.publicUrl = "http://127.0.0.1:" + std::to_string(a.httpPort);
+    while (!a.publicUrl.empty() && a.publicUrl.back() == '/') a.publicUrl.pop_back();
+    return a.port != 0 && a.maxPlayers != 0 && a.httpPort != 0;
 }
 
 // One SteamID64 per line; blank lines and lines starting with '#' are ignored.
@@ -68,9 +92,33 @@ int main(int argc, char** argv) {
     Args args;
     if (!parseArgs(argc, argv, args)) return 2;
 
+    std::unique_ptr<CharacterStore> store;
+    try {
+        store = std::make_unique<CharacterStore>(args.db);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "error: %s\n", e.what());
+        return 1;
+    }
+    AuthHttp http(args.httpPort, args.publicUrl);
+    if (!http.start()) {
+        std::fprintf(stderr, "error: cannot listen on TCP port %u (auth web page)\n", args.httpPort);
+        return 1;
+    }
+
     SessionConfig cfg;
     cfg.maxPlayers = args.maxPlayers;
     loadBans(args.banFile, cfg);
+    cfg.store = store.get();
+    cfg.authUrlBase = http.challengeUrlBase();
+    cfg.randomToken = [] {
+        static std::random_device rd;  // OS entropy (rand_s on Windows, /dev/urandom on Linux)
+        AuthToken t{};
+        for (auto& b : t) b = static_cast<uint8_t>(rd() & 0xff);
+        return t;
+    };
+    cfg.spawnX = args.spawn[0];
+    cfg.spawnY = args.spawn[1];
+    cfg.spawnZ = args.spawn[2];
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
@@ -85,6 +133,8 @@ int main(int argc, char** argv) {
         } else {
             std::printf("World of Kenshi server - protocol %u - UDP %u - max %u players\n", WOK_PROTOCOL_VERSION,
                         args.port, args.maxPlayers);
+            std::printf("auth page %s (TCP %u) - database %s\n", args.publicUrl.c_str(), args.httpPort,
+                        args.db.c_str());
             std::fflush(stdout);
             SessionManager session(cfg);
             const auto start = std::chrono::steady_clock::now();
@@ -115,6 +165,7 @@ int main(int argc, char** argv) {
                             break;
                     }
                 }
+                for (auto& [nonce, steamId] : http.poll()) flush(session.onAuthVerified(nonce, steamId, now()));
                 flush(session.tick(now()));
                 for (ConnId c : session.connectionsToClose()) server.close(c);
                 std::fflush(stdout);

@@ -5,6 +5,13 @@
   "dependencies": [
     "doctest",
     "sqlite3",
+    {
+      "name": "cpp-httplib",
+      "default-features": false,
+      "features": [
+        "openssl"
+      ]
+    },
     "gamenetworkingsockets",
     {
       "name": "minhook",

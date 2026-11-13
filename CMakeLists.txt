@@ -16,6 +16,7 @@ endif()
 find_package(doctest CONFIG REQUIRED)
 find_package(GameNetworkingSockets CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(httplib CONFIG REQUIRED)
 
 enable_testing()
 
