@@ -4,7 +4,11 @@
   "builtin-baseline": "2ec0f1747d8186a5c9babe276e2ad57cd2b12d2a",
   "dependencies": [
     "doctest",
+    "sqlite3",
     "gamenetworkingsockets",
-    { "name": "minhook", "platform": "windows" }
+    {
+      "name": "minhook",
+      "platform": "windows"
+    }
   ]
 }
