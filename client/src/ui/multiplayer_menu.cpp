@@ -604,7 +604,7 @@ void MultiplayerMenu::update(float dt) {
         // is really being played (not in the character editor or behind our loading screen).
         timeLocked_ = multiplayerWorld_ && inGame_() && net_.status() == ClientNet::Status::Connected &&
                       !loadingShown_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
-        for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight"})
+        for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
             if (mygui::Widget* w = mygui::findBySuffix(suffix, 12)) mygui::setVisible(w, !timeLocked_);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
