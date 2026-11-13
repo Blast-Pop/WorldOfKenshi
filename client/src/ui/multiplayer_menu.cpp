@@ -96,14 +96,15 @@ void MultiplayerMenu::applyPauseMenu() {
     for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
         if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
             mygui::setVisible(b, !mp);
-    bool connected = net_.status() == ClientNet::Status::Connected;
+    // Disconnect stays available for the whole multiplayer world: the player may cancel Kenshi's
+    // exit dialog after clicking it and must still be able to leave later.
     mygui::Widget* disc = mygui::findWidget(kDisconnect);
-    if (connected && !disc) {
+    if (mp && !disc) {
         // Same slot and style as Kenshi's "Save Game" button.
         disc = mygui::createChild(mygui::parentOf(resume), "Button", "Kenshi_Button1",
                                   {0.125f, 0.188953f, 0.75f, 0.130814f}, kDisconnect);
         mygui::setProperty(disc, "Caption", "Disconnect");
-    } else if (!connected && disc) {
+    } else if (!mp && disc) {
         mygui::destroy(disc);
     }
 }
