@@ -378,12 +378,19 @@ void MultiplayerMenu::applyConnectedMenu() {
                 mygui::click(begin);
             }
         } else if (autoStep_ == 1) {
-            // The editor's Confirm only works once the editor has finished building: keep clicking it
-            // every ~2 s while it exists; the editor is done once the button is gone.
+            // Kenshi rejects a Confirm sent before the editor has assigned a race ("Invalid character
+            // race" dialog, whose OK is ButtonB). Wait until the editor has been open ~4 s, click,
+            // dismiss any error dialog, and retry every ~4 s (at most 6 times). Polls run every 0.5 s.
+            if (mygui::Widget* ok = mygui::findBySuffixExcept("_ButtonB", kLoadingPrefix, 4)) {
+                log("ui: dismissing an editor message (OK)");
+                mygui::click(ok);
+                return;
+            }
             mygui::Widget* confirm = mygui::findBySuffixExcept("_ConfirmButton", kLoadingPrefix, 12);
             if (confirm) {
-                if (confirmWaits_++ % 4 == 0) {
-                    log("ui: returning player, confirming the character editor ('%s')", mygui::nameOf(confirm).c_str());
+                ++confirmWaits_;
+                if (confirmWaits_ >= 8 && confirmWaits_ % 8 == 0 && confirmWaits_ / 8 <= 6) {
+                    log("ui: returning player, confirming the character editor (try %d)", confirmWaits_ / 8);
                     mygui::click(confirm);
                 }
             } else if (confirmWaits_ > 0) {
@@ -435,13 +442,13 @@ void MultiplayerMenu::update(float dt) {
         ensureButton();
         applyConnectedMenu();
         applyPauseMenu();
-        updateLoading(0.5f);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
             windowOpen_ = false;
         }
         if (windowOpen_) refreshRows();
     }
+    updateLoading(dt);  // every frame: no gap between Kenshi's loading screen and ours
     if (windowOpen_) {
         statusTimer_ += dt;
         if (statusTimer_ >= 0.25f) {
