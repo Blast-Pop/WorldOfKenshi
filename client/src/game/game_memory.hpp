@@ -12,7 +12,6 @@ std::span<const uint8_t> moduleText();  // .text section of kenshi_x64.exe
 
 bool readPtr(uintptr_t addr, uintptr_t& out);
 bool readBytes(uintptr_t addr, void* out, size_t n);
-bool writeBytes(uintptr_t addr, const void* src, size_t n);  // guarded; false if not writable
 
 // True if `obj` is a polymorphic object whose most-derived RTTI name equals `rttiName`
 // (e.g. ".?AVCharacterHuman@@").

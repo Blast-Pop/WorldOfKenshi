@@ -865,7 +865,7 @@ bool g_f11WasDown = false;
 std::vector<uint8_t> g_diffSnap;
 bool g_f1WasDown = false;
 void onF1() {
-    std::vector<uint8_t> now(0x20000);
+    std::vector<uint8_t> now(0x4000);
     copyRaw(g_base + kGameWorld, now.data(), now.size());
     if (g_diffSnap.empty()) {
         g_diffSnap = now;
@@ -880,7 +880,7 @@ void onF1() {
         std::memcpy(&x, &g_diffSnap[a], 4);
         std::memcpy(&y, &now[a], 4);
         // keep small integer/bool changes only (flags), skip timers and positions
-        if (x <= 1 && y <= 1) {  // booleans only
+        if (x <= 16 && y <= 16) {
             char buf[48];
             std::snprintf(buf, sizeof(buf), " +%zx:%u->%u", a, x, y);
             out += buf;

@@ -567,15 +567,6 @@ void MultiplayerMenu::refreshStatus() {
 void MultiplayerMenu::enforceNormalSpeed() {
     // GameWorld + 0x700: game speed (0 paused, 1 normal, 2 and 5 fast), docs/re/game-world.md.
     constexpr uintptr_t kGameSpeed = 0x2134110 + 0x700;
-    // Escape menu: candidate "paused" flags (GameWorld + 0x5154 / + 0x733c go 0 -> 1 when it opens).
-    for (uintptr_t off : {uintptr_t{0x5154}, uintptr_t{0x733c}}) {
-        uint8_t v = 0, zero = 0;
-        uintptr_t a = mem::moduleBase() + 0x2134110 + off;
-        if (mem::readBytes(a, &v, 1) && v == 1 && mem::writeBytes(a, &zero, 1) && !menuPauseLogged_) {
-            log("ui: menu pause flag +0x%llx cleared", static_cast<unsigned long long>(off));
-            menuPauseLogged_ = true;
-        }
-    }
     float speed = 1.0f;
     if (!mem::readBytes(mem::moduleBase() + kGameSpeed, &speed, sizeof(speed)) || speed == 1.0f) return;
     // Kenshi's own "normal speed" button keeps its UI (paused banner, button states) consistent.
