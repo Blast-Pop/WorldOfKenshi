@@ -5,14 +5,15 @@
       "name": "base",
       "hidden": true,
       "binaryDir": "${sourceDir}/build/${presetName}",
-      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      "toolchainFile": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": { "VCPKG_OVERLAY_PORTS": "${sourceDir}/vcpkg-overlays" }
     },
     {
       "name": "windows-base",
       "hidden": true,
       "inherits": "base",
       "architecture": "x64",
-      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-windows-static" },
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-windows-static", "VCPKG_OVERLAY_PORTS": "${sourceDir}/vcpkg-overlays" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     { "name": "windows-debug", "inherits": "windows-base" },
@@ -21,7 +22,7 @@
       "name": "linux-release",
       "inherits": "base",
       "generator": "Ninja",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" },
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "VCPKG_OVERLAY_PORTS": "${sourceDir}/vcpkg-overlays" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
     }
   ],
