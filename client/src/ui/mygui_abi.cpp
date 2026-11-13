@@ -46,7 +46,12 @@ struct Api {
     const S* (*getName)(Widget* w);
     size_t (*getChildCount)(Widget* w);
     Widget* (*getChildAt)(Widget* w, size_t index);
+    void (*riseClick)(void* widgetInput);
 } g_api{};
+
+// MyGUI::Widget derives from several classes; its WidgetInput base sits at +0x80 (Widget's RTTI
+// class hierarchy in MyGUIEngine_x64.dll, docs/re/mygui.md).
+constexpr uintptr_t kWidgetInputOffset = 0x80;
 
 // Gui keeps its root widgets in a std::vector<Widget*> at +0x28 (begin) / +0x30 (end): seen in
 // Gui::findWidgetT, which iterates exactly that range (docs/re/mygui.md).
@@ -106,6 +111,7 @@ bool init() {
                "?getName@Widget@MyGUI@@QEBAAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ");
     ok &= load(m, g_api.getChildCount, "?getChildCount@Widget@MyGUI@@QEAA_KXZ");
     ok &= load(m, g_api.getChildAt, "?getChildAt@Widget@MyGUI@@QEAAPEAV12@_K@Z");
+    ok &= load(m, g_api.riseClick, "?_riseMouseButtonClick@WidgetInput@MyGUI@@QEAAXXZ");
     g_ok = ok;
     log("mygui: %s", ok ? "ready" : "disabled");
     return ok;
@@ -164,6 +170,12 @@ Widget* findBySuffix(std::string_view suffix, int maxDepth) {
     }
     return nullptr;
 }
+
+void click(Widget* w) {
+    if (w) g_api.riseClick(reinterpret_cast<char*>(w) + kWidgetInputOffset);
+}
+
+void setVisible(Widget* w, bool visible) { setProperty(w, "Visible", visible ? "true" : "false"); }
 
 std::string nameOf(Widget* w) {
     if (!w) return {};

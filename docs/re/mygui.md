@@ -30,3 +30,11 @@ every run. Exact-name lookups (`findWidgetT("NewGameButton")`) therefore fail. W
 widgets (`Gui + 0x28` .. `Gui + 0x30`, a `std::vector<Widget*>` iterated by `Gui::findWidgetT`)
 and their children (`Widget::getChildCount` / `getChildAt`) for a name **ending** with `_NewGameButton`.
 Widgets we create ourselves have unprefixed names.
+
+## Triggering a game button by code
+
+`MyGUI::Widget` has several base classes. From the RTTI class hierarchy of `.?AVWidget@MyGUI@@` in
+`MyGUIEngine_x64.dll`: IObject +0x0, ICroppedRectangle +0x8, UserData +0x48, **WidgetInput +0x80**,
+IDelegateUnlink +0x278, SkinItem/LayerItem +0x288. Calling the exported
+`WidgetInput::_riseMouseButtonClick()` on `widget + 0x80` fires the widget's click event, so Kenshi's
+own handler runs (used to press `…_NewGameButton` once connected). Visibility uses the `Visible` property.

@@ -158,6 +158,25 @@ void MultiplayerMenu::onClick(const std::string& name) {
     }
 }
 
+void MultiplayerMenu::applyConnectedMenu() {
+    bool connected = net_.status() == ClientNet::Status::Connected;
+    // Local saves are never usable in multiplayer: hide every way into a local game while connected.
+    for (const char* suffix : {"_ContinueButton", "_NewGameButton", "_LoadGameButton", "_ImportGameButton"})
+        if (mygui::Widget* b = mygui::findBySuffix(suffix, 3)) mygui::setVisible(b, !connected);
+    if (!connected) {
+        enteredGame_ = false;
+        return;
+    }
+    if (enteredGame_) return;
+    mygui::Widget* newGame = mygui::findBySuffix("_NewGameButton", 3);
+    if (!newGame) return;  // not on the main menu
+    // Step 1 of entering the server game: let Kenshi run its own New Game action.
+    closeWindow();
+    enteredGame_ = true;
+    log("ui: connected, starting the server game (New Game)");
+    mygui::click(newGame);
+}
+
 void MultiplayerMenu::refreshStatus() {
     std::string s;
     if (!error_.empty()) {
@@ -188,6 +207,7 @@ void MultiplayerMenu::update(float dt) {
         pollTimer_ = 0;
         ensureButton();
         ensureOptionsTab();
+        applyConnectedMenu();
         if (windowOpen_ && !mygui::findWidget(kWindow)) windowOpen_ = false;
     }
     if (windowOpen_) {
@@ -195,6 +215,17 @@ void MultiplayerMenu::update(float dt) {
         if (statusTimer_ >= 0.25f) {
             statusTimer_ = 0;
             refreshStatus();
+        }
+    }
+
+    // Dev diagnostic while automating the entry flow: log the names of hovered widgets.
+    static void* lastHover = nullptr;
+    static int hoverLogs = 0;
+    if (void* hover = mygui::mouseFocus(); hover != lastHover) {
+        lastHover = hover;
+        if (hover && hoverLogs < 120) {
+            ++hoverLogs;
+            log("ui: hover '%s'", mygui::nameOf(static_cast<mygui::Widget*>(hover)).c_str());
         }
     }
 

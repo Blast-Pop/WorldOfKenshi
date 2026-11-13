@@ -26,6 +26,7 @@ private:
     void closeWindow();
     void onClick(const std::string& widgetName);
     void refreshStatus();
+    void applyConnectedMenu();  // connected: hide local-save buttons and start the server game
 
     ClientConfig& cfg_;
     ClientNet& net_;
@@ -39,6 +40,7 @@ private:
     bool windowOpen_ = false;
     std::string lastStatus_;
     std::string error_;
+    bool enteredGame_ = false;
 };
 
 }  // namespace wok
