@@ -33,14 +33,22 @@ struct Column {
     const char* suffix;
     const char* header;
     float left, width;
+    const char* align;  // MyGUI TextAlign
 };
 constexpr Column kColumns[] = {
-    {"_ver", "Ver.", 0.00f, 0.07f},     {"_name", "Server name", 0.07f, 0.23f},
-    {"_desc", "Server description", 0.30f, 0.46f}, {"_players", "Players", 0.76f, 0.12f},
-    {"_ping", "Ping", 0.88f, 0.12f},
+    {"_ver", "Ver.", 0.00f, 0.07f, "Center"},
+    {"_name", "Server name", 0.07f, 0.23f, "Left VCenter"},
+    {"_desc", "Server description", 0.30f, 0.46f, "Left VCenter"},
+    {"_players", "Players", 0.76f, 0.12f, "Center"},
+    {"_ping", "Ping", 0.88f, 0.12f, "Center"},
 };
-constexpr float kListLeft = 0.02f, kListWidth = 0.96f;
-constexpr float kRowTop = 0.09f, kRowHeight = 0.065f, kRowStep = 0.07f;
+// One grid for the whole window: equal side margins, rows flush under the header (no gaps), so
+// every separator sits exactly on a cell border.
+constexpr float kMargin = 0.025f;
+constexpr float kListLeft = kMargin, kListWidth = 1.0f - 2 * kMargin;
+constexpr float kHeaderTop = 0.02f, kHeaderHeight = 0.06f;
+constexpr float kRowTop = kHeaderTop + kHeaderHeight, kRowHeight = 0.065f, kRowStep = kRowHeight;
+constexpr float kCellPad = 0.008f;  // text inset inside a cell
 
 const char* rejectText(RejectReason r) {
     switch (r) {
@@ -107,13 +115,16 @@ void MultiplayerMenu::openWindow() {
         mygui::setProperty(f, "Alpha", alpha);
         mygui::setProperty(f, "NeedMouse", "false");
     };
-    fill({kListLeft, 0.015f, kListWidth, listBottom - 0.015f}, "0.62 0.55 0.43", "0.35");  // list background
-    fill({kListLeft, 0.015f, kListWidth, 0.06f}, "0.35 0.30 0.22", "0.75");                // header band
+    fill({kListLeft, kHeaderTop, kListWidth, listBottom - kHeaderTop}, "0.62 0.55 0.43", "0.35");  // list background
+    fill({kListLeft, kHeaderTop, kListWidth, kHeaderHeight}, "0.35 0.30 0.22", "0.75");            // header band
 
     for (const Column& c : kColumns) {
         auto h = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText",
-                                    {kListLeft + c.left * kListWidth + 0.005f, 0.02f, c.width * kListWidth, 0.05f}, "");
+                                    {kListLeft + (c.left + kCellPad) * kListWidth, kHeaderTop,
+                                     (c.width - 2 * kCellPad) * kListWidth, kHeaderHeight},
+                                    "");
         mygui::setProperty(h, "Caption", c.header);
+        mygui::setProperty(h, "TextAlign", c.align);
         mygui::setProperty(h, "TextColour", kHeaderText);
     }
     // Separators: vertical lines between columns, horizontal lines under the header and each row.
@@ -124,18 +135,19 @@ void MultiplayerMenu::openWindow() {
         mygui::setProperty(l, "NeedMouse", "false");
     };
     for (size_t c = 1; c < std::size(kColumns); ++c)
-        line({kListLeft + kColumns[c].left * kListWidth, 0.015f, 0.0015f, listBottom - 0.015f});
-    line({kListLeft, 0.075f, kListWidth, 0.002f});
+        line({kListLeft + kColumns[c].left * kListWidth, kHeaderTop, 0.0015f, listBottom - kHeaderTop});
+    line({kListLeft, kRowTop, kListWidth, 0.002f});
     rowCount_ = std::min(cfg_.servers.size(), kMaxRows);
     for (size_t i = 0; i < kMaxRows; ++i)
-        line({kListLeft, kRowTop + kRowStep * i + kRowHeight + 0.002f, kListWidth, 0.0015f});
+        line({kListLeft, kRowTop + kRowStep * (i + 1), kListWidth, 0.0015f});
 
     for (size_t i = 0; i < rowCount_; ++i) {
         auto row = mygui::createChild(w, "Button", "Kenshi_Button2",
                                       {kListLeft, kRowTop + kRowStep * i, kListWidth, kRowHeight}, rowName(i));
         for (const Column& c : kColumns) {
             auto cell = mygui::createChild(row, "TextBox", "Kenshi_TextboxStandardText",
-                                           {c.left + 0.005f, 0.0f, c.width - 0.01f, 1.0f}, rowName(i) + c.suffix);
+                                           {c.left + kCellPad, 0.0f, c.width - 2 * kCellPad, 1.0f}, rowName(i) + c.suffix);
+            mygui::setProperty(cell, "TextAlign", c.align);
             mygui::setProperty(cell, "NeedMouse", "false");  // clicks go to the row button
             mygui::setProperty(cell, "TextColour", kRowText);
         }
@@ -146,15 +158,19 @@ void MultiplayerMenu::openWindow() {
         mygui::setProperty(t, "TextColour", kRowText);
     }
 
-    auto status = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.03f, 0.77f, 0.48f, 0.06f}, kStatus);
+    // Bottom: status + Unlink on one line, then Connect / Close of equal width, same margins as the list.
+    const float half = (kListWidth - kMargin) / 2;
+    const float infoTop = listBottom + 0.03f, buttonsTop = infoTop + 0.10f;
+    auto status = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {kListLeft, infoTop, half, 0.07f}, kStatus);
+    mygui::setProperty(status, "TextAlign", "Left VCenter");
     mygui::setProperty(status, "TextColour", kStatusText);
     // Unlink lives here, not in Kenshi's Options: Kenshi casts every Options tab to its own panel
     // class when applying settings and crashes on a foreign tab (MyGUI "Bad cast ... DatapanelGUI").
-    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {0.53f, 0.76f, 0.44f, 0.07f}, kUnlink);
+    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {kListLeft + half + kMargin, infoTop, half, 0.07f}, kUnlink);
     mygui::setProperty(unlink, "Caption", "Unlink Steam account");
-    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {0.03f, 0.86f, 0.46f, 0.10f}, kConnect);
+    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft, buttonsTop, half, 0.10f}, kConnect);
     mygui::setProperty(connect, "Caption", "Connect");
-    auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {0.53f, 0.86f, 0.44f, 0.10f}, kClose);
+    auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft + half + kMargin, buttonsTop, half, 0.10f}, kClose);
     mygui::setProperty(close, "Caption", "Close");
 
     windowOpen_ = true;
