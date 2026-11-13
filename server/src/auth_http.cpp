@@ -12,13 +12,11 @@ namespace {
 constexpr const char* kPageOk =
     "<!doctype html><meta charset=utf-8><title>World of Kenshi</title>"
     "<body style='font-family:sans-serif;background:#2b2620;color:#e8dcc0;text-align:center;padding-top:15%'>"
-    "<h1>World of Kenshi</h1><p>Compte Steam vérifié. Tu peux retourner dans Kenshi.</p>"
-    "<p>Steam account verified. You can go back to Kenshi.</p></body>";
+    "<h1>World of Kenshi</h1><p>Steam account verified. You can go back to Kenshi.</p></body>";
 constexpr const char* kPageFail =
     "<!doctype html><meta charset=utf-8><title>World of Kenshi</title>"
     "<body style='font-family:sans-serif;background:#2b2620;color:#e8dcc0;text-align:center;padding-top:15%'>"
-    "<h1>World of Kenshi</h1><p>La vérification Steam a échoué. Réessaie depuis Kenshi.</p>"
-    "<p>Steam verification failed. Please try again from Kenshi.</p></body>";
+    "<h1>World of Kenshi</h1><p>Steam verification failed. Please try again from Kenshi.</p></body>";
 
 bool isNonce(const std::string& n) {
     if (n.size() != 64) return false;

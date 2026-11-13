@@ -150,7 +150,7 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         g_state = new ClientState;
         g_state->cfg = loadOrCreateConfig();
         if (g_state->cfg.servers.empty()) {  // until a server browser exists, offer the local test server
-            g_state->cfg.servers.push_back({"Serveur local (test)", "127.0.0.1:27800"});
+            g_state->cfg.servers.push_back({"Local server (test)", "127.0.0.1:27800"});
             saveConfig(g_state->cfg);
         }
         wok::log("config: host=%s port=%u name=%s", g_state->cfg.host.c_str(), g_state->cfg.port,

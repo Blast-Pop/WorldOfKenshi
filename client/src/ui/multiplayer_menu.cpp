@@ -26,11 +26,11 @@ constexpr size_t kMaxServers = 6;
 
 const char* rejectText(RejectReason r) {
     switch (r) {
-        case RejectReason::ServerFull: return "Serveur plein";
-        case RejectReason::VersionMismatch: return "Version du mod différente du serveur";
-        case RejectReason::Banned: return "Vous êtes banni de ce serveur";
-        case RejectReason::BadAuth: return "Authentification Steam refusée";
-        default: return "Refusé";
+        case RejectReason::ServerFull: return "Server full";
+        case RejectReason::VersionMismatch: return "Mod version differs from the server";
+        case RejectReason::Banned: return "You are banned from this server";
+        case RejectReason::BadAuth: return "Steam authentication refused";
+        default: return "Refused";
     }
 }
 
@@ -66,9 +66,9 @@ void MultiplayerMenu::ensureOptionsTab() {
     if (!tab) return;
     mygui::setProperty(tab, "Caption", "Multiplayer");
     auto text = mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.08f, 0.90f, 0.08f}, "");
-    mygui::setProperty(text, "Caption", "Compte Steam lié à World of Kenshi sur ce PC");
+    mygui::setProperty(text, "Caption", "Steam account linked to World of Kenshi on this PC");
     auto unlink = mygui::createChild(tab, "Button", "Kenshi_Button1", {0.05f, 0.20f, 0.40f, 0.09f}, kUnlink);
-    mygui::setProperty(unlink, "Caption", "Délier mon compte Steam");
+    mygui::setProperty(unlink, "Caption", "Unlink my Steam account");
     mygui::createChild(tab, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.33f, 0.90f, 0.08f}, kUnlinkStatus);
     log("ui: Multiplayer tab added to Options");
 }
@@ -95,24 +95,24 @@ void MultiplayerMenu::openWindow() {
         auto t = mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, top, 0.90f, 0.06f}, "");
         mygui::setProperty(t, "Caption", text);
     };
-    label("Adresse du serveur", 0.03f);
+    label("Server address", 0.03f);
     auto edit = mygui::createChild(w, "EditBox", "Kenshi_EditBox", {0.05f, 0.10f, 0.90f, 0.08f}, kAddress);
     mygui::setProperty(edit, "Caption", cfg_.host + ":" + std::to_string(cfg_.port));
 
-    label("Serveurs disponibles", 0.22f);
+    label("Available servers", 0.22f);
     size_t n = std::min(cfg_.servers.size(), kMaxServers);
     for (size_t i = 0; i < n; ++i) {
         auto b = mygui::createChild(w, "Button", "Kenshi_Button2", {0.05f, 0.29f + 0.075f * i, 0.90f, 0.065f},
                                     kServerPrefix + std::to_string(i));
         mygui::setProperty(b, "Caption", cfg_.servers[i].name + "  (" + cfg_.servers[i].address + ")");
     }
-    if (n == 0) label("(aucun serveur dans wok_client.ini)", 0.29f);
+    if (n == 0) label("(no server listed in wok_client.ini)", 0.29f);
 
     mygui::createChild(w, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.76f, 0.90f, 0.06f}, kStatus);
     auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {0.05f, 0.85f, 0.42f, 0.10f}, kConnect);
-    mygui::setProperty(connect, "Caption", "Se connecter");
+    mygui::setProperty(connect, "Caption", "Connect");
     auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {0.53f, 0.85f, 0.42f, 0.10f}, kClose);
-    mygui::setProperty(close, "Caption", "Fermer");
+    mygui::setProperty(close, "Caption", "Close");
     windowOpen_ = true;
     lastStatus_ = "?";
     error_.clear();
@@ -131,7 +131,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
     } else if (name == kUnlink) {
         unlink_();
         mygui::setProperty(mygui::findWidget(kUnlinkStatus), "Caption",
-                           "Compte délié : la prochaine connexion redemandera Steam.");
+                           "Account unlinked: the next connection will ask Steam again.");
     } else if (name == kConnect) {
         auto st = net_.status();
         if (st == ClientNet::Status::Connecting || st == ClientNet::Status::AwaitingSteamLogin ||
@@ -141,7 +141,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
         }
         auto addr = parseAddress(mygui::editText(mygui::findWidget(kAddress)));
         if (!addr) {
-            error_ = "Adresse invalide (exemple : 45.32.1.2:27800)";
+            error_ = "Invalid address (example: 45.32.1.2:27800)";
             return;
         }
         error_.clear();
@@ -151,7 +151,7 @@ void MultiplayerMenu::onClick(const std::string& name) {
         log("ui: connecting to %s:%u", cfg_.host.c_str(), cfg_.port);
         connect_();
     } else if (name.rfind(kServerPrefix, 0) == 0) {
-        // Selecting a server only fills the address; "Se connecter" does the rest.
+        // Selecting a server only fills the address; "Connect" does the rest.
         size_t i = std::stoul(name.substr(std::string(kServerPrefix).size()));
         if (i < cfg_.servers.size())
             mygui::setProperty(mygui::findWidget(kAddress), "Caption", cfg_.servers[i].address);
@@ -164,15 +164,15 @@ void MultiplayerMenu::refreshStatus() {
         s = error_;
     } else {
         switch (net_.status()) {
-            case ClientNet::Status::Disconnected: s = "Non connecté"; break;
-            case ClientNet::Status::Connecting: s = "Connexion..."; break;
+            case ClientNet::Status::Disconnected: s = "Not connected"; break;
+            case ClientNet::Status::Connecting: s = "Connecting..."; break;
             case ClientNet::Status::AwaitingSteamLogin:
-                s = "Connexion Steam en cours dans ton navigateur (onglet steamcommunity.com)";
+                s = "Steam login in progress in your browser (steamcommunity.com tab)";
                 break;
             case ClientNet::Status::Connected:
-                s = std::string("Connecté - ") + (net_.hasCharacter() ? "personnage trouvé" : "pas encore de personnage");
+                s = std::string("Connected - ") + (net_.hasCharacter() ? "character found" : "no character yet");
                 break;
-            case ClientNet::Status::Rejected: s = std::string("Refusé : ") + rejectText(net_.rejectReason()); break;
+            case ClientNet::Status::Rejected: s = std::string("Refused: ") + rejectText(net_.rejectReason()); break;
         }
     }
     if (s != lastStatus_) {
