@@ -9,6 +9,7 @@ namespace wok {
 namespace {
 
 constexpr uintptr_t kCharName = 0x18;       // std::string
+constexpr uintptr_t kCharTemplate = 0x40;   // GameData* (character template, e.g. a start's character)
 constexpr uintptr_t kCharGender = 0x610;    // std::string ("male" / "female")
 constexpr uintptr_t kCharRace = 0xb70;      // GameData*
 constexpr uintptr_t kCharHair = 0xb80;      // GameData*
@@ -36,6 +37,7 @@ std::optional<CreateCharacter> readIdentity(uintptr_t character) {
     if (auto hair = stringIdAt(character + kCharHair); !hair.empty()) look["hair"] = hair;
     if (auto beard = stringIdAt(character + kCharBeard); !beard.empty()) look["beard"] = beard;
     c.appearance = encodeAppearance(look);
+    c.templateId = stringIdAt(character + kCharTemplate);
     return c;
 }
 

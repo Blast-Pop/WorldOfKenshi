@@ -59,6 +59,7 @@ struct ClientState {
     bool wasConnected = false;
     uint64_t steamId = 0;
     bool characterSent = false;  // CreateCharacter already sent during this connection
+    bool characterRestored = false;  // returning player's server character recreated in this world
 };
 
 std::string tokensPath() { return wok::modFile(wok::modDir(), "tokens.ini"); }
@@ -121,7 +122,19 @@ void onFrame(float dt) {
 
     bool connected = s.net->status() == wok::ClientNet::Status::Connected;
     if (s.wasConnected && !connected) s.avatars.clear();
-    if (!connected) s.characterSent = false;
+    if (!connected) {
+        s.characterSent = false;
+        s.characterRestored = false;
+    }
+
+    // Returning player: Kenshi's New Game only loads the world; bring back the server character
+    // (template, name) into the player's squad at its saved position.
+    if (connected && !s.characterRestored && s.net->hasCharacter() && s.avatarsOk && s.reader.character()) {
+        if (auto data = s.net->character()) {
+            s.characterRestored = true;
+            s.avatars.restorePlayer(s.reader.character(), *data);
+        }
+    }
 
     // First visit: once the player has made their character with Kenshi's own New Game flow,
     // register it on the server (name, race and look by FCS string ID).
