@@ -28,6 +28,8 @@ public:
     void savePosition(uint64_t steamId, float x, float y, float z, float yaw);
     void saveStats(uint64_t steamId, const std::vector<StatValue>& stats);  // replaces all saved skills
     void saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory);
+    std::optional<double> worldHours();  // game hours since the world began, if saved
+    void setWorldHours(double hours);
 
 private:
     sqlite3* db_ = nullptr;

@@ -34,6 +34,7 @@ private:
     void applyPauseMenu();      // connected: no local save/load in the pause menu, Disconnect instead
     void enforceNormalSpeed();  // multiplayer: the game always runs at normal speed
     bool timeLocked_ = false;
+    bool menuPauseLogged_ = false;
 
     ClientConfig& cfg_;
     ClientNet& net_;

@@ -8,6 +8,7 @@
 #include <wok/session.hpp>
 #include <wok/spawn_file.hpp>
 #include <wok/transport.hpp>
+#include <wok/world_clock.hpp>
 
 #include <httplib.h>
 
@@ -217,6 +218,15 @@ int main(int argc, char** argv) {
                     }
                 });
             }
+            // World clock: resumes from the saved value (a new world starts on day 1 at 08:00).
+            const double savedHours = store->worldHours().value_or(8.0);
+            WorldClock clock(savedHours, 0.0);
+            std::printf("world time: day %u, %.2f h\n", clock.message(0.0).day, clock.message(0.0).hour);
+            const auto clockStart = std::chrono::steady_clock::now();
+            cfg.worldTime = [&clock, clockStart](double) {
+                return clock.message(std::chrono::duration<double>(std::chrono::steady_clock::now() - clockStart).count());
+            };
+            double nextClockSave = 60.0;
             SessionManager session(cfg);
             const auto start = std::chrono::steady_clock::now();
             auto now = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
@@ -248,11 +258,16 @@ int main(int argc, char** argv) {
                 }
                 for (auto& [nonce, steamId] : http.poll()) flush(session.onAuthVerified(nonce, steamId, now()));
                 flush(session.tick(now()));
+                if (now() >= nextClockSave) {  // the clock survives a server restart
+                    nextClockSave = now() + 60.0;
+                    store->setWorldHours(clock.gameHours(now()));
+                }
                 for (ConnId c : session.connectionsToClose()) server.close(c);
                 std::fflush(stdout);
                 std::this_thread::sleep_for(std::chrono::milliseconds(16));  // ~60 Hz
             }
             std::printf("shutting down\n");
+            store->setWorldHours(clock.gameHours(now()));
             if (announcer.joinable()) announcer.join();
         }
     }

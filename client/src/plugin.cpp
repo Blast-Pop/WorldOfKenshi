@@ -8,6 +8,7 @@
 #include "game/inventory.hpp"
 #include "game/items.hpp"
 #include "game/stats.hpp"
+#include "game/world_time.hpp"
 #include "game/local_player.hpp"
 #include "game/re_probe.hpp"
 #include "input.hpp"
@@ -212,6 +213,9 @@ void onFrame(float dt) {
                          static_cast<unsigned>(ps->anim));
             }
         }
+        // The server owns the world clock: align ours once the world is being played.
+        if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
+            wok::applyWorldTime(s.reader.gameWorld(), *wt);
         if (s.avatarsOk) s.avatars.onMessage(m, s.now);
     }
     if (s.avatarsOk) s.avatars.update(s.now);

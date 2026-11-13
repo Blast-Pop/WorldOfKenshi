@@ -91,6 +91,10 @@ void write(ByteWriter& w, const CharacterData& m) {
     writeBytes(w, m.inventory.data(), m.inventory.size());
 }
 void write(ByteWriter& w, const InventoryUpdate& m) { writeBytes(w, m.items.data(), m.items.size()); }
+void write(ByteWriter& w, const WorldTime& m) {
+    w.u32(m.day);
+    w.f32(m.hour);
+}
 void write(ByteWriter& w, const StatsUpdate& m) { writeStats(w, m.values); }
 void write(ByteWriter& w, const CreateCharacter& m) {
     writeString(w, m.name);
@@ -120,6 +124,7 @@ constexpr MsgType typeOf(const ServerInfoRequest&) { return MsgType::ServerInfoR
 constexpr MsgType typeOf(const ServerInfo&) { return MsgType::ServerInfo; }
 constexpr MsgType typeOf(const StatsUpdate&) { return MsgType::StatsUpdate; }
 constexpr MsgType typeOf(const InventoryUpdate&) { return MsgType::InventoryUpdate; }
+constexpr MsgType typeOf(const WorldTime&) { return MsgType::WorldTime; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -185,6 +190,13 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             if (!readStats(r, m.stats) || !readBytes(r, kMaxInventoryBytes, m.inventory)) return std::nullopt;
             return m;
         }
+        case MsgType::WorldTime: {
+            WorldTime m;
+            m.day = r.u32();
+            m.hour = r.f32();
+            if (!finite(m.hour) || m.hour < 0 || m.hour > 24 || m.day == 0) return std::nullopt;
+            return m;
+        }
         case MsgType::InventoryUpdate: {
             InventoryUpdate m;
             if (!readBytes(r, kMaxInventoryBytes, m.items)) return std::nullopt;
@@ -235,7 +247,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::InventoryUpdate))
+        type > static_cast<uint8_t>(MsgType::WorldTime))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

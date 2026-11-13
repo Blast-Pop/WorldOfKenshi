@@ -170,6 +170,7 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
     ack.token = newToken;
     std::vector<Outgoing> out{Outgoing{conn, ack}};
     if (character) out.push_back({conn, *character});
+    if (cfg_.worldTime) out.push_back({conn, cfg_.worldTime(nowSec)});
     for (auto& [otherId, other] : conns_)
         if (otherId != conn && other.player && other.lastState) out.push_back({conn, *other.lastState});
     out.insert(out.end(), kicked.begin(), kicked.end());
@@ -269,6 +270,12 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
         }
     }
     std::vector<Outgoing> out;
+    if (cfg_.worldTime && nowSec - lastWorldTimeSent_ >= kWorldTimeIntervalSec) {
+        lastWorldTimeSent_ = nowSec;
+        WorldTime t = cfg_.worldTime(nowSec);
+        for (auto& [id, c] : conns_)
+            if (c.player) out.push_back({id, t});
+    }
     for (ConnId id : expired) {
         auto left = dropConn(id);
         out.insert(out.end(), left.begin(), left.end());

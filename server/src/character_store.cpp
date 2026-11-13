@@ -108,6 +108,8 @@ CharacterStore::CharacterStore(const std::string& path) {
         throw std::runtime_error("schema: " + msg);
     }
     for (const char* m : kMigrations) sqlite3_exec(db_, m, nullptr, nullptr, nullptr);
+    sqlite3_exec(db_, "CREATE TABLE IF NOT EXISTS world (key TEXT PRIMARY KEY, value REAL NOT NULL);", nullptr,
+                 nullptr, nullptr);
     // Crash-safe and fast for frequent small writes (spec 7.7); ignored for ":memory:".
     sqlite3_exec(db_, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nullptr, nullptr, nullptr);
 }
@@ -168,6 +170,18 @@ void CharacterStore::saveStats(uint64_t steamId, const std::vector<StatValue>& s
 void CharacterStore::saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory) {
     Stmt s(db_, "UPDATE characters SET inventory = ?2 WHERE steam_id = ?1");
     s.id(1, steamId).blob(2, inventory.data(), inventory.size()).step();
+}
+
+std::optional<double> CharacterStore::worldHours() {
+    Stmt s(db_, "SELECT value FROM world WHERE key = 'game_hours'");
+    if (s.step() != SQLITE_ROW) return std::nullopt;
+    return sqlite3_column_double(s.get(), 0);
+}
+
+void CharacterStore::setWorldHours(double hours) {
+    Stmt s(db_, "INSERT INTO world(key, value) VALUES('game_hours', ?1) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    s.real(1, hours).step();
 }
 
 void CharacterStore::savePosition(uint64_t steamId, float x, float y, float z, float yaw) {

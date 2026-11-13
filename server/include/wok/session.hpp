@@ -22,6 +22,8 @@ class CharacterStore;
 
 // Progress (position, skills...) is kept in memory and written in small batches (spec 7.7).
 inline constexpr double kProgressSaveIntervalSec = 2.0;
+// Clients realign their game clock to the server's this often.
+inline constexpr double kWorldTimeIntervalSec = 5.0;
 // Test bots (wok_testclient) use fake ids below this value; real SteamID64s start at 76561197960265728.
 inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
 // A Steam login in progress survives reconnects of the same claimed SteamID for this long.
@@ -52,6 +54,7 @@ struct SessionConfig {
     float spawnX = 0, spawnY = 0, spawnZ = 0;  // fallback spawn when no spawn points are configured
     std::vector<SpawnPoint> spawnPoints;          // new characters appear at one of these
     std::function<size_t(size_t count)> pickSpawn;  // index in [0, count); random when empty
+    std::function<WorldTime(double nowSec)> worldTime;  // the server's clock; none: no time sync
     bool allowTestBots = false;  // accept fake ids < kMaxTestBotSteamId without auth (testing only)
 };
 
@@ -62,7 +65,7 @@ public:
     std::vector<Outgoing> onConnect(ConnId conn, double nowSec = 0.0);
     std::vector<Outgoing> onPacket(ConnId conn, std::span<const uint8_t> bytes, double nowSec);
     std::vector<Outgoing> onDisconnect(ConnId conn);
-    std::vector<Outgoing> tick(double nowSec);  // timeouts + periodic position saves
+    std::vector<Outgoing> tick(double nowSec);  // timeouts, periodic saves, world time broadcast
     // Steam OpenID succeeded for the connection waiting on `nonce`; `steamId` is the verified one.
     std::vector<Outgoing> onAuthVerified(const std::string& nonce, uint64_t steamId, double nowSec);
 
@@ -111,6 +114,7 @@ private:
     std::vector<Outgoing> completeAuth(ConnId conn, Conn& c, uint64_t steamId, double nowSec);
     std::vector<ConnId> toClose_;
     PlayerId nextPlayerId_ = 1;
+    double lastWorldTimeSent_ = 0.0;
 };
 
 }  // namespace wok

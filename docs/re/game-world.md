@@ -42,17 +42,15 @@ confirmed in game with the F8 probe (`client/src/game/re_probe.cpp`).
 - World of Kenshi hides those controls in a multiplayer world and clicks `TimeSpeedButton2`
   whenever the speed is not 1 (keyboard shortcuts included).
 
-## World clock (in progress, 2026-11-13)
+## World clock and menu pause (verified in game 2026-11-13)
 
-- The "Day: N" / "HH:MM" text comes from a clock object reached through the global pointer at RVA
-  `0x21303d0`: `+0` hours, `+4` minutes, `+8` day (ints, a display copy refreshed by the game).
-  Formatter: RVA `0x66d600`, called from RVA `0x728d50` (main panel update).
-- Candidate true time of day: `GameWorld + 0x3504` (float, fraction of a day; read 0.4145 at
-  ~09:57). Not confirmed, and no direct code write to it was found (it is likely written through a
-  pointer or a member function).
-- RVA `0x66e0e0` only drives the SkyX sky (sunrise/sunset from GLOBAL CONSTANTS); it receives the
-  time, it does not own it.
-- Next: find the per-frame time advance (multiplied by the game speed, `GameWorld + 0x700`); the
-  same code is what the Escape menu stops, so it answers both the server clock and the menu pause.
-- Do not write `GameWorld + 0x733c`: it is 1 during normal play and clearing it closes the game.
-  `GameWorld + 0x132c` is only a round-robin counter.
+- Time-of-day object: global pointer at RVA `0x21303d0`. `+0` hours and `+4` minutes (ints, display),
+  `+8` day (int, 1 on "Day 1"), `+0x18` SkyX, `+0x20` SkyX time controller whose `+0x1c` is the hour
+  of the day (float 0-24). Per-frame update: RVA `0x66f190`; the day increments when the hour wraps.
+- Time rate: `gameSpeed * 0.009166666` game hours per real second (one game day ~ 43.6 min).
+- `GameWorld + 0x8b9` (byte): set while a menu (Escape) pauses the world; the time update multiplies
+  by 0 then. World of Kenshi clears it in a multiplayer world.
+- World of Kenshi sets day + hour from the server's clock (`WorldTime`, every 5 s) when they differ
+  by more than 3 game minutes.
+- Do not write `GameWorld + 0x733c` (1 during normal play; clearing it closes the game).
+  `GameWorld + 0x132c` is a round-robin counter.

@@ -361,3 +361,26 @@ TEST_CASE("inventory_saved_in_batches_and_returned") {
     REQUIRE(chars.size() == 1);
     CHECK(chars[0].inventory == inv);
 }
+
+TEST_CASE("players_get_the_world_time_on_join_and_regularly") {
+    Fixture f;
+    // (rebuild the manager with a clock: the fixture's config has none)
+    SessionConfig cfg = f.config();
+    cfg.worldTime = [](double now) { return WorldTime{3, static_cast<float>(now)}; };
+    SessionManager sm(cfg);
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    REQUIRE(f.store.create(42, sampleChar()));
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 42;
+    std::strcpy(h.name, "p");
+    h.token = t;
+    auto joined = all<WorldTime>(sm.onPacket(1, encode(h), 1.0));
+    REQUIRE(joined.size() == 1);
+    CHECK(joined[0].day == 3);
+    CHECK(all<WorldTime>(sm.tick(1.5)).empty());
+    sm.onPacket(1, encode(Ping{}), kWorldTimeIntervalSec + 1.0);  // keep the player alive
+    CHECK(all<WorldTime>(sm.tick(kWorldTimeIntervalSec + 1.0)).size() == 1);
+}
