@@ -45,8 +45,12 @@ Next: own squad + neutral faction for remote players, AI off, move orders.
   at `+0x08`, array pointer at `+0x10`. The game finds a faction by comparing the FCS string ID of its data.
 - **Faction** `+0x240` -> its GameData; GameData `+0x28` = name, `+0x58` = string ID (VC10 strings).
 - **Creating a squad**: RVA `0x7f4420`, arguments (Faction*, squad template GameData* or 0, bool, const
-  position*). Several game call sites pass 0 as the template and `true` as the flag. Returns an
-  `ActivePlatoon*`. Prologue `40 53 55`.
+  position*). Several game call sites pass 0 as the template and `true` as the flag. Prologue `40 53 55`.
+  **Returns a `Platoon*`** (verified in game); its `ActivePlatoon*` is at **`Platoon + 0x1d8`**
+  (other fields seen: `+0x10` Faction, `+0x40` / `+0x108` GameData, `+0xf8` Blackboard, `+0x1b8` Faction).
+
+Verified in game 2026-11-12 23:52: new squad of the "Drifters" faction created, then one default
+character spawned into it — not in the player's squad, faction shown as Drifters.
 
 Plan for remote-player avatars: a small FCS data mod adds a neutral "World of Kenshi players" faction;
 each remote player gets a squad of that faction, holding one character.
