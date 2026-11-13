@@ -6,6 +6,7 @@
 #include <wok/auth_http.hpp>
 #include <wok/character_store.hpp>
 #include <wok/session.hpp>
+#include <wok/spawn_file.hpp>
 #include <wok/transport.hpp>
 
 #include <memory>
@@ -38,6 +39,8 @@ struct Args {
     float spawn[3] = {-50979.0f, 1533.0f, 2932.0f};  // first place a character was seen in testing
     bool testBots = false;
     std::vector<SpawnPoint> spawnPoints;
+    std::string spawnFile;
+    std::string defaultSpawn;
     std::string name = "World of Kenshi server";
     std::string description;
 };
@@ -63,6 +66,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
             }
             sp.name = v.substr(0, colon);
             a.spawnPoints.push_back(sp);
+        } else if (k == "--spawn-file" && hasValue) {
+            a.spawnFile = argv[++i];
+        } else if (k == "--default-spawn" && hasValue) {
+            a.defaultSpawn = argv[++i];
         } else if (k == "--name" && hasValue)
             a.name = argv[++i];
         else if (k == "--description" && hasValue)
@@ -142,6 +149,25 @@ int main(int argc, char** argv) {
     cfg.spawnZ = args.spawn[2];
     cfg.allowTestBots = args.testBots;
     cfg.spawnPoints = args.spawnPoints;
+    if (!args.spawnFile.empty()) {
+        std::ifstream in(args.spawnFile, std::ios::binary);
+        if (!in) {
+            std::fprintf(stderr, "error: cannot read spawn file %s\n", args.spawnFile.c_str());
+            return 1;
+        }
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        auto pts = parseSpawnPoints(text);
+        cfg.spawnPoints.insert(cfg.spawnPoints.end(), pts.begin(), pts.end());
+    }
+    if (!args.defaultSpawn.empty()) {
+        int idx = findSpawn(cfg.spawnPoints, args.defaultSpawn);
+        if (idx < 0) {
+            std::fprintf(stderr, "error: default spawn '%s' is not in the spawn points\n", args.defaultSpawn.c_str());
+            return 1;
+        }
+        // Until players can pick their town, every new character starts at the default one.
+        cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
+    }
     cfg.serverName = args.name;
     cfg.serverDescription = args.description;
 
@@ -158,6 +184,7 @@ int main(int argc, char** argv) {
         } else {
             std::printf("World of Kenshi server - protocol %u - UDP %u - max %u players\n", WOK_PROTOCOL_VERSION,
                         args.port, args.maxPlayers);
+            std::printf("%zu spawn points\n", cfg.spawnPoints.size());
             std::printf("auth page %s (TCP %u) - database %s\n", args.publicUrl.c_str(), args.httpPort,
                         args.db.c_str());
             std::fflush(stdout);

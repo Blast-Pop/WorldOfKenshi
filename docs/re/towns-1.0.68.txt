@@ -1,0 +1,99 @@
+# Kenshi 1.0.68 town positions (Name:X,Y,Z), mapped in game with the client's Ctrl+Shift+F5 probe.
+# Incomplete: Stoat, Heng, Catun, Sho-Battai, World's End, Mongrel and others still to map.
+Abandoned Town:-102551.2,141.2,138826.9
+Abandoned Town:-104158.8,106.3,111027.1
+Admag:-89274.6,1554.9,15300.6
+Armoury Ruin:-114719.6,329.3,78755.5
+Bad Teeth:-33384.5,341.8,-19952.7
+Bark:87804.2,195.0,-109400.0
+Bast:12475.1,759.9,-87292.5
+Black Dog HQ:73299.4,533.5,2819.2
+Cannibal Capital:-61996.9,519.3,-110806.7
+Cannibal Village:-11320.9,1136.1,-127874.2
+Cannibal Village:-50239.0,560.9,-104966.2
+Cannibal Village:-65388.1,1291.0,-99378.0
+Cannibal Village:-71933.2,1647.5,-107596.9
+Cannibal Village:726.7,564.8,-121712.1
+Crab Village:128349.0,141.3,19456.6
+Cult Village:93028.8,874.7,-4053.9
+Dead Fishing Village:27281.1,234.3,123867.9
+Distant Hive Village:31473.6,162.2,-140053.0
+Distant Hive Village:34743.3,1016.5,-120463.5
+Drin:25026.5,1176.0,-98033.7
+Dust King Tower:-36144.0,1266.6,-676.8
+Endin:5895.3,626.6,-99867.3
+Exile Camp:-71448.1,618.2,29419.6
+Eyesocket:51538.0,1150.7,-10402.5
+Farm Ruin:-15941.8,632.8,43439.1
+Farming Village:77732.2,221.8,-6569.2
+First Village:-9605.5,202.8,-143379.3
+Fishing Village:-25163.9,333.5,-103643.4
+Fishing Village:108907.9,133.6,-2322.7
+Fort Mirage:61681.4,1041.2,-104298.3
+Gatherer Village:-106335.9,452.5,-41801.7
+Gatherer Village:-115304.4,131.2,-40205.5
+Ghost Village:-35685.1,739.0,-105219.0
+Grayflayer Village:-34602.0,105.7,40161.9
+Heft:68773.0,1068.3,-71496.6
+Hive Village:-105157.4,135.0,-28044.8
+Hive Village:-109295.4,136.3,10387.3
+Hive Village:-111540.9,135.2,-5132.1
+Hive Village:-64989.1,115.9,-551.6
+Hive Village:-79718.6,1446.3,-4413.1
+Hive Village:-86287.4,111.8,5316.9
+Hive Village:-96778.4,138.5,-53226.7
+Hive Village:-97280.0,132.2,-4285.8
+Holy Farm:-24416.1,1758.8,-69976.5
+Holy Farm:-44020.0,244.4,-23187.0
+Holy Military Base:-52347.2,1036.1,-39279.1
+Holy Military Base:-62019.3,1177.7,-28584.0
+Holy Mine Ruin:-13211.5,1014.3,-16755.8
+Holy Mine Ruin:-16217.1,659.9,-28897.2
+Holy Mines:-25892.4,898.4,-14735.5
+Holy Mines:-40351.5,1103.6,-12264.5
+Holy Mines:-60654.9,528.0,-39050.8
+Horrible Ruin:55799.0,234.9,115410.8
+Last Stand:-97455.0,641.5,44691.7
+Lost Library:-128097.1,127.8,99190.5
+Lost Library:-79752.0,318.5,-137662.9
+MARKER-Nest-Cower:-81634.1,436.6,-26815.9
+Manhunter Base:-41625.1,151.7,100239.1
+Mud Town:-43560.6,91.0,40055.4
+New Kralia:-96012.7,1141.5,28453.5
+Okran's Shield:-6638.8,1157.7,-47390.6
+Old Frontlines:-101165.3,1508.5,62129.5
+Old Village:-61574.3,1644.2,-103557.5
+Police Barracks:101292.2,1455.8,64034.3
+Port North:57346.2,103.1,-119231.3
+Port South:87627.3,159.5,-89296.1
+Ravaged Hamlet:6667.0,600.4,-85024.8
+Rebel Base:-50642.4,1094.2,-1030.4
+Rebirth:-47333.9,724.1,-55622.5
+Rot:-40577.9,103.4,30658.7
+Ruined Holy Outpost:-39775.3,2711.6,7753.7
+Secret Drug Farm:38857.0,406.0,41831.1
+Shark:-47041.0,120.9,48137.1
+Shek Ruins:-80242.5,1495.4,16826.9
+Slave Farm South:-53378.5,145.1,109777.3
+Slave Farm:61290.4,1038.3,-31012.3
+Slave Markets:-30521.8,366.1,83964.1
+South Stone Camp:64741.5,777.3,-49500.4
+Squin:-62461.0,328.8,16346.8
+Stack:-56046.6,1060.5,-13188.1
+Stone Camp:46783.8,868.1,-85386.3
+Stone Rat Village:-44313.9,223.2,62571.0
+Suspicious Lab:-54304.3,1618.6,-93238.1
+Swamp Ninja Base:-41373.6,98.2,71775.4
+Swamp Village:-53100.8,117.4,52953.6
+Swamp Village:-61979.3,95.9,33880.1
+Tengu's Vault:27200.9,1722.3,-42287.5
+The Bastion:13729.8,732.0,-112421.4
+The Great Fortress:-87191.3,1521.7,26186.8
+The Hub:-50978.8,1533.1,2932.5
+Tiny Settlement:-24330.8,2263.8,6874.8
+Tower Of Ninjas:-27225.1,2211.5,-5953.1
+Trader's Edge:49563.0,1366.2,-43045.0
+Watchtower:-4692.2,1824.9,-79399.2
+Waystation:-31697.5,1733.0,10950.3
+Waystation:-71377.3,1620.1,25376.0
+Western Hive:-132020.0,247.0,-21315.6
