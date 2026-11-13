@@ -38,3 +38,15 @@ away in the player's squad, no crash.
 Ctrl+Shift+F7 dev key (`re_probe.cpp`): spawns a default character 40 units from the selected character, into
 that character's own squad — an experiment to validate the call, not the final avatar behaviour.
 Next: own squad + neutral faction for remote players, AI off, move orders.
+
+## Squads and factions
+
+- **Faction manager**: pointer at `GameWorld + 0x4a8`. It holds an array of `Faction*`: count (uint32)
+  at `+0x08`, array pointer at `+0x10`. The game finds a faction by comparing the FCS string ID of its data.
+- **Faction** `+0x240` -> its GameData; GameData `+0x28` = name, `+0x58` = string ID (VC10 strings).
+- **Creating a squad**: RVA `0x7f4420`, arguments (Faction*, squad template GameData* or 0, bool, const
+  position*). Several game call sites pass 0 as the template and `true` as the flag. Returns an
+  `ActivePlatoon*`. Prologue `40 53 55`.
+
+Plan for remote-player avatars: a small FCS data mod adds a neutral "World of Kenshi players" faction;
+each remote player gets a squad of that faction, holding one character.

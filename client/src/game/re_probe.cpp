@@ -197,6 +197,106 @@ void onF7() {
 
 bool g_f7WasDown = false;
 
+// ---- F6: list factions, then spawn a default character in a NEW squad of a neutral faction. ----
+constexpr uintptr_t kFactionMgrOff = 0x4a8;        // GameWorld + 0x4a8 -> faction manager
+constexpr uintptr_t kFactionCount = 0x08;          // uint32
+constexpr uintptr_t kFactionArray = 0x10;          // Faction**
+constexpr uintptr_t kFactionGameData = 0x240;      // Faction -> GameData*
+constexpr uintptr_t kGameDataName = 0x28;          // VC10 std::string
+constexpr uintptr_t kGameDataStringId = 0x58;      // VC10 std::string
+constexpr uintptr_t kCreatePlatoon = 0x7f4420;     // ActivePlatoon* (Faction*, GameData* squad|0, bool, const Vector3*)
+constexpr uint8_t kCreatePlatoonPrologue[] = {0x40, 0x53, 0x55};
+
+using CreatePlatoonFn = uintptr_t (*)(uintptr_t faction, uintptr_t squadTemplate, bool flag, const float* pos);
+
+bool copyRaw(uintptr_t addr, void* out, size_t n) {
+    __try {
+        std::memcpy(out, reinterpret_cast<const void*>(addr), n);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Reads an MSVC 2010 std::string (16-byte SSO buffer, size at +0x10, capacity at +0x18).
+std::string readVc10String(uintptr_t addr) {
+    uint8_t raw[32];
+    if (!copyRaw(addr, raw, sizeof(raw))) return "?";
+    uint64_t size, cap;
+    uintptr_t src = 0;
+    std::memcpy(&size, raw + 16, 8);
+    std::memcpy(&cap, raw + 24, 8);
+    std::memcpy(&src, raw, 8);
+    if (size > 256) return "?";
+    char buf[257] = {};
+    if (cap >= 16) {
+        if (!copyRaw(src, buf, size)) return "?";
+    } else {
+        std::memcpy(buf, raw, size);
+    }
+    return std::string(buf, size);
+}
+
+uintptr_t callCreatePlatoon(CreatePlatoonFn fn, uintptr_t faction, const float* pos) {
+    __try {
+        return fn(faction, 0, true, pos);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;
+    }
+}
+
+void onF6() {
+    uintptr_t gw = g_base + kGameWorld;
+    uintptr_t mgr = 0, arr = 0;
+    uint32_t count = 0;
+    if (!readQ(gw + kFactionMgrOff, mgr) || !mgr || !readQ(mgr + kFactionArray, arr)) {
+        log("factions: manager not found");
+        return;
+    }
+    if (!copyRaw(mgr + kFactionCount, &count, sizeof(count))) count = 0;
+    log("factions: %u", count);
+    uintptr_t neutral = 0;
+    for (uint32_t i = 0; i < count && i < 512; ++i) {
+        uintptr_t f = 0, gd = 0;
+        if (!readQ(arr + 8ull * i, f) || !readQ(f + kFactionGameData, gd)) continue;
+        std::string name = readVc10String(gd + kGameDataName);
+        std::string id = readVc10String(gd + kGameDataStringId);
+        log("faction %u: '%s' [%s] %s", i, name.c_str(), id.c_str(), isClass(f, ".?AVFaction@@") ? "" : "(not Faction?)");
+        if (!neutral && name.find("Drifter") != std::string::npos) neutral = f;
+    }
+    if (!neutral) {
+        log("spawn2: no 'Drifter' faction found, nothing spawned");
+        return;
+    }
+
+    uintptr_t pi = 0, sel = 0, ch = 0, factory = 0;
+    readQ(gw + kFactoryOff, factory);
+    if (!readQ(gw + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
+        !isClass(ch, ".?AVCharacterHuman@@") || !factory) {
+        log("spawn2: need a selected character in game");
+        return;
+    }
+    auto pfn = reinterpret_cast<const uint8_t*>(g_base + kCreatePlatoon);
+    auto cfn = reinterpret_cast<const uint8_t*>(g_base + kCreateCharacter);
+    if (std::memcmp(pfn, kCreatePlatoonPrologue, 3) != 0 || std::memcmp(cfn, kCreateCharacterPrologue, 3) != 0) {
+        log("spawn2: prologue mismatch (different Kenshi version?)");
+        return;
+    }
+    float pos[3];
+    std::memcpy(pos, reinterpret_cast<const void*>(ch + 0x48), sizeof(pos));
+    pos[0] -= 40.0f;
+    uintptr_t ap = callCreatePlatoon(reinterpret_cast<CreatePlatoonFn>(g_base + kCreatePlatoon), neutral, pos);
+    log("spawn2: createPlatoon -> %p (%s)", reinterpret_cast<void*>(ap),
+        ap > 1 && isClass(ap, ".?AVActivePlatoon@@") ? "ActivePlatoon" : "unexpected");
+    if (ap <= 1 || !isClass(ap, ".?AVActivePlatoon@@")) return;
+    uintptr_t created =
+        callCreate(reinterpret_cast<CreateCharacterFn>(g_base + kCreateCharacter), factory, neutral, pos, ap);
+    log("spawn2: created %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(created),
+        created > 1 && isClass(created, ".?AVCharacterHuman@@") ? "CharacterHuman" : "failed", pos[0], pos[1], pos[2]);
+}
+
+bool g_f6WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -212,6 +312,9 @@ void probeTick() {
     bool f7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
     if (f7 && !g_f7WasDown && focused) onF7();
     g_f7WasDown = f7;
+    bool f6 = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
+    if (f6 && !g_f6WasDown && focused) onF6();
+    g_f6WasDown = f6;
 }
 
 }  // namespace wok
