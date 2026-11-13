@@ -15,6 +15,7 @@ Le projet part de zéro. Les mods multijoueur existants ont été essayés et ju
 - **Kenshi de base** : aucun changement de gameplay obligatoire. Le mod ajoute le réseau, pas un nouveau jeu.
 - **Personnage dédié au serveur** : impossible d'importer un personnage ou une sauvegarde solo.
 - **Support des mods (essentiel pour la communauté)** : un serveur peut tourner avec des mods de données (FCS). Voir §7.6. Hors M1.
+- **Cadavres permanents** : un corps (PNJ ou joueur) ne disparaît jamais tout seul. Il reste dans le monde, pillable, et survit aux redémarrages du serveur. Le serveur stocke chaque cadavre (position, inventaire, équipement, race/apparence par stringID FCS) dans sa persistance. Hors M1.
 - **Persistance façon Rust** : un joueur déconnecté laisse son personnage, ses recrues et sa base dans le monde, vulnérables. Un mécanisme de protection sera conçu plus tard.
 - **Réplication** des actions de chaque joueur (déplacement, combat, construction, inventaire, factions) vers les autres clients concernés.
 - Code propre et publiable : README, licence, build reproductible.
@@ -118,5 +119,6 @@ Hors M1 : propriétaires de case, PNJ, combat, inventaire, persistance, grille.
 - Le mécanisme de protection des joueurs et des bases hors-ligne.
 - Le comportement exact d'une case qui « dégèle » après une longue absence : rattrapage du temps écoulé ou pas.
 - Comment répliquer les factions et les relations entre factions de joueurs.
+- Cadavres permanents à grande échelle : impact sur les perfs (Kenshi n'a pas été conçu pour des milliers de corps) — faut-il un moyen de les faire disparaître (enterrer, brûler, découper) ou une limite côté admin ?
 - Téléchargement automatique des mods Workshop manquants au moment de rejoindre (mécanique exacte).
 - La découverte des serveurs : liste maîtresse ou listing Steam.
