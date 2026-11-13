@@ -99,6 +99,7 @@ int main(int argc, char** argv) {
         const auto start = std::chrono::steady_clock::now();
         auto now = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count(); };
         double nextSend = 0;
+        double nextPing = 0;
         PlayerId target = 0;
         std::deque<std::pair<double, PlayerState>> history;  // target's states, by arrival time
 
@@ -172,6 +173,11 @@ int main(int argc, char** argv) {
                 s.yaw = std::fmod(angle * 57.29578f + 90.0f, 360.0f);
                 s.anim = a.radius > 0 ? AnimState::Walk : AnimState::Idle;
                 auto b = encode(s);
+                net.send(b, false);
+            }
+            if (me != 0 && now() >= nextPing) {  // keepalive: a follower with no target sends nothing else
+                nextPing = now() + 1.0;
+                auto b = encode(Ping{});
                 net.send(b, false);
             }
             std::fflush(stdout);
