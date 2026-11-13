@@ -14,6 +14,7 @@ Le projet part de zéro. Les mods multijoueur existants ont été essayés et ju
 - Serveurs dédiés visant **jusqu'à 250 joueurs** connectés.
 - **Kenshi de base** : aucun changement de gameplay obligatoire. Le mod ajoute le réseau, pas un nouveau jeu.
 - **Personnage dédié au serveur** : impossible d'importer un personnage ou une sauvegarde solo.
+- **Support des mods (essentiel pour la communauté)** : un serveur peut tourner avec des mods de données (FCS). Voir §7.6. Hors M1.
 - **Persistance façon Rust** : un joueur déconnecté laisse son personnage, ses recrues et sa base dans le monde, vulnérables. Un mécanisme de protection sera conçu plus tard.
 - **Réplication** des actions de chaque joueur (déplacement, combat, construction, inventaire, factions) vers les autres clients concernés.
 - Code propre et publiable : README, licence, build reproductible.
@@ -22,7 +23,7 @@ Le projet part de zéro. Les mods multijoueur existants ont été essayés et ju
 
 - Protection hors-ligne des bases : à concevoir plus tard.
 - Nouveau contenu de gameplay.
-- Support des autres mods Kenshi : la compatibilité viendra plus tard.
+- Mods qui injectent du code (plugins DLL type RE_Kenshi) : pas supportés au début.
 - Anti-triche avancé : la V1 se limite à des vérifications de plausibilité.
 
 ## 4. Anti-objectifs (ce serait un échec même si ça marche)
@@ -81,6 +82,15 @@ Le rôle de « propriétaire » est **générique** dans le protocole. Plus tard
 - Licence : MIT.
 - Repo GitHub public.
 
+### 7.6 Mods
+Les mods font vivre la communauté : un serveur moddé doit être un cas normal, pas une exception.
+- **Le serveur impose la liste de mods et l'ordre de chargement** (comme les serveurs ARK/Rust moddés). Tous les clients d'un serveur ont exactement le même contenu, sinon le monde diverge.
+- **Vérification à la connexion** : le client envoie sa liste (identifiant + empreinte de chaque fichier `.mod`, dans l'ordre). Différence → refus avec la raison « Mods manquants / différents : X, Y » (le cas « dependency » du schéma de la vision).
+- **Mods Steam Workshop identifiés par leur ID Workshop** ; plus tard, téléchargement automatique au moment de rejoindre un serveur. Les mods hors Workshop sont identifiés par nom + empreinte.
+- **Cible : les mods de données** (FCS : objets, races, factions, bâtiments, armures…). Ils passent par le moteur normal, donc la réplication les couvre comme le contenu de base.
+- **Plugins DLL** (code injecté) : non supportés au début, car on ne peut pas garantir qu'ils restent synchronisés.
+- **Règle d'architecture, dès maintenant** : le protocole désigne tout contenu (objet, race, faction, bâtiment…) par son **identifiant de données FCS** (chaîne `stringID`), jamais par un index numérique codé en dur ou un pointeur. Un objet ajouté par un mod circule ainsi comme un objet du jeu de base.
+
 ## 8. Premier jalon (M1) : « ça marche »
 
 **Deux joueurs se connectent au même serveur et se voient marcher en jeu.**
@@ -108,4 +118,5 @@ Hors M1 : propriétaires de case, PNJ, combat, inventaire, persistance, grille.
 - Le mécanisme de protection des joueurs et des bases hors-ligne.
 - Le comportement exact d'une case qui « dégèle » après une longue absence : rattrapage du temps écoulé ou pas.
 - Comment répliquer les factions et les relations entre factions de joueurs.
+- Téléchargement automatique des mods Workshop manquants au moment de rejoindre (mécanique exacte).
 - La découverte des serveurs : liste maîtresse ou listing Steam.
