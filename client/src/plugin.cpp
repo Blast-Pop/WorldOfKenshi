@@ -2,6 +2,7 @@
 // dllStartPlugin() during Ogre::Root initialisation, dllStopPlugin() at shutdown.
 // Nothing here may throw into the game or touch OGRE objects beyond registering hooks.
 
+#include "frame_hook.hpp"
 #include "log.hpp"
 
 #include <core/config.hpp>
@@ -36,6 +37,17 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         wok::log("World of Kenshi client loaded (protocol %u)", wok::WOK_PROTOCOL_VERSION);
         auto cfg = loadOrCreateConfig();
         wok::log("config: host=%s port=%u name=%s", cfg.host.c_str(), cfg.port, cfg.name.c_str());
+
+        // Temporary diagnostic (Task 6): log the frame rate every 5 s to prove the hook runs.
+        wok::installFrameHook([frames = 0, elapsed = 0.0f](float dt) mutable {
+            ++frames;
+            elapsed += dt;
+            if (elapsed >= 5.0f) {
+                wok::log("frame hook alive: %.1f fps", frames / elapsed);
+                frames = 0;
+                elapsed = 0.0f;
+            }
+        });
     } catch (...) {
         wok::log("dllStartPlugin: unexpected exception");
     }
