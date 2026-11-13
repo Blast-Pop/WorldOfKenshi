@@ -1,34 +1,38 @@
 # M2 — Player identity and authentication (decision, 2026-11-13)
 
-## What Kenshi gives us (client side)
+## Client side: what Kenshi gives us
 
-Kenshi ships an older `steam_api64.dll` and has already initialised Steam when our DLL runs. It uses
-`SteamClient017`, `SteamUser019`, `SteamUtils008`; the DLL also exports the flat API
-(`SteamAPI_GetHSteamUser`, `SteamAPI_GetHSteamPipe`, `SteamClient`,
-`SteamAPI_ISteamClient_GetISteamUser`, `SteamAPI_ISteamUser_GetSteamID`,
-`SteamAPI_ISteamUser_GetAuthSessionTicket`). So the client can read the player's **SteamID** and
-produce a Steam **auth session ticket**.
+Kenshi ships an older `steam_api64.dll` and has already initialised Steam when our DLL runs
+(`SteamClient017`, `SteamUser019`, `SteamUtils008`; flat exports such as `SteamAPI_ISteamUser_GetSteamID`).
+The client can read the player's **SteamID**; it is a claim, not a proof.
 
-## What verifying a ticket needs (server side)
+## Proof of ownership: Steam OpenID (suggested by Aeglen)
 
-A ticket is checked with `ISteamGameServer::BeginAuthSession`, which requires the dedicated server to
-run the Steamworks game-server API (Steamworks SDK `steam_api64` / `steamclient`, a game-server logon
-for Kenshi's app id 233860). Whether an anonymous game server for Kenshi is accepted by Steam, and the
-redistribution terms of the SDK for a fan project, are not settled. The Web API alternative needs a
-publisher key we do not have.
+Steam's OpenID 2.0 provider (`https://steamcommunity.com/openid/`) lets a website prove that a visitor
+owns a Steam account, **without a publisher key** and without the Steamworks SDK:
 
-## Decision for M2
+1. First connection to a server, no token yet: the server answers `Hello` with an `AuthChallenge`
+   carrying a one-time login URL (`http://<server>:<http-port>/auth/start?nonce=…`).
+2. The game opens it in the player's browser. The page redirects to Steam's OpenID login
+   (`openid.mode=checkid_setup`, `return_to` = our callback, `realm` = the server's address). The player
+   signs in on steamcommunity.com — the server never sees a password.
+3. Steam redirects back to `/auth/callback`. The server re-posts the received parameters to Steam with
+   `openid.mode=check_authentication`; only an `is_valid:true` answer is accepted. The SteamID is the
+   last part of `openid.claimed_id` (`https://steamcommunity.com/openid/id/<steamid64>`).
+4. The server binds that SteamID to the waiting connection (via the nonce), creates the player's
+   **per-server secret token**, and sends it in `HelloAck`. The client keeps it in
+   `<Kenshi>\WorldOfKenshi\tokens.ini` (one line per server).
+5. Later connections present SteamID + token: no browser step. A wrong token → `BadAuth`.
 
-1. The client sends its **SteamID** and (when available) its **Steam ticket** in `Hello`.
-2. The server identifies players by SteamID and protects each character with a **per-server secret
-   token** (trust on first use): on a player's first connection the server creates the token, sends it
-   once, and the client stores it in `<Kenshi>\WorldOfKenshi\tokens.ini` (one line per server). Every
-   later connection must present the same token for that SteamID, or it is rejected (`BadAuth`).
-3. Server-side ticket verification through the Steamworks game-server API is kept as a later,
-   optional step (server config `steam_auth=on`), once tested on a real dedicated server.
+## Server requirements
 
-## Known limit
+- An HTTP endpoint (library `cpp-httplib`, HTTPS client through the OpenSSL we already build) on a port
+  of its own (default **27801/TCP**), reachable by players' browsers.
+- Outbound HTTPS to steamcommunity.com.
+- Config: `--http-port`, `--public-url` (what goes into `realm`/`return_to`).
 
-Until Steam ticket verification is on, someone who knows another player's SteamID could register it on
-a server **before** that player's first visit. Admins can delete such a record; tokens prevent any
-takeover after the first visit.
+## Not chosen
+
+- Steamworks game-server ticket validation (`BeginAuthSession`): needs the SDK and a game-server logon
+  for Kenshi's app id; unsettled.
+- Steam Web API ticket check: needs a publisher key.
