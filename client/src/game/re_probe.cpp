@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
 #include <cstring>
@@ -345,13 +346,15 @@ void onF5() {
     auto addTown = [&](uintptr_t p) {
         if (townSet.insert(p).second) towns.push_back(p);
     };
-    const size_t kMaxNodes = 400000;
+    const size_t kMaxNodes = 1500000;
+    std::unordered_map<uintptr_t, std::pair<uintptr_t, uintptr_t>> parent;  // child -> (object, offset)
     for (int depth = 0; depth < 5 && !frontier.empty() && visited.size() < kMaxNodes; ++depth) {
         std::vector<uintptr_t> next;
         for (uintptr_t obj : frontier) {
             for (uintptr_t off = 0; off < 0x400 && visited.size() < kMaxNodes; off += 8) {
                 uintptr_t p;
                 if (!readQ(obj + off, p) || !visited.insert(p).second) continue;
+                parent[p] = {obj, off};
                 std::string cls = rttiName(p);
                 if (cls.find("Town") != std::string::npos) ++counts[cls];
                 if (townLike(cls)) addTown(p);
@@ -362,6 +365,15 @@ void onF5() {
                     uintptr_t arr = 0;
                     if (copyRaw(p + 0x08, &count, sizeof(count)) && readQ(p + 0x10, arr)) {
                         log("towns: lektor<TownBase*> with %u entries", count);
+                        // Print how to reach it from GameWorld, so the client can go there directly.
+                        std::string chain;
+                        for (uintptr_t cur = p; cur != g_base + kGameWorld && parent.count(cur);) {
+                            char buf[48];
+                            std::snprintf(buf, sizeof(buf), "+0x%llx", static_cast<unsigned long long>(parent[cur].second));
+                            chain = std::string(buf) + (chain.empty() ? "" : " -> ") + chain;
+                            cur = parent[cur].first;
+                        }
+                        log("towns: path from GameWorld: %s", chain.c_str());
                         for (uint32_t i = 0; i < count && i < 4096; ++i) {
                             uintptr_t t;
                             if (readQ(arr + 8ull * i, t) && townLike(rttiName(t))) addTown(t);
