@@ -47,6 +47,9 @@ struct Api {
     size_t (*getChildCount)(Widget* w);
     Widget* (*getChildAt)(Widget* w, size_t index);
     void (*riseClick)(void* widgetInput);
+    void* (*getLayoutManager)();
+    // Returns std::vector<Widget*> by value: hidden result buffer in the second register.
+    void* (*loadLayoutFn)(void* manager, void* result, const S* file, const S* prefix, Widget* parent);
 } g_api{};
 
 // MyGUI::Widget derives from several classes; its WidgetInput base sits at +0x80 (Widget's RTTI
@@ -112,6 +115,11 @@ bool init() {
     ok &= load(m, g_api.getChildCount, "?getChildCount@Widget@MyGUI@@QEAA_KXZ");
     ok &= load(m, g_api.getChildAt, "?getChildAt@Widget@MyGUI@@QEAAPEAV12@_K@Z");
     ok &= load(m, g_api.riseClick, "?_riseMouseButtonClick@WidgetInput@MyGUI@@QEAAXXZ");
+    // Optional: only the loading screen needs these.
+    load(m, g_api.getLayoutManager, "?getInstancePtr@?$Singleton@VLayoutManager@MyGUI@@@MyGUI@@SAPEAVLayoutManager@2@XZ");
+    load(m, g_api.loadLayoutFn,
+         "?loadLayout@LayoutManager@MyGUI@@QEAA?AV?$vector@PEAVWidget@MyGUI@@V?$allocator@PEAVWidget@MyGUI@@@std@@@std@@"
+         "AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@4@0PEAVWidget@2@@Z");
     g_ok = ok;
     log("mygui: %s", ok ? "ready" : "disabled");
     return ok;
@@ -198,6 +206,19 @@ Widget* findBySuffix(std::string_view suffix, int maxDepth) {
 
 void click(Widget* w) {
     if (w) g_api.riseClick(reinterpret_cast<char*>(w) + kWidgetInputOffset);
+}
+
+bool loadLayout(std::string_view file, std::string_view prefix) {
+    if (!g_api.getLayoutManager || !g_api.loadLayoutFn) return false;
+    void* manager = g_api.getLayoutManager();
+    if (!manager) return false;
+    // Room for MSVC 2010's std::vector<Widget*> result; its small buffer is left to the game's heap
+    // (a few bytes per load), we only need the widgets, found afterwards by name.
+    alignas(16) static uint8_t result[64];
+    std::memset(result, 0, sizeof(result));
+    S f(file), p(prefix);
+    g_api.loadLayoutFn(manager, result, &f, &p, nullptr);
+    return true;
 }
 
 void setVisible(Widget* w, bool visible) { setProperty(w, "Visible", visible ? "true" : "false"); }

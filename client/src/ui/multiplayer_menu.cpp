@@ -22,8 +22,8 @@ constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr const char* kDisconnect = "WokDisconnect";
-constexpr const char* kLoading = "WokLoading";
-constexpr const char* kLoadingText = "WokLoadingText";
+constexpr const char* kLoadingPrefix = "WokLoading_";
+constexpr const char* kLoadingRoot = "WokLoading_Root";
 constexpr float kLoadingTimeoutSec = 60.0f;  // never leave a player stuck behind the cover
 constexpr size_t kMaxRows = 8;
 
@@ -286,31 +286,39 @@ void MultiplayerMenu::onClick(const std::string& name) {
 }
 
 void MultiplayerMenu::showLoading(const std::string& text) {
-    if (!mygui::findWidget(kLoading)) {
-        // Opaque full-screen cover on the topmost layer: hides the automated menus underneath.
-        mygui::Widget* cover = mygui::createRoot("Widget", "WhiteSkin", {0.0f, 0.0f, 1.0f, 1.0f}, "Top", kLoading);
-        if (!cover) return;
-        mygui::setProperty(cover, "Colour", "0.09 0.08 0.06");
-        auto title = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.40f, 1.0f, 0.08f}, "");
-        mygui::setProperty(title, "Caption", "World of Kenshi");
-        mygui::setProperty(title, "TextAlign", "Center");
-        mygui::setProperty(title, "TextColour", kHeaderText);
-        auto line = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.50f, 1.0f, 0.06f},
-                                       kLoadingText);
-        mygui::setProperty(line, "TextAlign", "Center");
-        mygui::setProperty(line, "TextColour", kRowText);
+    if (!loadingShown_) {
+        // Kenshi's own loading screen (same layout file the game uses), under our widget prefix.
+        if (mygui::loadLayout("Kenshi_LoadingScreen.layout", kLoadingPrefix) && mygui::findWidget(kLoadingRoot)) {
+            static const char* kImages[] = {"loading_screen0.dds", "loading_screen1.dds", "loading_screen2.dds",
+                                            "loading_screen3.dds", "loading_screen4.dds", "loading_screen5.dds",
+                                            "loading_screen6.dds", "loading_screen9.dds", "loading_screen10.dds"};
+            const char* image = kImages[GetTickCount64() % std::size(kImages)];
+            mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "BackgroundImage"), "ImageTexture", image);
+            mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "MessageText"), "Caption",
+                               "Joining World of Kenshi - your character is on its way.");
+            log("ui: Kenshi loading screen shown (%s)", image);
+        } else {
+            // Fallback: plain opaque cover on the topmost layer.
+            mygui::Widget* cover = mygui::createRoot("Widget", "WhiteSkin", {0.0f, 0.0f, 1.0f, 1.0f}, "Top", kLoadingRoot);
+            if (!cover) return;
+            mygui::setProperty(cover, "Colour", "0.09 0.08 0.06");
+            auto line = mygui::createChild(cover, "TextBox", "Kenshi_TextboxStandardText", {0.0f, 0.50f, 1.0f, 0.06f},
+                                           std::string(kLoadingPrefix) + "LoadingText");
+            mygui::setProperty(line, "TextAlign", "Center");
+            mygui::setProperty(line, "TextColour", kRowText);
+            log("ui: fallback loading cover shown");
+        }
         loadingShown_ = true;
         loadingTime_ = 0;
-        log("ui: loading screen shown");
     }
     if (text != loadingText_) {
-        mygui::setProperty(mygui::findWidget(kLoadingText), "Caption", text);
+        mygui::setProperty(mygui::findWidget(std::string(kLoadingPrefix) + "LoadingText"), "Caption", text);
         loadingText_ = text;
     }
 }
 
 void MultiplayerMenu::hideLoading() {
-    if (mygui::Widget* cover = mygui::findWidget(kLoading)) mygui::destroy(cover);
+    if (mygui::Widget* cover = mygui::findWidget(kLoadingRoot)) mygui::destroy(cover);
     if (loadingShown_) log("ui: loading screen hidden after %.1f s", loadingTime_);
     loadingShown_ = false;
     loadingText_.clear();

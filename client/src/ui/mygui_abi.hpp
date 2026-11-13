@@ -55,5 +55,8 @@ void logWidgetsWithSuffix(std::string_view suffix, int maxDepth);
 // Fires the widget's click event exactly like a real mouse click (runs the game's own handler).
 void click(Widget* w);
 void setVisible(Widget* w, bool visible);
+// Loads one of Kenshi's own layout files (e.g. "Kenshi_LoadingScreen.layout"); its widgets are
+// named `prefix` + their layout name. Returns false if MyGUI could not load it.
+bool loadLayout(std::string_view file, std::string_view prefix);
 
 }  // namespace wok::mygui
