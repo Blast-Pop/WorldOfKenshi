@@ -90,11 +90,13 @@ MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::functio
 void MultiplayerMenu::applyPauseMenu() {
     mygui::Widget* resume = mygui::findBySuffix("_ResumeButton", 3);  // Kenshi_MainMenuPopupPanel.layout
     if (!resume) return;                                                 // pause menu not open
-    bool connected = net_.status() == ClientNet::Status::Connected;
-    // Multiplayer never touches local saves: hide New/Save/Load while connected, show them in solo.
+    // A world started from multiplayer never touches local saves, even after a disconnect (the exit
+    // dialog would otherwise reveal Save again): hide New/Save/Load until back on the title screen.
+    bool mp = multiplayerWorld_;
     for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
         if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
-            mygui::setVisible(b, !connected);
+            mygui::setVisible(b, !mp);
+    bool connected = net_.status() == ClientNet::Status::Connected;
     mygui::Widget* disc = mygui::findWidget(kDisconnect);
     if (connected && !disc) {
         // Same slot and style as Kenshi's "Save Game" button.
@@ -107,6 +109,8 @@ void MultiplayerMenu::applyPauseMenu() {
 }
 
 void MultiplayerMenu::ensureButton() {
+    if (!inGame_() && mygui::findBySuffix("_NewGameButton", 3) && net_.status() != ClientNet::Status::Connected)
+        multiplayerWorld_ = false;  // back on the title screen: the multiplayer world is gone
     if (inGame_()) {  // pause menu: no Multiplayer button there
         if (mygui::Widget* b = mygui::findWidget(kButton)) mygui::destroy(b);
         return;
@@ -287,6 +291,7 @@ void MultiplayerMenu::applyConnectedMenu() {
     // Step 1 of entering the server game: let Kenshi run its own New Game action.
     closeWindow();
     enteredGame_ = true;
+    multiplayerWorld_ = true;
     log("ui: connected, starting the server game (New Game)");
     mygui::click(newGame);
 }

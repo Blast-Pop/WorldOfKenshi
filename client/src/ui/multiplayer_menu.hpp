@@ -50,6 +50,7 @@ private:
     std::string lastStatus_;
     std::string error_;
     bool enteredGame_ = false;
+    bool multiplayerWorld_ = false;  // the loaded world was started from multiplayer (until the title screen)
 };
 
 }  // namespace wok
