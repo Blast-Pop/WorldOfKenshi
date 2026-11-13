@@ -554,6 +554,15 @@ bool writeRaw(uintptr_t addr, const void* src, size_t n) {
     }
 }
 
+bool callTeleport(uintptr_t fn, uintptr_t movement, const float* pos) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, const float*)>(fn)(movement, pos);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 uintptr_t g_tpChar = 0;
 double g_tpUntil = 0;
 double g_tpNextLog = 0;
@@ -570,10 +579,14 @@ void onF2() {
     log("tp: movement %p (%s) at (%.1f, %.1f, %.1f)", reinterpret_cast<void*>(mv), rttiName(mv).c_str(), pos[0], pos[1],
         pos[2]);
     pos[0] += 50.0f;
-    if (!writeRaw(mv + 0xc4, pos, sizeof(pos))) {
-        log("tp: write failed");
+    // CharMovement vtable slot +0xc8: copies the Vector3 into +0xc4 and pushes it to the physics
+    // controller (+0x320) - the candidate teleport. Called through the object's own vtable.
+    uintptr_t vt = 0, fn = 0;
+    if (!readQ(mv, vt) || !readQ(vt + 0xc8, fn) || !callTeleport(fn, mv, pos)) {
+        log("tp: teleport call failed");
         return;
     }
+    log("tp: teleport called (+50 on x)");
     g_tpChar = ch;
     g_tpUntil = GetTickCount64() / 1000.0 + 2.0;
     g_tpNextLog = 0;
