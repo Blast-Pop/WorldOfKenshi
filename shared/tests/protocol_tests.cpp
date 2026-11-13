@@ -126,7 +126,7 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_2") { CHECK(WOK_PROTOCOL_VERSION == 2); }
+TEST_CASE("protocol_version_is_3") { CHECK(WOK_PROTOCOL_VERSION == 3); }
 
 TEST_CASE("hello_carries_token_roundtrip") {
     Hello h = makeHello();
@@ -241,4 +241,27 @@ TEST_CASE("character_template_id_roundtrip") {
     auto m2 = decode(encode(cc));
     REQUIRE(m2.has_value());
     CHECK(std::get<CreateCharacter>(*m2) == cc);
+}
+
+TEST_CASE("stats_roundtrip_in_character_data_and_update") {
+    CharacterData c;
+    c.name = "Nine";
+    c.race = "17-gamedata.quack";
+    c.stats = {{1, 12.5f}, {21, 3.25f}};
+    StatsUpdate u{{{18, 7.0f}, {37, 1.5f}}};
+    for (const Message& m : std::vector<Message>{c, u}) {
+        auto decoded = decode(encode(m));
+        REQUIRE(decoded.has_value());
+        CHECK(*decoded == m);
+    }
+}
+
+TEST_CASE("stats_reject_bad_values") {
+    StatsUpdate nan{{{1, std::numeric_limits<float>::quiet_NaN()}}};
+    CHECK_FALSE(decode(encode(nan)).has_value());
+    StatsUpdate badId{{{0, 1.0f}}};
+    CHECK_FALSE(decode(encode(badId)).has_value());
+    StatsUpdate tooMany;
+    for (int i = 0; i < static_cast<int>(kMaxStats) + 1; ++i) tooMany.values.push_back({1, 1.0f});
+    CHECK_FALSE(decode(encode(tooMany)).has_value());
 }

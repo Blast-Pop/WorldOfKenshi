@@ -22,7 +22,33 @@ constexpr const char* kSchema =
     "  template TEXT NOT NULL DEFAULT '');";
 
 // Databases created before the template column existed get it added on open (error ignored if present).
-constexpr const char* kMigrations = "ALTER TABLE characters ADD COLUMN template TEXT NOT NULL DEFAULT '';";
+// Each runs on its own and fails harmlessly once applied.
+constexpr const char* kMigrations[] = {
+    "ALTER TABLE characters ADD COLUMN template TEXT NOT NULL DEFAULT '';",
+    "ALTER TABLE characters ADD COLUMN stats BLOB NOT NULL DEFAULT x'';",
+};
+
+// Stats on disk: id (1 byte) + value (float, 4 bytes little-endian) per skill.
+std::vector<uint8_t> packStats(const std::vector<StatValue>& stats) {
+    std::vector<uint8_t> out;
+    for (auto& s : stats) {
+        out.push_back(s.id);
+        uint8_t f[4];
+        std::memcpy(f, &s.value, 4);
+        out.insert(out.end(), f, f + 4);
+    }
+    return out;
+}
+std::vector<StatValue> unpackStats(const uint8_t* p, size_t n) {
+    std::vector<StatValue> out;
+    for (size_t i = 0; p && i + 5 <= n; i += 5) {
+        StatValue s;
+        s.id = p[i];
+        std::memcpy(&s.value, p + i + 1, 4);
+        out.push_back(s);
+    }
+    return out;
+}
 
 // RAII prepared statement.
 class Stmt {
@@ -80,7 +106,9 @@ CharacterStore::CharacterStore(const std::string& path) {
         db_ = nullptr;
         throw std::runtime_error("schema: " + msg);
     }
-    sqlite3_exec(db_, kMigrations, nullptr, nullptr, nullptr);
+    for (const char* m : kMigrations) sqlite3_exec(db_, m, nullptr, nullptr, nullptr);
+    // Crash-safe and fast for frequent small writes (spec 7.7); ignored for ":memory:".
+    sqlite3_exec(db_, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nullptr, nullptr, nullptr);
 }
 
 CharacterStore::~CharacterStore() { sqlite3_close(db_); }
@@ -102,7 +130,7 @@ void CharacterStore::setToken(uint64_t steamId, const AuthToken& token) {
 }
 
 std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
-    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw, template FROM characters WHERE steam_id = ?1");
+    Stmt s(db_, "SELECT name, race, appearance, x, y, z, yaw, template, stats FROM characters WHERE steam_id = ?1");
     s.id(1, steamId);
     if (s.step() != SQLITE_ROW) return std::nullopt;
     CharacterData c;
@@ -115,6 +143,8 @@ std::optional<CharacterData> CharacterStore::load(uint64_t steamId) {
     c.z = static_cast<float>(sqlite3_column_double(s.get(), 5));
     c.yaw = static_cast<float>(sqlite3_column_double(s.get(), 6));
     c.templateId = columnText(s.get(), 7);
+    c.stats = unpackStats(static_cast<const uint8_t*>(sqlite3_column_blob(s.get(), 8)),
+                          static_cast<size_t>(sqlite3_column_bytes(s.get(), 8)));
     return c;
 }
 
@@ -124,6 +154,12 @@ bool CharacterStore::create(uint64_t steamId, const CharacterData& c) {
     s.id(1, steamId).text(2, c.name).text(3, c.race).blob(4, c.appearance.data(), c.appearance.size());
     s.real(5, c.x).real(6, c.y).real(7, c.z).real(8, c.yaw).text(9, c.templateId);
     return s.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+}
+
+void CharacterStore::saveStats(uint64_t steamId, const std::vector<StatValue>& stats) {
+    auto blob = packStats(stats);
+    Stmt s(db_, "UPDATE characters SET stats = ?2 WHERE steam_id = ?1");
+    s.id(1, steamId).blob(2, blob.data(), blob.size()).step();
 }
 
 void CharacterStore::savePosition(uint64_t steamId, float x, float y, float z, float yaw) {

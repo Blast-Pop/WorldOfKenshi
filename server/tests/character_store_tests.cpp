@@ -107,3 +107,14 @@ TEST_CASE("store_keeps_template_id") {
     s.create(42, c);
     CHECK(s.load(42)->templateId == "1533662-rebirth.mod");
 }
+
+TEST_CASE("store_saves_and_loads_stats") {
+    CharacterStore s(":memory:");
+    REQUIRE(s.create(42, sample()));
+    CHECK(s.load(42)->stats.empty());
+    s.saveStats(42, {{1, 12.5f}, {21, 3.0f}});
+    auto c = s.load(42);
+    REQUIRE(c.has_value());
+    CHECK(c->stats == std::vector<StatValue>{{1, 12.5f}, {21, 3.0f}});
+    CHECK(c->name == "Aeglen");  // the rest is untouched
+}

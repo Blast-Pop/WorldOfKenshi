@@ -48,6 +48,7 @@ void ClientNet::start(const ClientConfig& cfg, uint64_t steamId, const AuthToken
         character_.reset();
         issuedToken_.reset();
         outgoingCreate_.reset();
+        outgoingStats_.clear();
     }
     thread_ = std::thread([this, cfg, steamId, token] { run(cfg, steamId, token); });
 }
@@ -66,6 +67,11 @@ void ClientNet::pushLocal(const PlayerState& state) {
 void ClientNet::createCharacter(const CreateCharacter& c) {
     std::lock_guard lock(mutex_);
     outgoingCreate_ = c;
+}
+
+void ClientNet::sendStats(const StatsUpdate& u) {
+    std::lock_guard lock(mutex_);
+    for (auto& v : u.values) outgoingStats_[v.id] = v.value;
 }
 
 std::vector<Message> ClientNet::drainIncoming() {
@@ -163,10 +169,13 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
             if (status_ == Status::Connected) {
                 std::optional<PlayerState> out;
                 std::optional<CreateCharacter> create;
+                std::map<uint8_t, float> stats;
                 {
                     std::lock_guard lock(mutex_);
                     out = std::exchange(outgoing_, std::nullopt);
                     create = std::exchange(outgoingCreate_, std::nullopt);
+                    // Only after the character exists on the server (it ignores stats before).
+                    if (!create && character_) stats = std::exchange(outgoingStats_, {});
                 }
                 if (out) {
                     auto b = encode(*out);
@@ -174,6 +183,12 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
                 }
                 if (create) {
                     auto b = encode(*create);
+                    net.send(b, true);
+                }
+                if (!stats.empty()) {
+                    StatsUpdate u;
+                    for (auto& [id, value] : stats) u.values.push_back({id, value});
+                    auto b = encode(u);
                     net.send(b, true);
                 }
             }

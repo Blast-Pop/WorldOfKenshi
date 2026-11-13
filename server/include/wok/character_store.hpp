@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 struct sqlite3;
 
@@ -25,6 +26,7 @@ public:
     std::optional<CharacterData> load(uint64_t steamId);
     bool create(uint64_t steamId, const CharacterData& c);  // false if the player already has one
     void savePosition(uint64_t steamId, float x, float y, float z, float yaw);
+    void saveStats(uint64_t steamId, const std::vector<StatValue>& stats);  // replaces all saved skills
 
 private:
     sqlite3* db_ = nullptr;

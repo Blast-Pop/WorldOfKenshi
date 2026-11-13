@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 2.
+// World of Kenshi wire protocol, version 3.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 2;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 3;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -22,6 +22,7 @@ constexpr size_t kMaxAppearanceBytes = 16384;  // includes Kenshi's exported bod
 constexpr size_t kMaxUrlBytes = 512;
 constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;
+constexpr size_t kMaxStats = 64;  // skill ids are 1..kMaxStats (docs/re/stats.md)
 
 using PlayerId = uint32_t;
 using ConnId = uint32_t;  // connection handle assigned by the transport
@@ -38,6 +39,7 @@ enum class MsgType : uint8_t {
     CreateCharacter = 8,
     ServerInfoRequest = 9,
     ServerInfo = 10,
+    StatsUpdate = 11,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -91,6 +93,13 @@ struct AuthChallenge {
     bool operator==(const AuthChallenge&) const = default;
 };
 
+// One skill of a character: Kenshi's stat id and its value (level + progress, e.g. 12.37).
+struct StatValue {
+    uint8_t id = 0;
+    float value = 0;
+    bool operator==(const StatValue&) const = default;
+};
+
 // The player's server-side character (server -> client).
 struct CharacterData {
     std::string name;
@@ -98,6 +107,7 @@ struct CharacterData {
     std::vector<uint8_t> appearance;   // opaque, produced by the client from Kenshi's character editor
     std::string templateId;            // FCS stringID of the character template (e.g. a start's character)
     float x = 0, y = 0, z = 0, yaw = 0;
+    std::vector<StatValue> stats;      // saved skills (empty for a new character)
     bool operator==(const CharacterData&) const = default;
 };
 
@@ -124,8 +134,14 @@ struct ServerInfo {
     bool operator==(const ServerInfo&) const = default;
 };
 
+// Skills that changed since the last update (client -> server); the server keeps the latest value.
+struct StatsUpdate {
+    std::vector<StatValue> values;
+    bool operator==(const StatsUpdate&) const = default;
+};
+
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
-                             CreateCharacter, ServerInfoRequest, ServerInfo>;
+                             CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

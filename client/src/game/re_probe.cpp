@@ -602,6 +602,47 @@ void tpTick() {
 
 bool g_f2WasDown = false;
 
+// ---- F10: character components (persistence RE). Lists the character's pointers to stats,
+// inventory, medical and body objects, and dumps the CharStats floats. ----
+void onF10() {
+    uintptr_t pi = 0, sel = 0, ch = 0;
+    if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
+        rttiName(ch) != ".?AVCharacterHuman@@") {
+        log("comp: select a character in game first");
+        return;
+    }
+    log("comp: character %p", reinterpret_cast<void*>(ch));
+    uintptr_t stats = 0;
+    for (uintptr_t off = 0; off < 0x1400; off += 8) {
+        uintptr_t p = 0;
+        if (!readQ(ch + off, p) || p < 0x10000) continue;
+        std::string n = rttiName(p);
+        if (n.find("Stat") == std::string::npos && n.find("Inventory") == std::string::npos &&
+            n.find("Medical") == std::string::npos && n.find("Body") == std::string::npos &&
+            n.find("Anatomy") == std::string::npos)
+            continue;
+        log("comp: +0x%llx -> %s %p", static_cast<unsigned long long>(off), n.c_str(), reinterpret_cast<void*>(p));
+        if (n == ".?AVCharStats@@" && !stats) stats = p;
+    }
+    if (!stats) return;
+    float f[256];
+    if (!copyRaw(stats, f, sizeof(f))) return;
+    std::string line;
+    for (int i = 2; i < 256; ++i) {  // skip the vtable
+        if (f[i] == 0.0f || !(f[i] > -100000.0f && f[i] < 100000.0f)) continue;
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), " +0x%x=%g", i * 4, f[i]);
+        line += buf;
+        if (line.size() > 180) {
+            log("comp: stats%s", line.c_str());
+            line.clear();
+        }
+    }
+    if (!line.empty()) log("comp: stats%s", line.c_str());
+}
+
+bool g_f10WasDown = false;
+
 }  // namespace
 
 void probeTick() {
@@ -634,6 +675,9 @@ void probeTick() {
     if (f2 && !g_f2WasDown && focused) onF2();
     g_f2WasDown = f2;
     tpTick();
+    bool f10 = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
+    if (f10 && !g_f10WasDown && focused) onF10();
+    g_f10WasDown = f10;
 }
 
 }  // namespace wok

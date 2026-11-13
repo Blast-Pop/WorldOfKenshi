@@ -55,6 +55,10 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
     if (!c.player) return {};  // everything else requires an accepted player
     if (auto* s = std::get_if<PlayerState>(&*msg)) return handleState(conn, c, *s);
     if (auto* cc = std::get_if<CreateCharacter>(&*msg)) return handleCreate(conn, c, *cc);
+    if (auto* st = std::get_if<StatsUpdate>(&*msg)) {
+        handleStats(c, *st);
+        return {};
+    }
     return {};  // server-to-client messages are ignored when received from a client
 }
 
@@ -150,6 +154,8 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
     std::optional<CharacterData> character;
     if (cfg_.store) character = cfg_.store->load(c.steamId);
     c.hasCharacter = character.has_value();
+    if (character)
+        for (auto& st : character->stats) c.stats[st.id] = st.value;
 
     HelloAck ack{RejectReason::None, *c.player};
     ack.hasCharacter = c.hasCharacter;
@@ -195,10 +201,24 @@ std::vector<Outgoing> SessionManager::handleState(ConnId conn, Conn& c, PlayerSt
     return out;
 }
 
+void SessionManager::handleStats(Conn& c, const StatsUpdate& m) {
+    if (!c.hasCharacter) return;
+    for (auto& st : m.values) c.stats[st.id] = st.value;  // ids and values already validated by decode
+    c.statsDirty = !m.values.empty() || c.statsDirty;
+}
+
 void SessionManager::savePosition(Conn& c) {
-    if (!cfg_.store || !c.hasCharacter || !c.lastState || !c.positionDirty) return;
-    cfg_.store->savePosition(c.steamId, c.lastState->x, c.lastState->y, c.lastState->z, c.lastState->yaw);
-    c.positionDirty = false;
+    if (!cfg_.store || !c.hasCharacter) return;
+    if (c.lastState && c.positionDirty) {
+        cfg_.store->savePosition(c.steamId, c.lastState->x, c.lastState->y, c.lastState->z, c.lastState->yaw);
+        c.positionDirty = false;
+    }
+    if (c.statsDirty) {
+        std::vector<StatValue> all;
+        for (auto& [id, value] : c.stats) all.push_back({id, value});
+        cfg_.store->saveStats(c.steamId, all);
+        c.statsDirty = false;
+    }
 }
 
 std::vector<Outgoing> SessionManager::dropConn(ConnId conn) {
@@ -223,7 +243,7 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
     for (auto& [id, c] : conns_) {
         if (nowSec - c.lastSeen > cfg_.timeoutSec) {
             expired.push_back(id);
-        } else if (nowSec - c.lastSaved >= kPositionSaveIntervalSec) {
+        } else if (nowSec - c.lastSaved >= kProgressSaveIntervalSec) {
             savePosition(c);
             c.lastSaved = nowSec;
         }

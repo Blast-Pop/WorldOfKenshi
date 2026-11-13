@@ -219,11 +219,11 @@ TEST_CASE("position_persisted_periodically") {
     f.hello(1, 42, t);
     PlayerState s{};
     s.x = 11.0f;
-    f.sm.onPacket(1, encode(s), 1.0);
-    f.sm.tick(5.0);
+    f.sm.onPacket(1, encode(s), 0.5);
+    f.sm.tick(kProgressSaveIntervalSec - 0.5);
     CHECK(f.store.load(42)->x == sampleChar().x);  // not yet
-    f.sm.onPacket(1, encode(s), 9.0);
-    f.sm.tick(kPositionSaveIntervalSec + 1.0);
+    f.sm.onPacket(1, encode(s), kProgressSaveIntervalSec);
+    f.sm.tick(kProgressSaveIntervalSec + 1.0);
     CHECK(f.store.load(42)->x == 11.0f);
 }
 
@@ -314,4 +314,32 @@ TEST_CASE("new_character_spawns_at_one_of_the_town_spawn_points") {
     REQUIRE(chars.size() == 1);
     CHECK(chars[0].x == 30.0f);
     CHECK(chars[0].z == 40.0f);
+}
+
+TEST_CASE("stats_update_saved_in_batches_and_on_disconnect") {
+    Fixture f;
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    REQUIRE(f.store.create(42, sampleChar()));
+    f.hello(1, 42, t);
+    f.sm.onPacket(1, encode(StatsUpdate{{{1, 5.5f}}}), 0.5);
+    CHECK(f.store.load(42)->stats.empty());  // not written at once
+    f.sm.tick(kProgressSaveIntervalSec + 1.0);
+    CHECK(f.store.load(42)->stats == std::vector<StatValue>{{1, 5.5f}});
+    f.sm.onPacket(1, encode(StatsUpdate{{{1, 6.0f}, {21, 2.0f}}}), kProgressSaveIntervalSec + 1.5);
+    f.sm.onDisconnect(1);  // written immediately when the player leaves
+    CHECK(f.store.load(42)->stats == std::vector<StatValue>{{1, 6.0f}, {21, 2.0f}});
+}
+
+TEST_CASE("returning_player_gets_saved_stats") {
+    Fixture f;
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    REQUIRE(f.store.create(42, sampleChar()));
+    f.store.saveStats(42, {{18, 9.0f}});
+    auto chars = all<CharacterData>(f.hello(1, 42, t));
+    REQUIRE(chars.size() == 1);
+    CHECK(chars[0].stats == std::vector<StatValue>{{18, 9.0f}});
 }

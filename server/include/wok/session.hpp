@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -19,7 +20,8 @@ namespace wok {
 
 class CharacterStore;
 
-inline constexpr double kPositionSaveIntervalSec = 10.0;
+// Progress (position, skills...) is kept in memory and written in small batches (spec 7.7).
+inline constexpr double kProgressSaveIntervalSec = 2.0;
 // Test bots (wok_testclient) use fake ids below this value; real SteamID64s start at 76561197960265728.
 inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
 // A Steam login in progress survives reconnects of the same claimed SteamID for this long.
@@ -79,12 +81,15 @@ private:
         std::string nonce;               // pending Steam OpenID
         bool hasCharacter = false;
         bool positionDirty = false;
+        std::map<uint8_t, float> stats;  // latest known skills of the character
+        bool statsDirty = false;
         double lastSaved = 0.0;
     };
 
     std::vector<Outgoing> handleHello(ConnId conn, Conn& c, const Hello& h, double nowSec);
     std::vector<Outgoing> handleState(ConnId conn, Conn& c, PlayerState s);
     std::vector<Outgoing> handleCreate(ConnId conn, Conn& c, const CreateCharacter& m);
+    void handleStats(Conn& c, const StatsUpdate& m);
     std::vector<Outgoing> accept(ConnId conn, Conn& c, const AuthToken& newToken, double nowSec);
     std::vector<Outgoing> reject(ConnId conn, RejectReason reason);
     void savePosition(Conn& c);

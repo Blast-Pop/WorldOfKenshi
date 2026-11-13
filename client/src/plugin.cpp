@@ -5,6 +5,7 @@
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
 #include "game/identity.hpp"
+#include "game/stats.hpp"
 #include "game/local_player.hpp"
 #include "game/re_probe.hpp"
 #include "input.hpp"
@@ -24,6 +25,7 @@
 #include <wok/protocol.hpp>
 
 #include <cstdio>
+#include <cmath>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -61,7 +63,9 @@ struct ClientState {
     bool wasConnected = false;
     uint64_t steamId = 0;
     bool characterSent = false;  // CreateCharacter already sent during this connection
-    bool characterRestored = false;  // returning player's server character recreated in this world
+    bool characterRestored = false;
+    std::map<uint8_t, float> statsSent;  // skills the server already has
+    double nextStatsPoll = 0;  // returning player's server character recreated in this world
 };
 
 std::string tokensPath() { return wok::modFile(wok::modDir(), "tokens.ini"); }
@@ -135,6 +139,9 @@ void onFrame(float dt) {
         if (auto data = s.net->character()) {
             s.characterRestored = true;
             s.avatars.restorePlayer(s.reader.character(), *data);
+            int applied = wok::writeStats(s.reader.character(), data->stats);
+            wok::log("stats: %d saved skills applied", applied);
+            for (auto& st : data->stats) s.statsSent[st.id] = st.value;
             // Check the look really came back (Kenshi's editor Import does the work).
             if (auto now = wok::readIdentity(s.reader.character())) {
                 auto saved = wok::decodeAppearance(data->appearance);
@@ -147,12 +154,30 @@ void onFrame(float dt) {
             if (s.menu) s.menu->setWorldReady();  // lift the loading screen
         }
     }
+    // Continuous save (spec 7.7): once a second, send the skills that changed since last time.
+    if (connected && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextStatsPoll) {
+        s.nextStatsPoll = s.now + 1.0;
+        wok::StatsUpdate u;
+        for (auto& st : wok::readStats(s.reader.character())) {
+            auto it = s.statsSent.find(st.id);
+            if (it != s.statsSent.end() && std::fabs(it->second - st.value) < 1e-4f) continue;
+            s.statsSent[st.id] = st.value;
+            u.values.push_back(st);
+        }
+        if (!u.values.empty()) {
+            s.net->sendStats(u);
+            wok::log("stats: %zu changed skill(s) sent", u.values.size());
+        }
+    }
+    if (!connected) s.statsSent.clear();
+
     // First visit: once the player has made their character with Kenshi's own New Game flow,
     // register it on the server (name, race and look by FCS string ID).
     if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character()) {
         if (auto c = wok::readIdentity(s.reader.character())) {
             s.net->createCharacter(*c);
             s.characterSent = true;
+            s.statsSent.clear();  // the first stats poll sends every skill of the new character
             wok::log("character: sent '%s' (%s, look %zu bytes) to the server", c->name.c_str(), c->race.c_str(), c->appearance.size());
         }
     }

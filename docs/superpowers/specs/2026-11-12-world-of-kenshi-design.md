@@ -101,6 +101,9 @@ Les mods font vivre la communauté : un serveur moddé doit être un cas normal,
 - **Crash du client** : rien n'est perdu au-delà des dernières secondes ; le personnage reste dans le monde (règle façon Rust) et le joueur le retrouve à la reconnexion.
 - **Crash du serveur** : au pire les ~2 dernières secondes ; la base reste intègre (WAL) et des sauvegardes horodatées de la base sont faites régulièrement.
 
+- **Server time (Aeglen, 2026-11-13)**: a player can never control the server's time. In a multiplayer world the pause and speed controls (buttons and keys) are disabled; time always runs at normal speed.
+- **Skills (done 2026-11-13)**: the client sends changed skills once a second (`StatsUpdate`); the server keeps them in memory and writes them every 2 s and on disconnect; a returning player gets them back in `CharacterData` (docs/re/stats.md).
+
 ## 8. Premier jalon (M1) : « ça marche »
 
 **Deux joueurs se connectent au même serveur et se voient marcher en jeu.**
