@@ -18,7 +18,7 @@ public:
     // `unlink` forgets this PC's server tokens (next connection asks Steam again).
     // `inGame` tells whether a world is loaded (the pause menu reuses the main menu layout).
     MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect,
-                    std::function<void()> unlink, std::function<bool()> inGame);
+                    std::function<void()> unlink, std::function<bool()> inGame, std::function<void()> disconnect);
     void update(float dt);  // game thread, every frame
 
 private:
@@ -30,6 +30,7 @@ private:
     void refreshRows();
     void select(int row);
     void applyConnectedMenu();  // connected on the title screen: start the server game
+    void applyPauseMenu();      // connected: no local save/load in the pause menu, Disconnect instead
 
     ClientConfig& cfg_;
     ClientNet& net_;
@@ -37,6 +38,7 @@ private:
     std::function<void()> connect_;
     std::function<void()> unlink_;
     std::function<bool()> inGame_;
+    std::function<void()> disconnect_;
     ServerBrowser browser_;
     int selected_ = -1;
     size_t rowCount_ = 0;

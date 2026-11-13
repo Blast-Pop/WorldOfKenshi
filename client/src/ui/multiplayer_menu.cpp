@@ -20,6 +20,7 @@ constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
+constexpr const char* kDisconnect = "WokDisconnect";
 constexpr size_t kMaxRows = 8;
 
 // Colours ("R G B", 0-1): light text on a paler panel, for contrast with Kenshi's dark window.
@@ -66,7 +67,7 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose, kUnlink})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDisconnect})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -77,13 +78,33 @@ std::string ownedName(void* w, size_t rows) {
 
 MultiplayerMenu::MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig,
                                  std::function<void()> connect, std::function<void()> unlink,
-                                 std::function<bool()> inGame)
+                                 std::function<bool()> inGame, std::function<void()> disconnect)
     : cfg_(cfg),
       net_(net),
       saveConfig_(std::move(saveConfig)),
       connect_(std::move(connect)),
       unlink_(std::move(unlink)),
-      inGame_(std::move(inGame)) {}
+      inGame_(std::move(inGame)),
+      disconnect_(std::move(disconnect)) {}
+
+void MultiplayerMenu::applyPauseMenu() {
+    mygui::Widget* resume = mygui::findBySuffix("_ResumeButton", 3);  // Kenshi_MainMenuPopupPanel.layout
+    if (!resume) return;                                                 // pause menu not open
+    bool connected = net_.status() == ClientNet::Status::Connected;
+    // Multiplayer never touches local saves: hide New/Save/Load while connected, show them in solo.
+    for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
+        if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
+            mygui::setVisible(b, !connected);
+    mygui::Widget* disc = mygui::findWidget(kDisconnect);
+    if (connected && !disc) {
+        // Same slot and style as Kenshi's "Save Game" button.
+        disc = mygui::createChild(mygui::parentOf(resume), "Button", "Kenshi_Button1",
+                                  {0.125f, 0.188953f, 0.75f, 0.130814f}, kDisconnect);
+        mygui::setProperty(disc, "Caption", "Disconnect");
+    } else if (!connected && disc) {
+        mygui::destroy(disc);
+    }
+}
 
 void MultiplayerMenu::ensureButton() {
     if (inGame_()) {  // pause menu: no Multiplayer button there
@@ -219,6 +240,11 @@ void MultiplayerMenu::onClick(const std::string& name) {
         openWindow();
     } else if (name == kClose) {
         closeWindow();
+    } else if (name == kDisconnect) {
+        log("ui: Disconnect from the pause menu");
+        disconnect_();
+        // Leave the game through Kenshi's own exit action (no local save is involved).
+        if (mygui::Widget* exitGame = mygui::findBySuffix("_ExitGameButton", 3)) mygui::click(exitGame);
     } else if (name == kUnlink) {
         unlink_();
         error_ = "Account unlinked: the next connection will ask Steam again.";
@@ -295,6 +321,7 @@ void MultiplayerMenu::update(float dt) {
         pollTimer_ = 0;
         ensureButton();
         applyConnectedMenu();
+        applyPauseMenu();
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
             windowOpen_ = false;

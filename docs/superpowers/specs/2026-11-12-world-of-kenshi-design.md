@@ -94,6 +94,13 @@ Les mods font vivre la communauté : un serveur moddé doit être un cas normal,
 - **Plugins DLL** (code injecté) : non supportés au début, car on ne peut pas garantir qu'ils restent synchronisés.
 - **Règle d'architecture, dès maintenant** : le protocole désigne tout contenu (objet, race, faction, bâtiment…) par son **identifiant de données FCS** (chaîne `stringID`), jamais par un index numérique codé en dur ou un pointeur. Un objet ajouté par un mod circule ainsi comme un objet du jeu de base.
 
+### 7.7 Sauvegarde continue côté serveur (demande 2026-11-13)
+- Le serveur est la **seule** sauvegarde des joueurs ; le client n'écrit jamais rien sur disque en multijoueur (menu pause : pas de Save/Load/New Game, un bouton **Disconnect** à la place).
+- Le client envoie les **changements au fil de l'eau** : position/état à 10 Hz (déjà), et chaque changement d'inventaire, de stats, d'argent, de santé, d'escouade sous forme d'événement dès qu'il se produit.
+- Le serveur applique ces changements **en mémoire immédiatement** et les écrit dans SQLite (mode WAL, résistant aux crashs) par **petits lots toutes les ~2 s**, plus **immédiatement** à la déconnexion.
+- **Crash du client** : rien n'est perdu au-delà des dernières secondes ; le personnage reste dans le monde (règle façon Rust) et le joueur le retrouve à la reconnexion.
+- **Crash du serveur** : au pire les ~2 dernières secondes ; la base reste intègre (WAL) et des sauvegardes horodatées de la base sont faites régulièrement.
+
 ## 8. Premier jalon (M1) : « ça marche »
 
 **Deux joueurs se connectent au même serveur et se voient marcher en jeu.**

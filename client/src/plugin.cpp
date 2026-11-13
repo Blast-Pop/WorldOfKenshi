@@ -166,7 +166,11 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
                     std::remove(tokensPath().c_str());
                     wok::log("auth: tokens forgotten (unlink)");
                 },
-                [] { return g_state->avatarsOk && g_state->avatars.inGame(); });
+                [] { return g_state->avatarsOk && g_state->avatars.inGame(); },
+                [] {  // Disconnect from the pause menu: leave the server, forget remote players
+                    g_state->net->stop();
+                    g_state->avatars.clear();
+                });
         wok::installFrameHook(onFrame);
         wok::log("Multiplayer button on the main menu (F9 also connects, for development)");
     } catch (...) {
