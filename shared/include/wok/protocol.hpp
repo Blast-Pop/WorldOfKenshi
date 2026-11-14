@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 8.
+// World of Kenshi wire protocol, version 9.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 8;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 9;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -125,6 +125,9 @@ struct CreateCharacter {
     std::string race;
     std::vector<uint8_t> appearance;
     std::string templateId;
+    // Where Kenshi's chosen start put the character (used unless the server forces a spawn point).
+    bool hasStart = false;
+    float startX = 0, startY = 0, startZ = 0;
     bool operator==(const CreateCharacter&) const = default;
 };
 

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <cstring>
 #include <utility>
 
@@ -225,6 +226,13 @@ std::vector<Outgoing> SessionManager::handleCreate(ConnId conn, Conn& c, const C
         d.x = sp.x;
         d.y = sp.y;
         d.z = sp.z;
+    }
+    // Kenshi's own start choice decides where a new character begins, unless the server forces it.
+    auto sane = [](float v) { return std::isfinite(v) && std::fabs(v) < 1.0e6f; };
+    if (m.hasStart && !cfg_.forceSpawn && sane(m.startX) && sane(m.startY) && sane(m.startZ)) {
+        d.x = m.startX;
+        d.y = m.startY;
+        d.z = m.startZ;
     }
     if (!cfg_.store->create(c.steamId, d)) return {};
     c.hasCharacter = true;

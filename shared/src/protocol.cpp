@@ -107,6 +107,10 @@ void write(ByteWriter& w, const CreateCharacter& m) {
     writeString(w, m.race);
     writeBytes(w, m.appearance.data(), m.appearance.size());
     writeString(w, m.templateId);
+    w.u8(m.hasStart ? 1 : 0);
+    w.f32(m.startX);
+    w.f32(m.startY);
+    w.f32(m.startZ);
 }
 
 void write(ByteWriter&, const ServerInfoRequest&) {}
@@ -229,6 +233,11 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.race) ||
                 !readBytes(r, kMaxAppearanceBytes, m.appearance) || !readBytes(r, kMaxStringIdBytes, m.templateId))
                 return std::nullopt;
+            m.hasStart = r.u8() != 0;
+            m.startX = r.f32();
+            m.startY = r.f32();
+            m.startZ = r.f32();
+            if (!r.ok()) return std::nullopt;
             return m;
         }
         case MsgType::ServerInfoRequest:

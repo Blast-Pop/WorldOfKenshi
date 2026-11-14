@@ -4,6 +4,7 @@
 
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
+#include "game/game_memory.hpp"
 #include "game/identity.hpp"
 #include "game/inventory.hpp"
 #include "game/items.hpp"
@@ -70,6 +71,7 @@ struct ClientState {
     std::map<uint8_t, float> statsSent;  // skills the server already has
     bool dead = false;                   // our character died; reported, waiting for the server
     double nextDeathCheck = 0;
+    double nextCreateDiag = 0;
     float hungerKept = 0;               // hunger before the last clock move
     double hungerGuardUntil = 0;        // until then, the clock move must not make us hungry
     uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
@@ -249,12 +251,28 @@ void onFrame(float dt) {
     if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character() &&
         s.reader.character() != s.deadCharacter) {
         if (auto c = wok::readIdentity(s.reader.character())) {
+            if (auto pos = s.reader.read(s.now)) {  // where Kenshi's chosen start put the character
+                c->hasStart = true;
+                c->startX = pos->x;
+                c->startY = pos->y;
+                c->startZ = pos->z;
+            }
             s.net->createCharacter(*c);
             if (s.menu) s.menu->newCharacterSent();
             s.characterSent = true;
             s.statsSent.clear();  // the first stats poll sends every skill of the new character
             wok::log("character: sent '%s' (%s, look %zu bytes) to the server", c->name.c_str(), c->race.c_str(), c->appearance.size());
         }
+    }
+    // Diagnostic: a new player whose character is not registered yet, every 5 s.
+    if (connected && !s.characterSent && !s.net->hasCharacter() && s.now >= s.nextCreateDiag) {
+        s.nextCreateDiag = s.now + 5.0;
+        uintptr_t ch = s.reader.character();
+        bool human = ch && wok::mem::isA(ch, ".?AVCharacterHuman@@");
+        auto id = ch ? wok::readIdentity(ch) : std::nullopt;
+        wok::log("character: not sent yet (char %p, human %d, dead body %d, identity %d '%s' '%s')",
+                 reinterpret_cast<void*>(ch), human ? 1 : 0, ch && ch == s.deadCharacter ? 1 : 0, id ? 1 : 0,
+                 id ? id->name.c_str() : "", id ? id->race.c_str() : "");
     }
     s.wasConnected = connected;
     lap(FrameProfile::Polls);

@@ -740,6 +740,11 @@ void MultiplayerMenu::update(float dt) {
             browser_.stop();
             windowOpen_ = false;
         }
+        // Opened before the master list arrived: rebuild it with the servers as soon as they come.
+        if (windowOpen_ && rowCount_ == 0 && !master_.servers().empty()) {
+            closeWindow();
+            openWindow();
+        }
         if (windowOpen_) refreshRows();
     }
     updateLoading(dt);  // every frame: no gap between Kenshi's loading screen and ours

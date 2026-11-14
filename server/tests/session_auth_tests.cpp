@@ -465,3 +465,30 @@ TEST_CASE("death_is_permanent_and_the_player_stays_connected") {
     cc.race = "r";
     CHECK(all<CharacterData>(sm.onPacket(1, encode(cc), 2.0)).size() == 1);  // a new one, same connection
 }
+
+TEST_CASE("new_character_keeps_its_kenshi_start_position") {
+    Fixture f;
+    SessionConfig cfg = f.config();
+    cfg.spawnPoints = {{"The Hub", 1, 2, 3}};
+    SessionManager sm(cfg);
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 42;
+    std::strcpy(h.name, "p");
+    h.token = t;
+    sm.onPacket(1, encode(h), 0.0);
+    CreateCharacter cc;
+    cc.name = "Fall";
+    cc.race = "r";
+    cc.hasStart = true;
+    cc.startX = 500.0f;
+    cc.startY = 20.0f;
+    cc.startZ = -700.0f;
+    auto made = all<CharacterData>(sm.onPacket(1, encode(cc), 1.0));
+    REQUIRE(made.size() == 1);
+    CHECK(made[0].x == 500.0f);
+    CHECK(made[0].z == -700.0f);
+}

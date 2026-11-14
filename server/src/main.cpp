@@ -45,6 +45,7 @@ struct Args {
     std::vector<SpawnPoint> spawnPoints;
     std::string spawnFile;
     std::string defaultSpawn;
+    bool forceSpawn = false;  // new characters always start at the spawn rule, not Kenshi's start
     std::string name = "World of Kenshi server";
     std::string description;
     bool master = false;         // also serve the master server list
@@ -80,6 +81,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.spawnPoints.push_back(sp);
         } else if (k == "--spawn-file" && hasValue) {
             a.spawnFile = argv[++i];
+        } else if (k == "--force-spawn") {
+            a.forceSpawn = true;
         } else if (k == "--default-spawn" && hasValue) {
             a.defaultSpawn = argv[++i];
         } else if (k == "--name" && hasValue)
@@ -111,7 +114,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
                          "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n"
                          "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
                          "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
-                         "                  [--default-spawn Name] [--master] [--announce http://MASTER:27801]\n"
+                         "                  [--default-spawn Name] [--force-spawn] [--master] [--announce http://MASTER:27801]\n"
                          "                  [--no-steam] [--steam-api path/to/steam_api64.dll|libsteam_api.so]\n");
             return false;
         }
@@ -193,6 +196,7 @@ int main(int argc, char** argv) {
         // Every new character starts at the default town.
         cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
     }
+    cfg.forceSpawn = args.forceSpawn;
     static SteamAuth steamAuth;
     if (args.steam && steamAuth.start(args.steamApi, args.port)) {
         cfg.beginSteamAuth = [](uint64_t id, const std::string& t) { return steamAuth.begin(id, t); };

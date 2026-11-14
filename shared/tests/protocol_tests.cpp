@@ -126,11 +126,14 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_8") { CHECK(WOK_PROTOCOL_VERSION == 8);
+TEST_CASE("protocol_version_is_9") { CHECK(WOK_PROTOCOL_VERSION == 9);
     CHECK(decode(encode(CharacterDied{})) == std::optional<Message>(CharacterDied{}));
     CreateCharacter cc;
     cc.name = "A";
     cc.race = "r";
+    cc.hasStart = true;
+    cc.startX = 12.5f;
+    cc.startZ = -3.0f;
     CHECK(decode(encode(cc)) == std::optional<Message>(cc));
     CHECK(decode(encode(PlayerInfo{4, "Nine"})) == std::optional<Message>(PlayerInfo{4, "Nine"}));
     CHECK(decode(encode(WorldTime{12, 6.5f})) == std::optional<Message>(WorldTime{12, 6.5f}));
