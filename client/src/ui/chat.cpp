@@ -31,10 +31,33 @@ void Chat::onMessage(const ChatMessage& m, double nowSec) {
     lastDrawn_ = -1;  // force a redraw
 }
 
+namespace {
+constexpr const char* kBox = "WokChatBox";
+constexpr float kLineH = 0.024f;                                // one line, relative to the screen
+constexpr float kPad = 0.008f;                                  // inner margin
+constexpr float kInputH = 0.032f;
+constexpr float kBoxH = kPad * 3 + kLineH * kShownLines + kInputH;
+constexpr float kBoxW = 0.42f;
+
+// The chat frame (Kenshi's beige info panel look); lines and the input line live inside it.
+mygui::Widget* chatBox(bool create) {
+    mygui::Widget* box = mygui::findWidget(kBox);
+    if (box || !create) return box;
+    box = mygui::createRoot("Widget", "Kenshi_GenericTextBoxSkin", {0.01f, kTop, kBoxW, kBoxH}, "Popup", kBox);
+    if (box) mygui::setProperty(box, "NeedMouse", "false");
+    return box;
+}
+
+// A rectangle inside the box, given in screen-relative units from the box's top-left corner.
+mygui::FloatCoord inBox(float x, float y, float w, float h) { return {x / kBoxW, y / kBoxH, w / kBoxW, h / kBoxH}; }
+}  // namespace
+
 void Chat::open() {
+    mygui::Widget* box = chatBox(true);
+    if (!box) return;
     mygui::destroy(mygui::findWidget(kInput));
-    mygui::Widget* in =
-        mygui::createRoot("EditBox", "Kenshi_EditBox", {0.01f, kTop + 0.024f * kShownLines, 0.40f, 0.03f}, "Popup", kInput);
+    mygui::Widget* in = mygui::createChild(box, "EditBox", "Kenshi_EditBox",
+                                           inBox(kPad, kPad * 2 + kLineH * kShownLines, kBoxW - 2 * kPad, kInputH), kInput);
     if (!in) return;
     mygui::setProperty(in, "MaxTextLength", "200");
     mygui::setKeyFocus(in);
@@ -66,29 +89,37 @@ void Chat::close(bool sendIt) {
 }
 
 void Chat::redraw(double nowSec) {
-    size_t shown = 0;
-    for (size_t i = 0; i < kShownLines; ++i) {
-        // Newest at the bottom: line i shows message (size - kShownLines + i).
+    auto visibleAt = [&](size_t i) -> const Line* {
+        // Newest at the bottom: row i shows message (size - kShownLines + i).
         const size_t idx = i + lines_.size();
         const Line* line = idx >= kShownLines ? &lines_[idx - kShownLines] : nullptr;
-        const bool visible = line && (typing_ || nowSec - line->time < kFadeSec);
+        return line && (typing_ || nowSec - line->time < kFadeSec) ? line : nullptr;
+    };
+    size_t shown = 0;
+    for (size_t i = 0; i < kShownLines; ++i)
+        if (visibleAt(i)) ++shown;
+    drawnCount_ = shown;
+    if (shown == 0 && !typing_) {  // nothing to show: no frame either
+        mygui::destroy(chatBox(false));
+        return;
+    }
+    mygui::Widget* box = chatBox(true);
+    if (!box) return;
+    for (size_t i = 0; i < kShownLines; ++i) {
+        const Line* line = visibleAt(i);
         mygui::Widget* w = mygui::findWidget(lineName(i));
-        if (!visible) {
+        if (!line) {
             mygui::destroy(w);
             continue;
         }
         if (!w) {
-            w = mygui::createRoot("TextBox", "Kenshi_TextboxStandardText", {0.01f, kTop + 0.024f * i, 0.45f, 0.024f},
-                                  "Popup", lineName(i));
+            w = mygui::createChild(box, "TextBox", "Kenshi_TextboxStandardText",
+                                   inBox(kPad, kPad + kLineH * i, kBoxW - 2 * kPad, kLineH), lineName(i));
             if (!w) continue;
-            mygui::setProperty(w, "TextShadow", "true");
-            mygui::setProperty(w, "TextColour", "1 1 1");
             mygui::setProperty(w, "NeedMouse", "false");
         }
         mygui::setProperty(w, "Caption", line->text);
-        ++shown;
     }
-    drawnCount_ = shown;
 }
 
 void Chat::update(double nowSec, bool active) {
