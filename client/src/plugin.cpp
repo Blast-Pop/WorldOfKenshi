@@ -105,11 +105,35 @@ void connectToServer() {
                  std::string(ticket.begin(), ticket.end()));
 }
 
+// Per-frame cost of our code, by part (dev measure, logged every 10 s with the frame rate).
+struct FrameProfile {
+    enum Part { Probe, Menu, Send, Polls, Incoming, Avatars, Count };
+    double ms[Count] = {};
+    double worstFrameMs = 0;
+    static double nowMs() {
+        static LARGE_INTEGER f = [] { LARGE_INTEGER x; QueryPerformanceFrequency(&x); return x; }();
+        LARGE_INTEGER c;
+        QueryPerformanceCounter(&c);
+        return 1000.0 * static_cast<double>(c.QuadPart) / static_cast<double>(f.QuadPart);
+    }
+};
+FrameProfile g_prof;
+double g_lap = 0;
+void lap(FrameProfile::Part part) {
+    double t = FrameProfile::nowMs();
+    g_prof.ms[part] += t - g_lap;
+    g_lap = t;
+}
+
 void onFrame(float dt) {
     auto& s = *g_state;
     s.now += dt;
+    const double frameStart = FrameProfile::nowMs();
+    g_lap = frameStart;
     wok::probeTick();
+    lap(FrameProfile::Probe);
     if (s.menu) s.menu->update(dt);
+    lap(FrameProfile::Menu);
 
     if (auto issued = s.net->takeIssuedToken()) {  // first visit verified by Steam: keep our secret
         auto tokens = loadTokens();
@@ -178,6 +202,7 @@ void onFrame(float dt) {
         }
     }
     // Continuous save (spec 7.7): once a second, send the skills that changed since last time.
+    lap(FrameProfile::Send);
     // Permanent death (server rule): report it once; the server retires the character.
     if (connected && !s.dead && s.net->character() && (s.characterRestored || s.characterSent) &&
         s.now >= s.nextDeathCheck) {
@@ -230,6 +255,7 @@ void onFrame(float dt) {
         }
     }
     s.wasConnected = connected;
+    lap(FrameProfile::Polls);
     for (auto& m : s.net->drainIncoming()) {
         if (std::holds_alternative<wok::CharacterDied>(m)) {  // retired: make a new one, still connected
             s.dead = false;
@@ -251,12 +277,20 @@ void onFrame(float dt) {
             wok::applyWorldTime(s.reader.gameWorld(), *wt);
         if (s.avatarsOk) s.avatars.onMessage(m, s.now);
     }
+    lap(FrameProfile::Incoming);
     if (s.avatarsOk) s.avatars.update(s.now);
+    lap(FrameProfile::Avatars);
+    g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 
     ++s.frames;
     s.fpsTimer += dt;
-    if (s.fpsTimer >= 60.0) {
-        wok::log("frame hook alive: %.1f fps", s.frames / s.fpsTimer);
+    if (s.fpsTimer >= 10.0) {
+        const double n = s.frames > 0 ? s.frames : 1;
+        auto& m = g_prof.ms;
+        wok::log("perf: %.1f fps | our code per frame (ms): probe %.3f menu %.3f send %.3f polls %.3f incoming %.3f "
+                 "avatars %.3f | worst %.2f",
+                 s.frames / s.fpsTimer, m[0] / n, m[1] / n, m[2] / n, m[3] / n, m[4] / n, m[5] / n, g_prof.worstFrameMs);
+        g_prof = {};
         s.frames = 0;
         s.fpsTimer = 0.0;
     }
