@@ -48,7 +48,7 @@ private:
     size_t drawnCount_ = 0;
     float opacity_ = 85.0f;  // percent
     float appliedOpacity_ = -1;
-    int boxW_ = 775, boxH_ = 210;
+    int boxW_ = 450, boxH_ = 200;
     int boxLeft_ = -1, boxTop_ = -1;  // pixels; set when the frame is first made
     bool dragging_ = false;
     bool mouseWasDown_ = false;
