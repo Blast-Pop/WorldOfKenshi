@@ -70,6 +70,8 @@ struct ClientState {
     std::map<uint8_t, float> statsSent;  // skills the server already has
     bool dead = false;                   // our character died; reported, waiting for the server
     double nextDeathCheck = 0;
+    float hungerKept = 0;               // hunger before the last clock move
+    double hungerGuardUntil = 0;        // until then, the clock move must not make us hungry
     uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
     wok::Items items;
     bool itemsOk = false;
@@ -274,8 +276,20 @@ void onFrame(float dt) {
         }
         // The server owns the world clock: align ours once the world is being played.
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
-            wok::applyWorldTime(s.reader.gameWorld(), *wt);
+        {
+            float hunger = 0;
+            bool known = wok::readHunger(s.reader.character(), hunger);
+            if (wok::applyWorldTime(s.reader.gameWorld(), *wt) && known) {
+                s.hungerKept = hunger;  // the hours skipped are not time lived by our character
+                s.hungerGuardUntil = s.now + 5.0;
+            }
+        }
         if (s.avatarsOk) s.avatars.onMessage(m, s.now);
+    }
+    if (s.now < s.hungerGuardUntil) {
+        float hunger = 0;
+        if (wok::readHunger(s.reader.character(), hunger) && hunger < s.hungerKept)
+            wok::writeHunger(s.reader.character(), s.hungerKept);
     }
     lap(FrameProfile::Incoming);
     if (s.avatarsOk) s.avatars.update(s.now);

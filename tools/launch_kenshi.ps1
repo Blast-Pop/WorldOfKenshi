@@ -51,7 +51,7 @@ if ($running) {
 }
 
 # 2. Install the client build.
-& (Join-Path $PSScriptRoot 'install.ps1') -KenshiDir $KenshiDir
+& (Join-Path $PSScriptRoot 'install.ps1') -KenshiDir $KenshiDir -BuildDir build\windows-release -Config Release
 
 # 3. Start Kenshi through Steam (keeps the Steam overlay and authentication), then press OK on the
 #    launcher dialog. Steam sometimes ignores the request right after the game closed: retry.

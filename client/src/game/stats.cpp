@@ -126,6 +126,8 @@ int writeStats(uintptr_t character, const std::vector<StatValue>& values) {
 
 bool isDead(uintptr_t character) {
     if (!character) return false;
+    uint8_t deadFlag = 0;
+    if (mem::readBytes(character + 0x5bc, &deadFlag, 1) && deadFlag) return true;
     uint32_t count = 0;
     uintptr_t parts = 0;
     if (!mem::readBytes(character + kPartCount, &count, sizeof(count)) || count < 3 || !mem::readPtr(character + kParts, parts))
@@ -137,6 +139,14 @@ bool isDead(uintptr_t character) {
             return true;
     }
     return false;
+}
+
+bool readHunger(uintptr_t character, float& out) {
+    return character && mem::readBytes(character + 0x4b8, &out, sizeof(out)) && out >= -1000.0f && out <= 1000.0f;
+}
+
+void writeHunger(uintptr_t character, float value) {
+    if (character) mem::writeBytes(character + 0x4b8, &value, sizeof(value));
 }
 
 }  // namespace wok
