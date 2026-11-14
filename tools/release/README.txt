@@ -1,4 +1,4 @@
-World of Kenshi - alpha 0.1
+World of Kenshi - alpha 0.2
 ===========================
 
 A multiplayer mod for Kenshi (Steam version 1.0.68). This is an ALPHA: expect bugs.
@@ -19,7 +19,12 @@ Good to know
   saved continuously. Nothing is saved on your PC in multiplayer.
 - Time never stops: no pause, no speed-up.
 - Death is permanent: a dead character is gone. You can make a new one or leave.
-- Other players move by short teleports for now (walking animations are coming).
+- Other players walk with Kenshi's own animations and look like their character template.
+- Chat: press Enter, type, Enter to send. Start with /l to talk only to players nearby.
+  Drag the chat frame's bottom-right corner to resize it; its opacity is in
+  Options > Multiplayer.
+- A server may require a mod list: if yours differs, the Multiplayer window tells you what to change.
+- Delete character (Multiplayer window) removes your character on the selected server.
 - Single player is untouched: just use Continue / New Game as usual.
 
 Uninstall
