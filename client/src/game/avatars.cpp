@@ -2,6 +2,9 @@
 
 #include "game_memory.hpp"
 #include "orders.hpp"
+#include "avatar_look.hpp"
+
+#include <core/appearance.hpp>
 
 #include "../log.hpp"
 
@@ -25,6 +28,10 @@ void AvatarManager::onMessage(const Message& msg, double nowSec) {
         auto& a = avatars_[info->playerId];
         a.name = info->name;
         a.named = false;
+        if (a.look != info->appearance) {
+            a.look = info->appearance;
+            a.lookApplied = false;
+        }
         if (a.templateId != info->templateId) {
             a.templateId = info->templateId;
             // Spawned before we knew their template: make the body again from it.
@@ -83,11 +90,18 @@ void AvatarManager::update(double nowSec) {
             }
             a.character = spawner_.spawnCharacter(faction_, pos, tpl);
             a.templateUsed = tpl != 0;
+            a.lookApplied = false;
             log("avatar: player %u -> character %p at (%.1f, %.1f, %.1f), template '%s' %s", id,
                 reinterpret_cast<void*>(a.character), pos[0], pos[1], pos[2], a.templateId.c_str(),
                 tpl ? "found" : "not found");
             a.named = false;
             continue;
+        }
+        if (!a.lookApplied && !a.look.empty()) {  // their exact face and body (exported body file)
+            a.lookApplied = true;
+            Appearance look = decodeAppearance(a.look);
+            if (auto it = look.find("bod2"); it != look.end())
+                applyBodyFile(a.character, base64Decode(it->second), "player" + std::to_string(id));
         }
         if (!a.named && !a.name.empty()) {  // the player's name above their avatar
             Spawner::setName(a.character, a.name);

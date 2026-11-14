@@ -30,6 +30,8 @@ private:
         std::string name;    // the remote player's character name
         std::string templateId;  // their character template (race, look ranges, clothes)
         bool templateUsed = false;  // the spawned body was made from templateId
+        std::vector<uint8_t> look;  // their encoded look (PlayerInfo::appearance)
+        bool lookApplied = false;
         bool named = false;
         bool walking = false;
         float lastPos[3] = {0, 0, 0};

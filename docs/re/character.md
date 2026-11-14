@@ -52,3 +52,14 @@ content (here a modded haircut) travels like vanilla content.
 - World of Kenshi stores that file (base64, `bod2` key of the appearance text) with the character:
   exported when a new player confirms the editor, imported by the returning player flow before
   Confirm (file `WoK - <name>.bod2`).
+
+## Exact look of another player's avatar (verified 2026-11-14)
+- A `.bod2` (exported body file) is a `GameDataContainer` holding one appearance record (type `0x42`):
+  the editor's export (RVA `0x5ea410`) copies its appearance record (`editor + 0x1d0`) and saves it with
+  RVA `0x6c0930`.
+- Import (editor callback RVA `0x5f4280`): a `GameDataCopyStandalone` on the stack — GameData constructor
+  RVA `0x66b590`, then vtable RVA `0x1683098` and byte `+0x18 = 1` — filled by RVA `0x6c3a70`
+  `(GameData*, const std::string& path, 0x42) -> bool`.
+- Applying it to a character: `Character::setAppearanceData` RVA `0x5b9e90` `(Character*, GameDataCopyStandalone*)`
+  (sets the gender string at `character + 0x610`, then `AppearanceBase::setAppearanceData` on
+  `character + 0x448`). Used on avatars with the body file the server relays in `PlayerInfo`.
