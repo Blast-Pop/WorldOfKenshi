@@ -125,7 +125,13 @@ static mygui::Widget* chatBox(int w, int h, int& left, int& top, bool create) {
     box = mygui::createRoot("Widget", "Kenshi_GenericTextBoxSkin", {0.01f, 0.3f, 0.4f, 0.2f}, "Popup", kBox);
     if (!box) return nullptr;
     mygui::setCoord(box, left, top, w, h);
-    mygui::setProperty(box, "NeedMouse", "false");
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        int vw = 0, vh = 0;
+        gameViewSize(vw, vh);
+        log("chat: frame %d x %d at (%d, %d), game view %d x %d", w, h, left, top, vw, vh);
+    }
     // Resize grip: bottom-right corner, drag to resize.
     if (mygui::Widget* grip = mygui::createChild(box, "Widget", "WhiteSkin",
                                                  inBox(w, h, float(w - kGrip - 2), float(h - kGrip - 2), kGrip, kGrip),
@@ -216,8 +222,15 @@ void Chat::redraw(double nowSec) {
 
 void Chat::dragCorner() {
     const bool down = keyDown(VK_LBUTTON);
-    mygui::Widget* grip = mygui::findWidget(kGripName);
-    if (down && !mouseWasDown_ && grip && mygui::mouseFocus() == grip) dragging_ = true;
+    // Pressed on the grip: checked against the frame's known pixel rectangle (MyGUI's mouse focus
+    // does not reach a child of a frame that ignores the mouse).
+    if (down && !mouseWasDown_ && boxLeft_ >= 0 && mygui::findWidget(kBox)) {
+        int mx = 0, my = 0;
+        const int right = boxLeft_ + boxW_, bottom = boxTop_ + boxH_;
+        if (mouseInGame(mx, my) && mx >= right - kGrip - 6 && mx <= right + 2 && my >= bottom - kGrip - 6 &&
+            my <= bottom + 2)
+            dragging_ = true;
+    }
     if (dragging_) {
         int mx = 0, my = 0;
         if (mouseInGame(mx, my) && boxLeft_ >= 0) {
