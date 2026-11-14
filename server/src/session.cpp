@@ -79,6 +79,7 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         handleStats(c, *st);
         return {};
     }
+    if (auto* chat = std::get_if<ChatSend>(&*msg)) return handleChat(conn, c, *chat, nowSec);
     if (std::holds_alternative<CharacterDied>(*msg)) {
         // Permanent death: the character is retired; the player stays connected and makes a new one.
         if (!c.hasCharacter || !cfg_.store) return {};
@@ -384,6 +385,33 @@ std::vector<ConnId> SessionManager::connectionsToClose() { return std::exchange(
 size_t SessionManager::playerCount() const {
     return static_cast<size_t>(
         std::count_if(conns_.begin(), conns_.end(), [](auto& kv) { return kv.second.player.has_value(); }));
+}
+
+std::vector<Outgoing> SessionManager::handleChat(ConnId conn, Conn& c, const ChatSend& m, double nowSec) {
+    if (!c.hasCharacter && c.characterName.empty()) return {};
+    if (nowSec < c.nextChat) return {};  // anti-spam: at most two messages a second
+    c.nextChat = nowSec + 0.5;
+    std::string text;
+    for (char ch : m.text)  // printable only (UTF-8 bytes kept), no control characters
+        if (static_cast<unsigned char>(ch) >= 0x20) text += ch;
+    while (!text.empty() && text.front() == ' ') text.erase(text.begin());
+    while (!text.empty() && text.back() == ' ') text.pop_back();
+    if (text.empty()) return {};
+    std::printf("[chat %s] %s: %s\n", m.channel == ChatChannel::Local ? "local" : "global", c.characterName.c_str(),
+                text.c_str());
+    std::fflush(stdout);
+    ChatMessage out{m.channel, *c.player, c.characterName, text};
+    std::vector<Outgoing> sent;
+    for (auto& [otherId, other] : conns_) {
+        if (!other.player) continue;
+        if (m.channel == ChatChannel::Local && otherId != conn) {
+            if (!c.lastState || !other.lastState) continue;
+            const float dx = other.lastState->x - c.lastState->x, dz = other.lastState->z - c.lastState->z;
+            if (dx * dx + dz * dz > cfg_.chatLocalRadius * cfg_.chatLocalRadius) continue;
+        }
+        sent.push_back({otherId, out});
+    }
+    return sent;
 }
 
 }  // namespace wok

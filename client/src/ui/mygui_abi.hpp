@@ -46,6 +46,9 @@ Widget* createRoot(std::string_view type, std::string_view skin, FloatCoord coor
 void setProperty(Widget* w, std::string_view key, std::string_view value);
 void destroy(Widget* w);
 Widget* mouseFocus();
+// Keyboard focus: the widget typing goes to (0 if none), and giving it to an EditBox (0 clears it).
+Widget* keyFocus();
+void setKeyFocus(Widget* w);
 bool isShown(Widget* w);  // visible, parents included
 // Unlocks the edit box and feeds `text` through MyGUI's key input; returns the resulting text.
 std::string injectText(Widget* editBox, std::string_view text);

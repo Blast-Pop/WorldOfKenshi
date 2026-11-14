@@ -6,6 +6,7 @@
 #include "game/avatars.hpp"
 #include "game/game_memory.hpp"
 #include "game/direct_control.hpp"
+#include "ui/chat.hpp"
 #include "game/identity.hpp"
 #include "game/inventory.hpp"
 #include "game/items.hpp"
@@ -33,6 +34,7 @@
 #include <cmath>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 
 namespace {
@@ -74,6 +76,7 @@ struct ClientState {
     double nextDeathCheck = 0;
     double nextCreateDiag = 0;
     wok::DirectControl control;          // WASD movement
+    std::unique_ptr<wok::Chat> chat;     // in-game chat (spec 7.8)
     float hungerKept = 0;               // hunger before the last clock move
     double hungerGuardUntil = 0;        // until then, the clock move must not make us hungry
     uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
@@ -303,6 +306,10 @@ void onFrame(float dt) {
             }
         }
         // The server owns the world clock: align ours once the world is being played.
+        if (auto* cm = std::get_if<wok::ChatMessage>(&m)) {
+            if (s.chat) s.chat->onMessage(*cm, s.now);
+            continue;
+        }
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
         {
             if (s.menu) s.menu->setServerDay(wt->day);
@@ -405,9 +412,11 @@ void onFrame(float dt) {
         wasDown = down;
         if (s.control.enabled() && s.readerOk) {
             s.reader.read(s.now);
-            s.control.update(s.now, s.reader.character(), false);
+            s.control.update(s.now, s.reader.character(), (s.chat && s.chat->typing()) || wok::mygui::keyFocus());
         }
     }
+    if (!s.chat) s.chat = std::make_unique<wok::Chat>([](const wok::ChatSend& m) { g_state->net->sendChat(m); });
+    s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent));
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 

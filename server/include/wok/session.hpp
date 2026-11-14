@@ -58,7 +58,8 @@ struct SessionConfig {
     std::function<size_t(size_t count)> pickSpawn;  // index in [0, count); random when empty
     bool forceSpawn = false;
     // Mods every player must run, in load order (spec 7.6). Empty optional: any mods are accepted.
-    std::optional<std::vector<std::string>> requiredMods;  // ignore the start position chosen in Kenshi (always use the spawn rule)
+    std::optional<std::vector<std::string>> requiredMods;
+    float chatLocalRadius = 100.0f;  // local chat reaches players this close to the speaker (game units)  // ignore the start position chosen in Kenshi (always use the spawn rule)
     std::function<WorldTime(double nowSec)> worldTime;  // the server's clock; none: no time sync
     // Steam session tickets (docs/m2-auth.md): when set, a Hello carrying a ticket is checked with
     // Steam instead of the browser login. beginSteamAuth returns true if Steam accepted the ticket
@@ -99,6 +100,7 @@ private:
         std::string characterName;       // shown to the other players
         std::string characterRace, characterTemplate;
         std::vector<uint8_t> characterLook;  // what the other players' avatars wear
+        double nextChat = 0;             // anti-spam: earliest time for the next message
         std::string helloName;           // name sent in Hello (test bots have no character)
         bool positionDirty = false;
         std::map<uint8_t, float> stats;  // latest known skills of the character
@@ -114,6 +116,7 @@ private:
     void handleStats(Conn& c, const StatsUpdate& m);
     std::vector<Outgoing> accept(ConnId conn, Conn& c, const AuthToken& newToken, double nowSec);
     std::vector<Outgoing> reject(ConnId conn, RejectReason reason);
+    std::vector<Outgoing> handleChat(ConnId conn, Conn& c, const ChatSend& m, double nowSec);
     void savePosition(Conn& c);
     std::vector<Outgoing> dropConn(ConnId conn);  // removes and broadcasts PlayerLeft if needed
     void requestClose(ConnId conn);

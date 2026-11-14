@@ -126,7 +126,11 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_11") { CHECK(WOK_PROTOCOL_VERSION == 11);
+TEST_CASE("protocol_version_is_12") { CHECK(WOK_PROTOCOL_VERSION == 12);
+    ChatMessage said{ChatChannel::Local, 3, "Nine", "hello"};
+    CHECK(decode(encode(said)) == std::optional<Message>(said));
+    ChatSend sent{ChatChannel::Global, "hi all"};
+    CHECK(decode(encode(sent)) == std::optional<Message>(sent));
     HelloAck refused;
     refused.reason = RejectReason::ModMismatch;
     refused.serverMods = {"Many More Hairs", "MoodLighting"};

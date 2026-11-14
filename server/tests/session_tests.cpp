@@ -208,3 +208,20 @@ TEST_CASE("server_info_answered_before_hello") {
     CHECK(infos[0].second.protocolVersion == WOK_PROTOCOL_VERSION);
     CHECK(sm.playerCount() == 1);  // a query is not a player
 }
+
+TEST_CASE("chat_global_reaches_all_local_only_nearby") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    auto b = join(sm, 2, 12).playerId;
+    auto c = join(sm, 3, 13).playerId;
+    sm.onPacket(1, stateBytes(a, 0.0f), 0.1);
+    sm.onPacket(2, stateBytes(b, 10.0f), 0.1);
+    sm.onPacket(3, stateBytes(c, 5000.0f), 0.1);
+    auto global = sentOf<ChatMessage>(sm.onPacket(1, encode(ChatSend{ChatChannel::Global, "hi"}), 1.0));
+    CHECK(global.size() == 3);  // everyone, the speaker included
+    auto local = sm.onPacket(1, encode(ChatSend{ChatChannel::Local, " near\x01 "}), 2.0);
+    CHECK(sentOf<ChatMessage>(local).size() == 2);  // the speaker and the player 10 units away
+    REQUIRE(!sentOf<ChatMessage>(local).empty());
+    CHECK(sentOf<ChatMessage>(local)[0].second.text == "near");
+    CHECK(sentOf<ChatMessage>(sm.onPacket(1, encode(ChatSend{ChatChannel::Global, "spam"}), 2.1)).empty());
+}

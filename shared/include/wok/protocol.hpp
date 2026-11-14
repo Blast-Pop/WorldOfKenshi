@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 11.
+// World of Kenshi wire protocol, version 12.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 11;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 12;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -24,6 +24,7 @@ constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;
 constexpr size_t kMaxStats = 64;
 constexpr size_t kMaxMods = 255;
+constexpr size_t kMaxChatBytes = 200;
 constexpr size_t kMaxModNameBytes = 128;
 constexpr size_t kMaxTicketBytes = 512;  // identity ticket from the master server
 constexpr size_t kMaxInventoryBytes = 32768;  // the client's inventory text (opaque to the server)  // skill ids are 1..kMaxStats (docs/re/stats.md)
@@ -48,6 +49,8 @@ enum class MsgType : uint8_t {
     WorldTime = 13,
     PlayerInfo = 14,
     CharacterDied = 15,
+    ChatSend = 16,
+    ChatMessage = 17,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -168,6 +171,21 @@ struct WorldTime {
     bool operator==(const WorldTime&) const = default;
 };
 
+// Chat (spec 7.8). Global: every player; local: players near the speaker.
+enum class ChatChannel : uint8_t { Global = 0, Local = 1 };
+struct ChatSend {  // client -> server
+    ChatChannel channel = ChatChannel::Global;
+    std::string text;
+    bool operator==(const ChatSend&) const = default;
+};
+struct ChatMessage {  // server -> clients
+    ChatChannel channel = ChatChannel::Global;
+    PlayerId from = 0;
+    std::string name;  // the speaker's character name
+    std::string text;
+    bool operator==(const ChatMessage&) const = default;
+};
+
 // Permanent death. Client -> server: my character died. Server -> client: it is gone, make a new one.
 struct CharacterDied {
     bool operator==(const CharacterDied&) const = default;
@@ -185,7 +203,7 @@ struct PlayerInfo {
 
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
                              CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
-                             PlayerInfo, CharacterDied>;
+                             PlayerInfo, CharacterDied, ChatSend, ChatMessage>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

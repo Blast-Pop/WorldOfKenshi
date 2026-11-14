@@ -198,6 +198,20 @@ void destroy(Widget* w) {
     if (gui && w) g_api.destroyWidget(gui, w);
 }
 
+Widget* keyFocus() {
+    void* input = g_api.getInput ? g_api.getInput() : nullptr;
+    return input && g_api.getKeyFocus ? g_api.getKeyFocus(input) : nullptr;
+}
+
+void setKeyFocus(Widget* w) {
+    void* input = g_api.getInput ? g_api.getInput() : nullptr;
+    if (!input) return;
+    if (w && g_api.setKeyFocus)
+        g_api.setKeyFocus(input, w);
+    else if (!w && g_api.resetKeyFocus)
+        g_api.resetKeyFocus(input);
+}
+
 Widget* mouseFocus() {
     void* input = g_api.getInput();
     return input ? g_api.getMouseFocusWidget(input) : nullptr;

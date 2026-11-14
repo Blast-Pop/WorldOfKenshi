@@ -98,6 +98,11 @@ void ClientNet::sendInventory(std::vector<uint8_t> items) {
     outgoingInventory_ = std::move(items);
 }
 
+void ClientNet::sendChat(const ChatSend& m) {
+    std::lock_guard lock(mutex_);
+    if (outgoingChat_.size() < 16) outgoingChat_.push_back(m);
+}
+
 void ClientNet::reportDeath() {
     std::lock_guard lock(mutex_);
     outgoingDeath_ = true;
@@ -234,6 +239,7 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                 std::optional<PlayerState> out;
                 std::optional<CreateCharacter> create;
                 bool death = false;
+                std::vector<ChatSend> chat;
                 std::map<uint8_t, float> stats;
                 std::optional<std::vector<uint8_t>> inventory;
                 {
@@ -241,6 +247,7 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                     out = std::exchange(outgoing_, std::nullopt);
                     create = std::exchange(outgoingCreate_, std::nullopt);
                     death = std::exchange(outgoingDeath_, false);
+                    chat = std::exchange(outgoingChat_, {});
                     // Only after the character exists on the server (it ignores stats before).
                     if (!create && character_) {
                         stats = std::exchange(outgoingStats_, {});
@@ -257,6 +264,10 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                 }
                 if (death) {
                     auto b = encode(CharacterDied{});
+                    net.send(b, true);
+                }
+                for (const ChatSend& m : chat) {
+                    auto b = encode(m);
                     net.send(b, true);
                 }
                 if (inventory) {

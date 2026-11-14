@@ -108,6 +108,16 @@ void write(ByteWriter& w, const CharacterData& m) {
 }
 void write(ByteWriter& w, const InventoryUpdate& m) { writeBytes(w, m.items.data(), m.items.size()); }
 void write(ByteWriter&, const CharacterDied&) {}
+void write(ByteWriter& w, const ChatSend& m) {
+    w.u8(static_cast<uint8_t>(m.channel));
+    writeString(w, m.text);
+}
+void write(ByteWriter& w, const ChatMessage& m) {
+    w.u8(static_cast<uint8_t>(m.channel));
+    w.u32(m.from);
+    writeString(w, m.name);
+    writeString(w, m.text);
+}
 void write(ByteWriter& w, const PlayerInfo& m) {
     w.u32(m.playerId);
     writeString(w, m.name);
@@ -155,6 +165,8 @@ constexpr MsgType typeOf(const InventoryUpdate&) { return MsgType::InventoryUpda
 constexpr MsgType typeOf(const WorldTime&) { return MsgType::WorldTime; }
 constexpr MsgType typeOf(const PlayerInfo&) { return MsgType::PlayerInfo; }
 constexpr MsgType typeOf(const CharacterDied&) { return MsgType::CharacterDied; }
+constexpr MsgType typeOf(const ChatSend&) { return MsgType::ChatSend; }
+constexpr MsgType typeOf(const ChatMessage&) { return MsgType::ChatMessage; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -224,6 +236,21 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
         }
         case MsgType::CharacterDied:
             return CharacterDied{};
+        case MsgType::ChatSend: {
+            ChatSend m;
+            uint8_t ch = r.u8();
+            if (ch > 1 || !readBytes(r, kMaxChatBytes, m.text)) return std::nullopt;
+            m.channel = static_cast<ChatChannel>(ch);
+            return m;
+        }
+        case MsgType::ChatMessage: {
+            ChatMessage m;
+            uint8_t ch = r.u8();
+            m.from = r.u32();
+            if (ch > 1 || !readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxChatBytes, m.text)) return std::nullopt;
+            m.channel = static_cast<ChatChannel>(ch);
+            return m;
+        }
         case MsgType::PlayerInfo: {
             PlayerInfo m;
             m.playerId = r.u32();
@@ -294,7 +321,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::CharacterDied))
+        type > static_cast<uint8_t>(MsgType::ChatMessage))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

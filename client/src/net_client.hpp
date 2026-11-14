@@ -30,6 +30,7 @@ public:
     std::optional<AuthToken> takeIssuedToken();       // new token to persist, once
     std::optional<CharacterData> character() const;   // our server-side character, once known
     void reportDeath();                                 // permanent death of our character
+    void sendChat(const ChatSend& m);
     Status status() const { return status_; }
     RejectReason rejectReason() const { return reject_; }
     // After a ModMismatch refusal: what to change, in words ("Missing: A, B. Remove: C.").
@@ -51,6 +52,7 @@ private:
     std::optional<PlayerState> outgoing_;
     std::optional<CreateCharacter> outgoingCreate_;
     bool outgoingDeath_ = false;
+    std::vector<ChatSend> outgoingChat_;
     std::map<uint8_t, float> outgoingStats_;
     std::optional<std::vector<uint8_t>> outgoingInventory_;
     std::vector<Message> incoming_;
