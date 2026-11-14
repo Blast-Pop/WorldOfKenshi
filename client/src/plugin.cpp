@@ -324,6 +324,78 @@ void onFrame(float dt) {
     }
     lap(FrameProfile::Incoming);
     if (s.avatarsOk) s.avatars.update(s.now);
+    // RE probe Ctrl+Shift+F4: snapshot Kenshi's camera object and PlayerInterface, diff on the next press.
+    {
+        static bool wasDown = false;
+        static std::vector<uint8_t> before[2];
+        bool down = (GetAsyncKeyState(VK_F4) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                    (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+        if (down && !wasDown) {
+            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
+            uintptr_t objs[2] = {};
+            wok::mem::readPtr(gw + 0x10, objs[0]);
+            wok::mem::readPtr(gw + 0x580, objs[1]);
+            for (int k = 0; k < 2; ++k) {
+                std::vector<uint8_t> now(0x800);
+                if (!objs[k] || !wok::mem::readBytes(objs[k], now.data(), now.size())) continue;
+                if (before[k].empty()) {
+                    before[k] = now;
+                    wok::log("probe: %s snapshot taken", k ? "PlayerInterface" : "camera");
+                    continue;
+                }
+                for (size_t o = 0; o < now.size(); o += 8)
+                    if (std::memcmp(&now[o], &before[k][o], 8) != 0) {
+                        uint64_t a = 0, b = 0;
+                        std::memcpy(&a, &before[k][o], 8);
+                        std::memcpy(&b, &now[o], 8);
+                        wok::log("probe: %s +0x%zx: %016llx -> %016llx", k ? "PlayerInterface" : "camera", o,
+                                 static_cast<unsigned long long>(a), static_cast<unsigned long long>(b));
+                    }
+                before[k].clear();
+            }
+        }
+        wasDown = down;
+    }
+    // RE probe Ctrl+Shift+F1: where does Kenshi keep the camera's followed object? Look for a copy of
+    // the selected character's own handle (character + 0x58, 0x20 bytes) in the camera object.
+    {
+        static bool wasDown = false;
+        bool down = (GetAsyncKeyState(VK_F1) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                    (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+        if (down && !wasDown && s.readerOk) {
+            s.reader.read(s.now);
+            uintptr_t ch = s.reader.character(), cam = 0, pi = 0;
+            uint8_t hand[0x20];
+            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
+            wok::mem::readPtr(gw + 0x10, cam);
+            wok::mem::readPtr(gw + 0x580, pi);
+            wok::log("probe: character %p camera %p", reinterpret_cast<void*>(ch), reinterpret_cast<void*>(cam));
+            if (ch && wok::mem::readBytes(ch + 0x58, hand, sizeof(hand))) {
+                wok::log("probe: character handle %016llx %016llx %016llx %016llx",
+                         *reinterpret_cast<unsigned long long*>(hand), *reinterpret_cast<unsigned long long*>(hand + 8),
+                         *reinterpret_cast<unsigned long long*>(hand + 16), *reinterpret_cast<unsigned long long*>(hand + 24));
+                for (uintptr_t root : {cam, pi}) {
+                    if (!root) continue;
+                    for (size_t o = 0; o < 0x4000; o += 8) {
+                        uint8_t q[0x18];
+                        if (!wok::mem::readBytes(root + o, q, sizeof(q))) continue;
+                        if (std::memcmp(q, hand + 8, 0x18) == 0)
+                            wok::log("probe: handle copy in %s + 0x%zx", root == cam ? "camera" : "PlayerInterface", o - 8);
+                        float f[3];
+                        std::memcpy(f, q, sizeof(f));
+                        float cp[3];
+                        if (o % 4 == 0 && wok::mem::readBytes(ch + 0x48, cp, sizeof(cp)) && std::fabs(f[0] - cp[0]) < 60 &&
+                            std::fabs(f[2] - cp[2]) < 60 && std::fabs(f[1] - cp[1]) < 200)
+                            wok::log("probe: position-like (%.1f, %.1f, %.1f) in %s + 0x%zx", f[0], f[1], f[2],
+                                     root == cam ? "camera" : "PlayerInterface", o);
+                        if (*reinterpret_cast<uintptr_t*>(q) == ch)
+                            wok::log("probe: character pointer in %s + 0x%zx", root == cam ? "camera" : "PlayerInterface", o);
+                    }
+                }
+            }
+        }
+        wasDown = down;
+    }
     // Direct control (dev toggle Ctrl+Shift+F3 until the Options checkbox exists).
     {
         static bool wasDown = false;
