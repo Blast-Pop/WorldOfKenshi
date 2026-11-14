@@ -52,3 +52,19 @@ accepts the player when Steam validates the ticket (and the licence), with no br
 per-server token. Steam OpenID stays as the fallback for servers without the Steam API. A Linux
 server needs `libsteam_api.so` (Steamworks SDK redistributable, kept out of the repository) and
 `steamclient.so` (SteamCMD).
+
+## Security checks (2026-11-13, against the EU test server)
+
+| Attempt | Result |
+|---|---|
+| Invented SteamID, no ticket | refused (browser login asked) |
+| Invented SteamID, random ticket | refused |
+| A real player's ticket presented with another SteamID | refused |
+| A real player's ticket replayed with their SteamID | **was accepted**, now refused |
+| Real player (Kenshi) | admitted in ~1.3 s, no browser |
+
+The replay hole came from trusting `UserHasLicenseForApp`, which answers before Steam validates the
+ticket. The server now waits for `ValidateAuthTicketResponse_t` (callback 143) and admits a player
+only on `k_EAuthSessionResponseOK`; cancelled (6) or already used (7) tickets are refused. The client
+cancels its ticket when it leaves a server and keeps a single live ticket.
+`tools/testclient --ticket-hex` reproduces these attempts.
