@@ -95,6 +95,20 @@ public:
 
 private:
     bool newGameAsked_ = false;
+    // "Delete character": armed by a first click, then connect, retire the character, disconnect.
+    float deleteArmedFor_ = 0;  // seconds left to confirm with a second click
+    enum class Delete { Off, Connecting, Sent } delete_ = Delete::Off;
+    bool deleteStarted_ = false;  // the connection attempt has begun
+    void driveDelete(float dt);
+public:
+    bool deletingCharacter() const { return delete_ != Delete::Off; }
+    // The server's day, shown in the time panel instead of Kenshi's local day counter (which is
+    // left alone: moving it ages every character, see world_time.cpp). 0 = not in a server world.
+    void setServerDay(uint32_t day) { serverDay_ = day; }
+private:
+    uint32_t serverDay_ = 0;
+public:
+private:
     bool rebuilding_ = false;  // Kenshi's New Game is building the world: let it pause (time lock off)
     float newGameTimer_ = 0;  // seconds since the last attempt
     float confirmWindow_ = 0; // seconds left to accept Kenshi's "lose progress?" dialog

@@ -30,6 +30,7 @@ constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
+constexpr const char* kDelete = "WokDeleteCharacter";
 constexpr const char* kDeathWindow = "WokDeathWindow";
 constexpr const char* kDeathNew = "WokDeathNew";
 constexpr const char* kDeathExit = "WokDeathExit";
@@ -82,7 +83,7 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDeathNew, kDeathExit})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDelete, kDeathNew, kDeathExit})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -215,8 +216,12 @@ void MultiplayerMenu::openWindow() {
     mygui::setProperty(status, "TextColour", kStatusText);
     // Unlink lives here, not in Kenshi's Options: Kenshi casts every Options tab to its own panel
     // class when applying settings and crashes on a foreign tab (MyGUI "Bad cast ... DatapanelGUI").
-    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {kListLeft + half + kMargin, infoTop, half, 0.07f}, kUnlink);
-    mygui::setProperty(unlink, "Caption", "Unlink Steam account");
+    const float quarter = (half - kMargin) / 2;
+    auto unlink = mygui::createChild(w, "Button", "Kenshi_Button2", {kListLeft + half + kMargin, infoTop, quarter, 0.07f}, kUnlink);
+    mygui::setProperty(unlink, "Caption", "Unlink Steam");
+    auto del = mygui::createChild(w, "Button", "Kenshi_Button2",
+                                  {kListLeft + half + 2 * kMargin + quarter, infoTop, quarter, 0.07f}, kDelete);
+    mygui::setProperty(del, "Caption", "Delete character");
     auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft, buttonsTop, half, 0.10f}, kConnect);
     mygui::setProperty(connect, "Caption", "Connect");
     auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft + half + kMargin, buttonsTop, half, 0.10f}, kClose);
@@ -300,6 +305,31 @@ void MultiplayerMenu::onClick(const std::string& name) {
     } else if (name == kUnlink) {
         unlink_();
         error_ = "Account unlinked: the next connection will ask Steam again.";
+    } else if (name == kDelete) {
+        if (net_.status() != ClientNet::Status::Disconnected && net_.status() != ClientNet::Status::Rejected) {
+            error_ = "Already connected: delete your character from the main menu.";
+            return;
+        }
+        if (selected_ < 0 || static_cast<size_t>(selected_) >= rowCount_) {
+            error_ = "Select a server first.";
+            return;
+        }
+        if (deleteArmedFor_ <= 0) {  // first click: ask to confirm
+            deleteArmedFor_ = 6.0f;
+            error_ = "Delete your character on this server for good? Click Delete character again.";
+            return;
+        }
+        auto addr = parseAddress(listed_[selected_].address);
+        if (!addr) return;
+        deleteArmedFor_ = 0;
+        cfg_.host = addr->host;
+        cfg_.port = addr->port;
+        saveConfig_();
+        delete_ = Delete::Connecting;
+        deleteStarted_ = false;
+        error_ = "Deleting your character...";
+        log("ui: deleting our character on %s:%u", cfg_.host.c_str(), cfg_.port);
+        connect_();
     } else if (name == kConnect) {
         auto st = net_.status();
         if (st == ClientNet::Status::Connecting || st == ClientNet::Status::AwaitingSteamLogin ||
@@ -565,7 +595,7 @@ void MultiplayerMenu::applyConnectedMenu() {
         }
         return;
     }
-    if (enteredGame_ || inGame_()) return;
+    if (enteredGame_ || inGame_() || delete_ != Delete::Off) return;  // never enter the world to delete
     mygui::Widget* newGame = mygui::findBySuffix("_NewGameButton", 3);
     if (!newGame) return;  // not on the title screen
     // Step 1 of entering the server game: let Kenshi run its own New Game action.
@@ -611,6 +641,35 @@ void MultiplayerMenu::driveNewGame(float dt) {
     in[1].ki.dwFlags |= KEYEVENTF_KEYUP;
     SendInput(2, in, sizeof(INPUT));
     log("ui: opening the pause menu for New Game");
+}
+
+void MultiplayerMenu::driveDelete(float dt) {
+    if (deleteArmedFor_ > 0) deleteArmedFor_ -= dt;
+    if (delete_ == Delete::Off) return;
+    auto st = net_.status();
+    if (st != ClientNet::Status::Disconnected) deleteStarted_ = true;
+    if (st == ClientNet::Status::Rejected || (st == ClientNet::Status::Disconnected && deleteStarted_)) {
+        delete_ = Delete::Off;
+        error_ = "Could not reach the server: nothing was deleted.";
+        return;
+    }
+    if (st != ClientNet::Status::Connected) return;
+    if (delete_ == Delete::Connecting) {
+        if (!net_.hasCharacter()) {
+            error_ = "You have no character on this server.";
+        } else {
+            net_.reportDeath();  // the server retires it (kept in its dead_characters table)
+            delete_ = Delete::Sent;
+            return;
+        }
+    } else if (net_.hasCharacter()) {
+        return;  // waiting for the server's answer
+    } else {
+        error_ = "Character deleted. Connect to make a new one.";
+        log("ui: character deleted on the server");
+    }
+    delete_ = Delete::Off;
+    disconnect_();
 }
 
 void MultiplayerMenu::refreshStatus() {
@@ -660,6 +719,7 @@ void MultiplayerMenu::enforceNormalSpeed() {
 
 void MultiplayerMenu::update(float dt) {
     driveNewGame(dt);
+    driveDelete(dt);
     if (!mygui::available()) return;
     pollTimer_ += dt;
     if (pollTimer_ >= 0.5f) {
@@ -671,6 +731,9 @@ void MultiplayerMenu::update(float dt) {
         // is really being played (not in the character editor or behind our loading screen).
         timeLocked_ = multiplayerWorld_ && inGame_() && net_.status() == ClientNet::Status::Connected &&
                       !loadingShown_ && !rebuilding_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
+        if (serverDay_ && multiplayerWorld_ && net_.status() == ClientNet::Status::Connected)
+            if (mygui::Widget* dayText = mygui::findBySuffix("_DayText", 12))
+                mygui::setProperty(dayText, "Caption", "Day: " + std::to_string(serverDay_));
         for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
             if (mygui::Widget* w = mygui::findBySuffix(suffix, 12)) mygui::setVisible(w, !timeLocked_);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)

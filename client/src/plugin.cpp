@@ -259,6 +259,8 @@ void onFrame(float dt) {
     s.wasConnected = connected;
     lap(FrameProfile::Polls);
     for (auto& m : s.net->drainIncoming()) {
+        // Only a death we saw in game opens the death window (not a deletion from the menu).
+        if (std::holds_alternative<wok::CharacterDied>(m) && !s.dead) continue;
         if (std::holds_alternative<wok::CharacterDied>(m)) {  // retired: make a new one, still connected
             s.dead = false;
             s.characterSent = false;
@@ -277,6 +279,7 @@ void onFrame(float dt) {
         // The server owns the world clock: align ours once the world is being played.
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
         {
+            if (s.menu) s.menu->setServerDay(wt->day);
             float hunger = 0;
             bool known = wok::readHunger(s.reader.character(), hunger);
             if (wok::applyWorldTime(s.reader.gameWorld(), *wt) && known) {
