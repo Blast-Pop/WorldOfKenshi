@@ -886,7 +886,8 @@ void MultiplayerMenu::update(float dt) {
         else
             dayTextName_.clear();  // the panel was rebuilt: look it up again
     }
-    if (timeLocked_) enforceNormalSpeed();
+    if (settleTimer_ > 0) settleTimer_ -= dt;
+    if (timeLocked_ && settleTimer_ <= 0) enforceNormalSpeed();
     if (windowOpen_) {
         statusTimer_ += dt;
         if (statusTimer_ >= 0.25f) {

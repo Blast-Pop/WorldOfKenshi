@@ -87,13 +87,17 @@ public:
     void setWorldReady() {
         worldReady_ = true;
         rebuilding_ = false;
+        settleTimer_ = kSettleSec;
     }
     // Permanent death: run Kenshi's New Game from the pause menu, staying connected.
     void restartForNewCharacter() { newGameAsked_ = true; newGameTimer_ = 0; }
     // Permanent death: asks the player "New character" (restartForNewCharacter) or "Exit".
     void showDeathWindow();
     // The new character reached the server: the rebuilt world is played again (time lock back on).
-    void newCharacterSent() { rebuilding_ = false; }
+    void newCharacterSent() {
+        rebuilding_ = false;
+        settleTimer_ = kSettleSec;
+    }
 
 private:
     bool newGameAsked_ = false;
@@ -113,6 +117,10 @@ private:
     std::string dayTextName_;  // full name of Kenshi's "Day: N" label, found once
 public:
 private:
+    // A world that just arrived keeps Kenshi's start pause this long before the time lock acts:
+    // unpausing while Kenshi is still starting its sound broke the audio.
+    static constexpr float kSettleSec = 5.0f;
+    float settleTimer_ = 0;
     bool rebuilding_ = false;  // Kenshi's New Game is building the world: let it pause (time lock off)
     float newGameTimer_ = 0;  // seconds since the last attempt
     float confirmWindow_ = 0; // seconds left to accept Kenshi's "lose progress?" dialog

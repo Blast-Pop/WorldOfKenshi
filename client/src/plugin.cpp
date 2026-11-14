@@ -366,42 +366,46 @@ void onFrame(float dt) {
         }
         wasDown = down;
     }
-    // RE probe Ctrl+Shift+F1: where does Kenshi keep the camera's followed object? Look for a copy of
-    // the selected character's own handle (character + 0x58, 0x20 bytes) in the camera object.
+    // RE probe Ctrl+Shift+F1: where is GameWorld's set of active characters? Look, two levels deep
+    // from GameWorld, for a hash-table node that holds the player's character pointer.
     {
         static bool wasDown = false;
         bool down = (GetAsyncKeyState(VK_F1) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
                     (GetAsyncKeyState(VK_SHIFT) & 0x8000);
         if (down && !wasDown && s.readerOk) {
             s.reader.read(s.now);
-            uintptr_t ch = s.reader.character(), cam = 0, pi = 0;
-            uint8_t hand[0x20];
-            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
-            wok::mem::readPtr(gw + 0x10, cam);
-            wok::mem::readPtr(gw + 0x580, pi);
-            wok::log("probe: character %p camera %p", reinterpret_cast<void*>(ch), reinterpret_cast<void*>(cam));
-            if (ch && wok::mem::readBytes(ch + 0x58, hand, sizeof(hand))) {
-                wok::log("probe: character handle %016llx %016llx %016llx %016llx",
-                         *reinterpret_cast<unsigned long long*>(hand), *reinterpret_cast<unsigned long long*>(hand + 8),
-                         *reinterpret_cast<unsigned long long*>(hand + 16), *reinterpret_cast<unsigned long long*>(hand + 24));
-                for (uintptr_t root : {cam, pi}) {
-                    if (!root) continue;
-                    for (size_t o = 0; o < 0x4000; o += 8) {
-                        uint8_t q[0x18];
-                        if (!wok::mem::readBytes(root + o, q, sizeof(q))) continue;
-                        if (std::memcmp(q, hand + 8, 0x18) == 0)
-                            wok::log("probe: handle copy in %s + 0x%zx", root == cam ? "camera" : "PlayerInterface", o - 8);
-                        float f[3];
-                        std::memcpy(f, q, sizeof(f));
-                        float cp[3];
-                        if (o % 4 == 0 && wok::mem::readBytes(ch + 0x48, cp, sizeof(cp)) && std::fabs(f[0] - cp[0]) < 60 &&
-                            std::fabs(f[2] - cp[2]) < 60 && std::fabs(f[1] - cp[1]) < 200)
-                            wok::log("probe: position-like (%.1f, %.1f, %.1f) in %s + 0x%zx", f[0], f[1], f[2],
-                                     root == cam ? "camera" : "PlayerInterface", o);
-                        if (*reinterpret_cast<uintptr_t*>(q) == ch)
-                            wok::log("probe: character pointer in %s + 0x%zx", root == cam ? "camera" : "PlayerInterface", o);
+            const uintptr_t ch = s.reader.character(), gw = wok::mem::moduleBase() + 0x2134110;
+            int hits = 0;
+            for (uintptr_t off = 0; off < 0x3000 && hits < 20; off += 8) {
+                uintptr_t a = 0;
+                if (!wok::mem::readPtr(gw + off, a) || a < 0x10000) continue;
+                for (uintptr_t i = 0; i < 0x400 && hits < 20; i += 8) {  // a bucket array, or a node
+                    uintptr_t n = 0;
+                    if (!wok::mem::readPtr(a + i, n) || n < 0x10000) continue;
+                    for (uintptr_t k = 0; k < 0x30; k += 8) {
+                        uintptr_t v = 0;
+                        if (wok::mem::readPtr(n + k, v) && v == ch) {
+                            wok::log("probe: GameWorld+0x%llx -> [+0x%llx] -> node +0x%llx holds the player",
+                                     (unsigned long long)off, (unsigned long long)i, (unsigned long long)k);
+                            ++hits;
+                        }
                     }
                 }
+            }
+            wok::log("probe: character set search done (%d hits, player %p)", hits, reinterpret_cast<void*>(ch));
+            for (uintptr_t off = 0x770; off <= 0x7c0; off += 8) {
+                uintptr_t v = 0;
+                wok::mem::readPtr(gw + off, v);
+                wok::log("probe: GameWorld+0x%llx = %016llx", (unsigned long long)off, (unsigned long long)v);
+            }
+            uintptr_t arr = 0;
+            wok::mem::readPtr(gw + 0x790, arr);
+            for (uintptr_t i = 0x180; i < 0x240; i += 8) {
+                uintptr_t v = 0, w = 0;
+                wok::mem::readPtr(arr + i, v);
+                if (v > 0x10000) wok::mem::readPtr(v, w);
+                wok::log("probe:   [+0x%llx] = %016llx (first qword %016llx)%s", (unsigned long long)i, (unsigned long long)v,
+                         (unsigned long long)w, wok::mem::isA(v, ".?AVCharacterHuman@@") ? " CHARACTER" : "");
             }
         }
         wasDown = down;
