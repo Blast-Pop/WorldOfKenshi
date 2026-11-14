@@ -741,6 +741,34 @@ bool callSetPaused(bool paused) {
 }
 }  // namespace
 
+// Kenshi's level editor (Shift+F12) edits the world: it cannot be opened in a server world. Its
+// "open" case in Kenshi's command handler (RVA 0x77bf8f, "mov esi, 1") becomes a jump to that
+// handler's exit (RVA 0x77d3f4) while blocked; the original bytes come back otherwise.
+void blockLevelEditor(bool block) {
+    static bool blocked = false;
+    if (block == blocked) return;
+    constexpr uintptr_t kSite = 0x77bf8f, kExit = 0x77d3f4;
+    static const uint8_t kOriginal[5] = {0xbe, 0x01, 0x00, 0x00, 0x00};
+    uint8_t jump[5] = {0xe9};
+    const int32_t rel = static_cast<int32_t>(kExit - (kSite + 5));
+    std::memcpy(jump + 1, &rel, 4);
+    uint8_t* site = reinterpret_cast<uint8_t*>(mem::moduleBase() + kSite);
+    uint8_t now[5];
+    if (!mem::readBytes(reinterpret_cast<uintptr_t>(site), now, 5) ||
+        std::memcmp(now, block ? kOriginal : jump, 5) != 0) {
+        log("ui: level editor block skipped (unexpected code at the patch site)");
+        blocked = block;  // never retry on an unknown game version
+        return;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    std::memcpy(site, block ? jump : kOriginal, 5);
+    VirtualProtect(site, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    blocked = block;
+    log("ui: level editor (Shift+F12) %s", block ? "disabled in multiplayer" : "available again");
+}
+
 void MultiplayerMenu::enforceNormalSpeed() {
     // A multiplayer world never stops: not for the Escape menu, Space, a conversation, nor fast
     // speeds. Undo any of them through Kenshi's own setSpeed / setPaused.
@@ -778,23 +806,13 @@ void MultiplayerMenu::update(float dt) {
             if (mygui::Widget* dayText = mygui::findBySuffix("_DayText", 12))
                 mygui::setProperty(dayText, "Caption", "Day: " + std::to_string(serverDay_));
         if (devNoTimeLock_) timeLocked_ = false;
-        // Kenshi's level editor (Shift+F12, Kenshi_LevelEditor.layout) edits the world: never in a
-        // server world. Closed with its own "exit" button, which runs Kenshi's leaving code.
-        if (multiplayerWorld_ && net_.status() == ClientNet::Status::Connected)
-            if (mygui::Widget* editor = mygui::findShownBySuffix("_fogfeatures", 12)) {
-                std::string n = mygui::nameOf(editor);
-                if (mygui::Widget* exitButton = mygui::findWidget(n.substr(0, n.size() - 11) + "exit")) {
-                    mygui::click(exitButton);
-                    log("ui: level editor closed (not allowed in multiplayer)");
-                }
-            }
+        blockLevelEditor(multiplayerWorld_ && net_.status() == ClientNet::Status::Connected);
         // Hide Kenshi's speed controls and paused banner in a locked world; give them back once
         // (never force them visible otherwise: the paused banner must stay Kenshi's to show).
         if (timeLocked_ || timeUiHidden_) {
             for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
                 if (mygui::Widget* w = mygui::findBySuffix(suffix, 12))
-                    // Transparent, never hidden: Kenshi's own code shows and hides these (its
-                    // conversations broke when we hid them: no more talking, roofs never cleared).
+                    // Transparent rather than hidden: Kenshi shows and hides these itself.
                     mygui::setProperty(w, "Alpha", timeLocked_ ? "0" : "1");
             timeUiHidden_ = timeLocked_;
         }
