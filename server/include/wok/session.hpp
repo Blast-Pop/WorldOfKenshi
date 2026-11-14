@@ -95,6 +95,8 @@ private:
         double steamPendingSince = 0.0;
         bool hasCharacter = false;
         std::string characterName;       // shown to the other players
+        std::string characterRace, characterTemplate;
+        std::vector<uint8_t> characterLook;  // what the other players' avatars wear
         std::string helloName;           // name sent in Hello (test bots have no character)
         bool positionDirty = false;
         std::map<uint8_t, float> stats;  // latest known skills of the character

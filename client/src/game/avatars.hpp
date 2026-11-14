@@ -28,6 +28,8 @@ private:
         uintptr_t character = 0;
         double nextSpawnTry = 0;
         std::string name;    // the remote player's character name
+        std::string templateId;  // their character template (race, look ranges, clothes)
+        bool templateUsed = false;  // the spawned body was made from templateId
         bool named = false;
         bool walking = false;
         float lastPos[3] = {0, 0, 0};

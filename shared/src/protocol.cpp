@@ -96,6 +96,9 @@ void write(ByteWriter&, const CharacterDied&) {}
 void write(ByteWriter& w, const PlayerInfo& m) {
     w.u32(m.playerId);
     writeString(w, m.name);
+    writeString(w, m.race);
+    writeString(w, m.templateId);
+    writeBytes(w, m.appearance.data(), m.appearance.size());
 }
 void write(ByteWriter& w, const WorldTime& m) {
     w.u32(m.day);
@@ -208,7 +211,9 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
         case MsgType::PlayerInfo: {
             PlayerInfo m;
             m.playerId = r.u32();
-            if (!readBytes(r, kMaxNameBytes, m.name)) return std::nullopt;
+            if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.race) ||
+                !readBytes(r, kMaxStringIdBytes, m.templateId) || !readBytes(r, kMaxAppearanceBytes, m.appearance))
+                return std::nullopt;
             return m;
         }
         case MsgType::WorldTime: {

@@ -25,6 +25,15 @@ void AvatarManager::onMessage(const Message& msg, double nowSec) {
         auto& a = avatars_[info->playerId];
         a.name = info->name;
         a.named = false;
+        if (a.templateId != info->templateId) {
+            a.templateId = info->templateId;
+            // Spawned before we knew their template: make the body again from it.
+            if (a.character && !a.templateUsed && !a.templateId.empty()) {
+                spawner_.destroy(a.character);
+                a.character = 0;
+                a.nextSpawnTry = 0;
+            }
+        }
     } else if (auto* left = std::get_if<PlayerLeft>(&msg)) {
         auto it = avatars_.find(left->playerId);
         if (it != avatars_.end()) {
@@ -62,9 +71,21 @@ void AvatarManager::update(double nowSec) {
         if (!a.character) {
             if (nowSec < a.nextSpawnTry) continue;
             a.nextSpawnTry = nowSec + kSpawnRetrySec;
-            a.character = spawner_.spawnCharacter(faction_, pos);
-            log("avatar: player %u -> character %p at (%.1f, %.1f, %.1f)", id, reinterpret_cast<void*>(a.character),
-                pos[0], pos[1], pos[2]);
+            uintptr_t tpl = 0;
+            if (!a.templateId.empty()) {
+                static int characterType = -1;  // GameData type of character templates, found once
+                if (characterType >= 0) tpl = spawner_.findGameData(a.templateId, characterType);
+                for (int t = 0; !tpl && characterType < 0 && t < 64; ++t)
+                    if ((tpl = spawner_.findGameData(a.templateId, t))) {
+                        characterType = t;
+                        log("avatar: character templates are GameData type %d", t);
+                    }
+            }
+            a.character = spawner_.spawnCharacter(faction_, pos, tpl);
+            a.templateUsed = tpl != 0;
+            log("avatar: player %u -> character %p at (%.1f, %.1f, %.1f), template '%s' %s", id,
+                reinterpret_cast<void*>(a.character), pos[0], pos[1], pos[2], a.templateId.c_str(),
+                tpl ? "found" : "not found");
             a.named = false;
             continue;
         }

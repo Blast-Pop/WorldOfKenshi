@@ -110,6 +110,7 @@ public:
     void setDevNoTimeLock(bool v) { devNoTimeLock_ = v; }
 private:
     uint32_t serverDay_ = 0;
+    std::string dayTextName_;  // full name of Kenshi's "Day: N" label, found once
 public:
 private:
     bool rebuilding_ = false;  // Kenshi's New Game is building the world: let it pause (time lock off)

@@ -126,7 +126,9 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_9") { CHECK(WOK_PROTOCOL_VERSION == 9);
+TEST_CASE("protocol_version_is_10") { CHECK(WOK_PROTOCOL_VERSION == 10);
+    PlayerInfo look{4, "Nine", "17-gamedata.quack", "tpl", {1, 2, 3}};
+    CHECK(decode(encode(look)) == std::optional<Message>(look));
     CHECK(decode(encode(CharacterDied{})) == std::optional<Message>(CharacterDied{}));
     CreateCharacter cc;
     cc.name = "A";

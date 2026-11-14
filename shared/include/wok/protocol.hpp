@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 9.
+// World of Kenshi wire protocol, version 10.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 9;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 10;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -173,6 +173,9 @@ struct CharacterDied {
 struct PlayerInfo {
     PlayerId playerId = 0;
     std::string name;  // their character's name
+    std::string race;        // FCS stringIDs, as in CharacterData
+    std::string templateId;
+    std::vector<uint8_t> appearance;  // encoded look (gender, hair, beard, exported body)
     bool operator==(const PlayerInfo&) const = default;
 };
 

@@ -16,7 +16,8 @@ public:
 
     uintptr_t findFaction(std::string_view name) const;  // by display name, 0 if absent
     // New squad of `faction` at `pos` holding one default character. Returns the Character*, 0 on failure.
-    uintptr_t spawnCharacter(uintptr_t faction, const float pos[3]) const;
+    // `charTemplate`: a character GameData (race, look ranges, clothes) or 0 for a random one.
+    uintptr_t spawnCharacter(uintptr_t faction, const float pos[3], uintptr_t charTemplate = 0) const;
     bool isAlive(uintptr_t character) const;  // still a valid CharacterHuman
     // Removes a character from the world (GameWorld::destroy), e.g. a player who left.
     bool destroy(uintptr_t character) const;

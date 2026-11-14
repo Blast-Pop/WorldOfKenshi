@@ -11,6 +11,14 @@
 namespace wok {
 
 namespace {
+// What the other players need to show this player's avatar.
+template <typename C>
+PlayerInfo infoOf(const C& c) {
+    return PlayerInfo{*c.player, c.characterName, c.characterRace, c.characterTemplate, c.characterLook};
+}
+}  // namespace
+
+namespace {
 
 std::string toHex(const AuthToken& t) {
     static const char* digits = "0123456789abcdef";
@@ -77,6 +85,7 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         cfg_.store->retire(c.steamId);
         c.hasCharacter = false;
         c.characterName.clear();
+        c.characterLook.clear();
         c.positionDirty = c.statsDirty = c.inventoryDirty = false;
         c.inventory.clear();
         std::vector<Outgoing> out{Outgoing{conn, CharacterDied{}}};
@@ -197,10 +206,15 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
     if (character) out.push_back({conn, *character});
     // Names: the newcomer learns the others', the others learn the newcomer's.
     c.characterName = character ? character->name : c.helloName;
+    if (character) {
+        c.characterRace = character->race;
+        c.characterTemplate = character->templateId;
+        c.characterLook = character->appearance;
+    }
     for (auto& [otherId, other] : conns_) {
         if (otherId == conn || !other.player) continue;
-        if (!other.characterName.empty()) out.push_back({conn, PlayerInfo{*other.player, other.characterName}});
-        if (!c.characterName.empty()) out.push_back({otherId, PlayerInfo{*c.player, c.characterName}});
+        if (!other.characterName.empty()) out.push_back({conn, infoOf(other)});
+        if (!c.characterName.empty()) out.push_back({otherId, infoOf(c)});
     }
     if (cfg_.worldTime) out.push_back({conn, cfg_.worldTime(nowSec)});
     for (auto& [otherId, other] : conns_)
@@ -237,9 +251,12 @@ std::vector<Outgoing> SessionManager::handleCreate(ConnId conn, Conn& c, const C
     if (!cfg_.store->create(c.steamId, d)) return {};
     c.hasCharacter = true;
     c.characterName = d.name;
+    c.characterRace = d.race;
+    c.characterTemplate = d.templateId;
+    c.characterLook = d.appearance;
     std::vector<Outgoing> out{Outgoing{conn, d}};
     for (auto& [otherId, other] : conns_)
-        if (otherId != conn && other.player) out.push_back({otherId, PlayerInfo{*c.player, d.name}});
+        if (otherId != conn && other.player) out.push_back({otherId, infoOf(c)});
     return out;
 }
 

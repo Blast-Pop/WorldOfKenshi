@@ -799,9 +799,8 @@ void MultiplayerMenu::update(float dt) {
         // is really being played (not in the character editor or behind our loading screen).
         timeLocked_ = multiplayerWorld_ && inGame_() && net_.status() == ClientNet::Status::Connected &&
                       !loadingShown_ && !rebuilding_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
-        if (serverDay_ && multiplayerWorld_ && net_.status() == ClientNet::Status::Connected)
-            if (mygui::Widget* dayText = mygui::findBySuffix("_DayText", 12))
-                mygui::setProperty(dayText, "Caption", "Day: " + std::to_string(serverDay_));
+        if (dayTextName_.empty())
+            if (mygui::Widget* dayText = mygui::findBySuffix("_DayText", 12)) dayTextName_ = mygui::nameOf(dayText);
         if (devNoTimeLock_) timeLocked_ = false;
         blockLevelEditor(multiplayerWorld_ && net_.status() == ClientNet::Status::Connected);
         // Hide Kenshi's speed controls and paused banner in a locked world; give them back once
@@ -825,6 +824,14 @@ void MultiplayerMenu::update(float dt) {
         if (windowOpen_) refreshRows();
     }
     updateLoading(dt);  // every frame: no gap between Kenshi's loading screen and ours
+    // The server's day in Kenshi's time panel. Kenshi rewrites that label with its local day all the
+    // time (the local day counter is left alone, see world_time.cpp), so ours goes in every frame.
+    if (serverDay_ && multiplayerWorld_ && !dayTextName_.empty() && net_.status() == ClientNet::Status::Connected) {
+        if (mygui::Widget* dayText = mygui::findWidget(dayTextName_))
+            mygui::setProperty(dayText, "Caption", "Day: " + std::to_string(serverDay_));
+        else
+            dayTextName_.clear();  // the panel was rebuilt: look it up again
+    }
     if (timeLocked_) enforceNormalSpeed();
     if (windowOpen_) {
         statusTimer_ += dt;
