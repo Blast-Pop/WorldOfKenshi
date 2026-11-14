@@ -36,7 +36,7 @@ void openInBrowser(const std::string& url) {
 
 }  // namespace
 
-void ClientNet::start(const ClientConfig& cfg, uint64_t steamId, const AuthToken& token) {
+void ClientNet::start(const ClientConfig& cfg, uint64_t steamId, const AuthToken& token, std::string ticket) {
     stop();
     running_ = true;
     status_ = Status::Connecting;
@@ -51,7 +51,7 @@ void ClientNet::start(const ClientConfig& cfg, uint64_t steamId, const AuthToken
         outgoingStats_.clear();
         outgoingInventory_.reset();
     }
-    thread_ = std::thread([this, cfg, steamId, token] { run(cfg, steamId, token); });
+    thread_ = std::thread([this, cfg, steamId, token, ticket] { run(cfg, steamId, token, ticket); });
 }
 
 void ClientNet::stop() {
@@ -95,7 +95,7 @@ std::optional<CharacterData> ClientNet::character() const {
     return character_;
 }
 
-void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
+void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::string ticket) {
     if (!netInit()) {
         log("net: GameNetworkingSockets init failed");
         status_ = Status::Disconnected;
@@ -117,6 +117,7 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token) {
                     Hello h{};
                     h.steamId = steamId;
                     h.token = token;
+                    h.ticket = ticket;
                     std::strncpy(h.name, cfg.name.c_str(), sizeof(h.name) - 1);
                     auto b = encode(h);
                     net.send(b, true);

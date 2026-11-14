@@ -2,6 +2,7 @@
 #include <wok/session.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <utility>
 
@@ -85,6 +86,14 @@ std::vector<Outgoing> SessionManager::handleHello(ConnId conn, Conn& c, const He
     if (cfg_.allowTestBots && h.steamId != 0 && h.steamId < kMaxTestBotSteamId) {
         c.steamId = h.steamId;  // test bot: no Steam account, never has a character
         return accept(conn, c, AuthToken{}, nowSec);
+    }
+
+    // Steam session ticket: Steam itself vouches for the account (and its Kenshi licence).
+    if (!h.ticket.empty() && cfg_.beginSteamAuth && cfg_.steamLicense && h.steamId >= kMaxTestBotSteamId &&
+        cfg_.beginSteamAuth(h.steamId, h.ticket)) {
+        c.steamPending = h.steamId;
+        c.steamPendingSince = nowSec;
+        return {};  // answered from tick() once Steam has checked it
     }
 
     if (h.token != AuthToken{}) {
@@ -238,6 +247,8 @@ std::vector<Outgoing> SessionManager::dropConn(ConnId conn) {
     auto it = conns_.find(conn);
     if (it == conns_.end()) return {};
     savePosition(it->second);
+    if (cfg_.endSteamAuth && it->second.player && it->second.steamId >= kMaxTestBotSteamId)
+        cfg_.endSteamAuth(it->second.steamId);
     if (auto p = pendingAuth_.find(it->second.nonce); p != pendingAuth_.end() && p->second.conn == conn)
         p->second.conn = 0;  // keep the Steam login alive for a reconnect
     std::optional<PlayerId> player = it->second.player;
@@ -270,6 +281,29 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
         }
     }
     std::vector<Outgoing> out;
+    for (auto& [id, c] : conns_) {
+        if (!c.steamPending || c.player) continue;
+        uint64_t steamId = c.steamPending;
+        int licence = cfg_.steamLicense(steamId);
+        if (licence == 0) {
+            c.steamPending = 0;
+            std::printf("[steam] %llu verified by Steam (owns Kenshi)\n", static_cast<unsigned long long>(steamId));
+            auto acc = completeAuth(id, c, steamId, nowSec);
+            out.insert(out.end(), acc.begin(), acc.end());
+        } else if (licence == 1) {
+            c.steamPending = 0;
+            if (cfg_.endSteamAuth) cfg_.endSteamAuth(steamId);
+            auto rej = reject(id, RejectReason::BadAuth);  // this account does not own Kenshi
+            out.insert(out.end(), rej.begin(), rej.end());
+        } else if (nowSec - c.steamPendingSince > kSteamAuthTimeoutSec) {
+            c.steamPending = 0;  // Steam too slow: fall back to the browser login
+            if (cfg_.endSteamAuth) cfg_.endSteamAuth(steamId);
+            c.nonce = toHex(cfg_.randomToken());
+            pendingAuth_[c.nonce] = PendingAuth{id, steamId, nowSec, 0};
+            pendingByClaimed_[steamId] = c.nonce;
+            out.push_back({id, AuthChallenge{cfg_.authUrlBase + c.nonce}});
+        }
+    }
     if (cfg_.worldTime && nowSec - lastWorldTimeSent_ >= kWorldTimeIntervalSec) {
         lastWorldTimeSent_ = nowSec;
         WorldTime t = cfg_.worldTime(nowSec);

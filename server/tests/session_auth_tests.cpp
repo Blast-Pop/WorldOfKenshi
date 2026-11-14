@@ -4,6 +4,7 @@
 #include <wok/session.hpp>
 
 #include <algorithm>
+#include <map>
 #include <cstring>
 
 using namespace wok;
@@ -383,4 +384,37 @@ TEST_CASE("players_get_the_world_time_on_join_and_regularly") {
     CHECK(all<WorldTime>(sm.tick(1.5)).empty());
     sm.onPacket(1, encode(Ping{}), kWorldTimeIntervalSec + 1.0);  // keep the player alive
     CHECK(all<WorldTime>(sm.tick(kWorldTimeIntervalSec + 1.0)).size() == 1);
+}
+
+TEST_CASE("steam_ticket_logs_in_without_browser_and_refuses_non_owners") {
+    Fixture f;
+    SessionConfig cfg = f.config();
+    std::map<uint64_t, int> licence;  // what "Steam" answers per SteamID
+    cfg.beginSteamAuth = [](uint64_t, const std::string& t) { return t == "valid"; };
+    cfg.steamLicense = [&licence](uint64_t id) { return licence.count(id) ? licence[id] : 2; };
+    SessionManager sm(cfg);
+    auto helloWith = [&](ConnId conn, uint64_t id, const std::string& ticket) {
+        sm.onConnect(conn, 0.0);
+        Hello h{};
+        h.steamId = id;
+        std::strcpy(h.name, "p");
+        h.ticket = ticket;
+        return sm.onPacket(conn, encode(h), 0.0);
+    };
+    CHECK(helloWith(1, 76561198000000001ull, "valid").empty());  // waiting for Steam
+    CHECK(all<HelloAck>(sm.tick(0.5)).empty());
+    licence[76561198000000001ull] = 0;  // Steam: owns Kenshi
+    auto acks = all<HelloAck>(sm.tick(1.0));
+    REQUIRE(acks.size() == 1);
+    CHECK(acks[0].reason == RejectReason::None);
+    CHECK(all<AuthChallenge>(sm.tick(1.0)).empty());  // never a browser step
+
+    helloWith(2, 76561198000000002ull, "valid");
+    licence[76561198000000002ull] = 1;  // Steam: does not own Kenshi
+    auto refused = all<HelloAck>(sm.tick(1.0));
+    REQUIRE(refused.size() == 1);
+    CHECK(refused[0].reason == RejectReason::BadAuth);
+
+    // Steam unreachable or a bad ticket: the browser login of this server, as before.
+    CHECK(all<AuthChallenge>(helloWith(3, 76561198000000003ull, "bad")).size() == 1);
 }

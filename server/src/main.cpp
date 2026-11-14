@@ -7,6 +7,7 @@
 #include <wok/character_store.hpp>
 #include <wok/session.hpp>
 #include <wok/spawn_file.hpp>
+#include <wok/steam_auth.hpp>
 #include <wok/transport.hpp>
 #include <wok/world_clock.hpp>
 
@@ -47,6 +48,12 @@ struct Args {
     std::string name = "World of Kenshi server";
     std::string description;
     bool master = false;         // also serve the master server list
+    bool steam = true;           // check players' Steam session tickets (no browser login)
+#ifdef _WIN32
+    std::string steamApi = "steam_api64.dll";
+#else
+    std::string steamApi = "./libsteam_api.so";
+#endif
     std::string announceUrl;     // master to announce this server to, e.g. http://1.2.3.4:27801
 };
 
@@ -79,6 +86,10 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.name = argv[++i];
         else if (k == "--description" && hasValue)
             a.description = argv[++i];
+        else if (k == "--no-steam")
+            a.steam = false;
+        else if (k == "--steam-api" && hasValue)
+            a.steamApi = argv[++i];
         else if (k == "--master")
             a.master = true;
         else if (k == "--announce" && hasValue)
@@ -100,7 +111,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
                          "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n"
                          "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
                          "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
-                         "                  [--default-spawn Name] [--master] [--announce http://MASTER:27801]\n");
+                         "                  [--default-spawn Name] [--master] [--announce http://MASTER:27801]\n"
+                         "                  [--no-steam] [--steam-api path/to/steam_api64.dll|libsteam_api.so]\n");
             return false;
         }
     }
@@ -181,6 +193,12 @@ int main(int argc, char** argv) {
         // Until players can pick their town, every new character starts at the default one.
         cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
     }
+    static SteamAuth steamAuth;
+    if (args.steam && steamAuth.start(args.steamApi, args.port)) {
+        cfg.beginSteamAuth = [](uint64_t id, const std::string& t) { return steamAuth.begin(id, t); };
+        cfg.steamLicense = [](uint64_t id) { return steamAuth.licence(id); };
+        cfg.endSteamAuth = [](uint64_t id) { steamAuth.end(id); };
+    }
     cfg.serverName = args.name;
     cfg.serverDescription = args.description;
 
@@ -257,6 +275,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 for (auto& [nonce, steamId] : http.poll()) flush(session.onAuthVerified(nonce, steamId, now()));
+                steamAuth.runCallbacks();
                 flush(session.tick(now()));
                 if (now() >= nextClockSave) {  // the clock survives a server restart
                     nextClockSave = now() + 60.0;

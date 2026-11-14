@@ -19,7 +19,8 @@ public:
     enum class Status { Disconnected, Connecting, AwaitingSteamLogin, Connected, Rejected };
 
     // `token`: the secret this server gave us earlier (zero on a first visit).
-    void start(const ClientConfig& cfg, uint64_t steamId, const AuthToken& token);
+    // `ticket`: Steam session ticket (empty if Steam is unavailable), checked by the server with Steam.
+    void start(const ClientConfig& cfg, uint64_t steamId, const AuthToken& token, std::string ticket = {});
     void stop();
     void pushLocal(const PlayerState& state);         // game thread
     void createCharacter(const CreateCharacter& c);   // game thread
@@ -34,7 +35,7 @@ public:
     bool hasCharacter() const { return hasCharacter_; }
 
 private:
-    void run(ClientConfig cfg, uint64_t steamId, AuthToken token);
+    void run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::string ticket);
 
     std::thread thread_;
     std::atomic<bool> running_{false};

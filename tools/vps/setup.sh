@@ -34,8 +34,27 @@ cmake --build --preset linux-release --target wok_server
 install -d /opt/wok /var/lib/wok
 install -m 755 build/linux-release/server/wok_server /opt/wok/wok_server
 install -m 644 docs/re/towns-1.0.68.txt /opt/wok/towns.txt
+
+# Steam session tickets (one login for every server, docs/m2-auth.md): libsteam_api.so comes from
+# the Steamworks SDK (uploaded by deploy.sh, never in the repository), steamclient.so from SteamCMD.
+STEAM_ARGS="--no-steam"
+if [ -f /root/libsteam_api.so ]; then
+  install -m 755 /root/libsteam_api.so /opt/wok/libsteam_api.so
+  apt-get install -y -q lib32gcc-s1 >/dev/null || true
+  if [ ! -f /opt/steamcmd/linux64/steamclient.so ]; then
+    mkdir -p /opt/steamcmd
+    curl -s https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C /opt/steamcmd
+    /opt/steamcmd/steamcmd.sh +quit >/dev/null 2>&1 || true
+  fi
+  if [ -f /opt/steamcmd/linux64/steamclient.so ]; then
+    install -d /var/lib/wok/.steam/sdk64
+    install -m 755 /opt/steamcmd/linux64/steamclient.so /var/lib/wok/.steam/sdk64/steamclient.so
+    STEAM_ARGS="--steam-api /opt/wok/libsteam_api.so"
+  fi
+fi
 id -u wok >/dev/null 2>&1 || useradd --system --home /var/lib/wok --shell /usr/sbin/nologin wok
 chown -R wok:wok /var/lib/wok
+echo "steam: ${STEAM_ARGS}"
 
 cat > /etc/systemd/system/wok-server.service <<UNIT
 [Unit]
@@ -47,7 +66,7 @@ Wants=network-online.target
 User=wok
 WorkingDirectory=/var/lib/wok
 ExecStart=/opt/wok/wok_server --db /var/lib/wok/world.sqlite --public-url http://${PUBLIC_IP}:27801 \
-  --name "${NAME}" --description "${DESCRIPTION}" --spawn-file /opt/wok/towns.txt --default-spawn "The Hub" ${LIST_ARGS}
+  --name "${NAME}" --description "${DESCRIPTION}" --spawn-file /opt/wok/towns.txt --default-spawn "The Hub" ${LIST_ARGS} ${STEAM_ARGS}
 Restart=on-failure
 RestartSec=3
 

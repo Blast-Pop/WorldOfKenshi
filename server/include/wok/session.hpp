@@ -24,6 +24,8 @@ class CharacterStore;
 inline constexpr double kProgressSaveIntervalSec = 2.0;
 // Clients realign their game clock to the server's this often.
 inline constexpr double kWorldTimeIntervalSec = 5.0;
+// Steam answers a ticket check within a second or two; past this the browser login is offered.
+inline constexpr double kSteamAuthTimeoutSec = 10.0;
 // Test bots (wok_testclient) use fake ids below this value; real SteamID64s start at 76561197960265728.
 inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
 // A Steam login in progress survives reconnects of the same claimed SteamID for this long.
@@ -55,6 +57,12 @@ struct SessionConfig {
     std::vector<SpawnPoint> spawnPoints;          // new characters appear at one of these
     std::function<size_t(size_t count)> pickSpawn;  // index in [0, count); random when empty
     std::function<WorldTime(double nowSec)> worldTime;  // the server's clock; none: no time sync
+    // Steam session tickets (docs/m2-auth.md): when set, a Hello carrying a ticket is checked with
+    // Steam instead of the browser login. beginSteamAuth returns true if Steam accepted the ticket
+    // for checking; steamLicense then answers 0 (owns Kenshi), 1 (does not) or 2 (still checking).
+    std::function<bool(uint64_t steamId, const std::string& ticket)> beginSteamAuth;
+    std::function<int(uint64_t steamId)> steamLicense;
+    std::function<void(uint64_t steamId)> endSteamAuth;
     bool allowTestBots = false;  // accept fake ids < kMaxTestBotSteamId without auth (testing only)
 };
 
@@ -82,6 +90,8 @@ private:
         std::optional<PlayerState> lastState;
         uint64_t steamId = 0;            // verified (or token-checked) identity
         std::string nonce;               // pending Steam OpenID
+        uint64_t steamPending = 0;       // SteamID whose session ticket Steam is checking
+        double steamPendingSince = 0.0;
         bool hasCharacter = false;
         bool positionDirty = false;
         std::map<uint8_t, float> stats;  // latest known skills of the character

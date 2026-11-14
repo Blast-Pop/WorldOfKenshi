@@ -96,7 +96,9 @@ void connectToServer() {
     if (!s.steamId) s.steamId = wok::localSteamId();
     auto tokens = loadTokens();
     auto it = tokens.find(wok::serverKey(s.cfg.host, s.cfg.port));
-    s.net->start(s.cfg, s.steamId, it == tokens.end() ? wok::AuthToken{} : it->second);
+    auto ticket = wok::steamAuthTicket();  // lets a Steam-enabled server skip the browser login
+    s.net->start(s.cfg, s.steamId, it == tokens.end() ? wok::AuthToken{} : it->second,
+                 std::string(ticket.begin(), ticket.end()));
 }
 
 void onFrame(float dt) {
