@@ -29,9 +29,10 @@ private:
         double nextSpawnTry = 0;
         std::string name;    // the remote player's character name
         bool named = false;
+        bool walking = false;
         float lastPos[3] = {0, 0, 0};
         double nextTrace = 0;
-        double nextOrder = 0;
+        double nextOrder = 0;  // next walk order allowed (seconds)
     };
     Spawner spawner_;
     std::unordered_map<PlayerId, Avatar> avatars_;

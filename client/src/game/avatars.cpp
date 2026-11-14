@@ -1,5 +1,8 @@
 #include "avatars.hpp"
 
+#include "game_memory.hpp"
+#include "orders.hpp"
+
 #include "../log.hpp"
 
 #include <cmath>
@@ -69,12 +72,31 @@ void AvatarManager::update(double nowSec) {
             Spawner::setName(a.character, a.name);
             a.named = true;
         }
-        // Follow the network position by teleport (walking with Kenshi's own move orders is not
-        // working yet: docs/re/orders.md).
-        float tx = pos[0] - a.lastPos[0], tz = pos[2] - a.lastPos[2];
-        if (tx * tx + tz * tz > 0.25f) {
+        // Follow the network position by walking there with Kenshi's own move orders (pathfinding
+        // and animations, docs/re/orders.md); teleport only when far behind (join, lag, fast moves).
+        float here[3];
+        if (!mem::readBytes(a.character + 0x48, here, sizeof(here))) continue;
+        const float dx = pos[0] - here[0], dz = pos[2] - here[2];
+        const float gap2 = dx * dx + dz * dz;
+        if (nowSec >= a.nextTrace && gap2 > 25.0f) {  // trace only when an avatar lags behind
+            a.nextTrace = nowSec + 5.0;
+            log("avatar: player %u at (%.1f, %.1f) wants (%.1f, %.1f) gap %.1f %s", id, here[0], here[2], pos[0], pos[2],
+                std::sqrt(gap2), a.walking ? "walking" : "idle");
+        }
+        constexpr float kTeleportGap = 40.0f, kArrived = 1.0f;
+        if (gap2 > kTeleportGap * kTeleportGap) {
             spawner_.setPosition(a.character, pos);
-            std::memcpy(a.lastPos, pos, sizeof(pos));
+            a.walking = false;
+        } else if (gap2 > kArrived * kArrived) {
+            const float mx = pos[0] - a.lastPos[0], mz = pos[2] - a.lastPos[2];
+            if ((!a.walking || mx * mx + mz * mz > 0.25f) && nowSec >= a.nextOrder) {
+                orderMoveTo(a.character, pos);
+                a.walking = true;
+                a.nextOrder = nowSec + 0.25;
+                std::memcpy(a.lastPos, pos, sizeof(pos));
+            }
+        } else {
+            a.walking = false;
         }
     }
 }
