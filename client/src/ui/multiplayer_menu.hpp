@@ -34,6 +34,8 @@ private:
     void applyPauseMenu();      // connected: no local save/load in the pause menu, Disconnect instead
     void enforceNormalSpeed();  // multiplayer: the game always runs at normal speed
     bool timeLocked_ = false;
+    bool timeUiHidden_ = false;  // we hid Kenshi's speed controls
+    bool devNoTimeLock_ = false;  // dev switch (file WorldOfKenshi/dev_no_timelock)
     bool menuPauseLogged_ = false;
 
     ClientConfig& cfg_;
@@ -105,6 +107,7 @@ public:
     // The server's day, shown in the time panel instead of Kenshi's local day counter (which is
     // left alone: moving it ages every character, see world_time.cpp). 0 = not in a server world.
     void setServerDay(uint32_t day) { serverDay_ = day; }
+    void setDevNoTimeLock(bool v) { devNoTimeLock_ = v; }
 private:
     uint32_t serverDay_ = 0;
 public:

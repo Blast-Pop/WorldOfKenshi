@@ -129,6 +129,12 @@ void lap(FrameProfile::Part part) {
     g_lap = t;
 }
 
+bool devSwitch(const char* name) {  // dev-only switches: an empty file in WorldOfKenshi/
+    bool on = std::ifstream(wok::modFile(wok::modDir(), name)).good();
+    if (on) wok::log("dev switch on: %s", name);
+    return on;
+}
+
 void onFrame(float dt) {
     auto& s = *g_state;
     s.now += dt;
@@ -298,6 +304,8 @@ void onFrame(float dt) {
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
         {
             if (s.menu) s.menu->setServerDay(wt->day);
+            static const bool noClock = devSwitch("dev_no_clock");
+            if (noClock) continue;
             float hunger = 0;
             bool known = wok::readHunger(s.reader.character(), hunger);
             if (wok::applyWorldTime(s.reader.gameWorld(), *wt) && known) {
@@ -361,6 +369,7 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
                     g_state->net->stop();
                     g_state->avatars.clear();
                 });
+        if (g_state->menu) g_state->menu->setDevNoTimeLock(devSwitch("dev_no_timelock"));
         wok::installFrameHook(onFrame);
         wok::log("Multiplayer button on the main menu (F9 also connects, for development)");
     } catch (...) {

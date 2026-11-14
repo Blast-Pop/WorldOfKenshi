@@ -696,13 +696,17 @@ void MultiplayerMenu::refreshStatus() {
 }
 
 void MultiplayerMenu::enforceNormalSpeed() {
+    // Kenshi pauses the world during a conversation and resumes it when the conversation ends;
+    // forcing it to run meanwhile left the conversation open for good (no more talking, roofs
+    // never cleared). Only looked up when something paused or changed the speed.
+    auto inConversation = [] { return mygui::findShownBySuffix("_PlayerDialog", 12) != nullptr; };
     // GameWorld + 0x700: game speed (0 paused, 1 normal, 2 and 5 fast), docs/re/game-world.md.
     constexpr uintptr_t kGameSpeed = 0x2134110 + 0x700;
     // GameWorld + 0x8b9: set while a menu (Escape) pauses the world; the per-frame time update
     // multiplies by 0 then (RVA 0x66f190). A multiplayer world never stops.
     constexpr uintptr_t kMenuPaused = 0x2134110 + 0x8b9;
     uint8_t paused = 0;
-    if (mem::readBytes(mem::moduleBase() + kMenuPaused, &paused, 1) && paused == 1) {
+    if (mem::readBytes(mem::moduleBase() + kMenuPaused, &paused, 1) && paused == 1 && !inConversation()) {
         uint8_t zero = 0;
         mem::writeBytes(mem::moduleBase() + kMenuPaused, &zero, 1);
         if (!menuPauseLogged_) log("ui: menu pause refused in multiplayer");
@@ -710,7 +714,27 @@ void MultiplayerMenu::enforceNormalSpeed() {
     }
     float speed = 1.0f;
     if (!mem::readBytes(mem::moduleBase() + kGameSpeed, &speed, sizeof(speed)) || speed == 1.0f) return;
-    // Kenshi's own "normal speed" button keeps its UI (paused banner, button states) consistent.
+    if (inConversation()) return;
+    if (speed <= 0.0f) {
+        // A pause (Space): undo it with Kenshi's own toggle, Space again. Setting the speed back
+        // through the speed button leaves Kenshi's "paused" state set, and its conversations then
+        // never close. One press per 0.5 s, the time Kenshi needs to take it.
+        static ULONGLONG lastPress = 0;
+        ULONGLONG nowMs = GetTickCount64();
+        if (nowMs - lastPress < 500) return;
+        lastPress = nowMs;
+        INPUT in[2] = {};
+        for (INPUT& i : in) {
+            i.type = INPUT_KEYBOARD;
+            i.ki.wScan = 0x39;  // Space
+            i.ki.dwFlags = KEYEVENTF_SCANCODE;
+        }
+        in[1].ki.dwFlags |= KEYEVENTF_KEYUP;
+        SendInput(2, in, sizeof(INPUT));
+        log("ui: pause refused in multiplayer (Space sent back)");
+        return;
+    }
+    // Fast speeds: Kenshi's own "normal speed" button keeps its UI consistent.
     if (mygui::Widget* normal = mygui::findBySuffix("_TimeSpeedButton2", 12)) {
         mygui::click(normal);
         log("ui: game speed %.0f refused in multiplayer, back to normal", speed);
@@ -734,8 +758,17 @@ void MultiplayerMenu::update(float dt) {
         if (serverDay_ && multiplayerWorld_ && net_.status() == ClientNet::Status::Connected)
             if (mygui::Widget* dayText = mygui::findBySuffix("_DayText", 12))
                 mygui::setProperty(dayText, "Caption", "Day: " + std::to_string(serverDay_));
-        for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
-            if (mygui::Widget* w = mygui::findBySuffix(suffix, 12)) mygui::setVisible(w, !timeLocked_);
+        if (devNoTimeLock_) timeLocked_ = false;
+        // Hide Kenshi's speed controls and paused banner in a locked world; give them back once
+        // (never force them visible otherwise: the paused banner must stay Kenshi's to show).
+        if (timeLocked_ || timeUiHidden_) {
+            for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
+                if (mygui::Widget* w = mygui::findBySuffix(suffix, 12))
+                    // Transparent, never hidden: Kenshi's own code shows and hides these (its
+                    // conversations broke when we hid them: no more talking, roofs never cleared).
+                    mygui::setProperty(w, "Alpha", timeLocked_ ? "0" : "1");
+            timeUiHidden_ = timeLocked_;
+        }
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
             browser_.stop();
             windowOpen_ = false;
