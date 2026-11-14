@@ -49,20 +49,70 @@ bool guardedAdd(AddTaskFn fn, uintptr_t queue, uintptr_t task) {
 
 }  // namespace
 
+// Kenshi's "add an order" on a character's AI (RVA 0x5086d0):
+// (ai, int taskType, hand* target, const Vector3* pos, bool playerOrder). It builds the task with
+// the task factory, stores it in the AI's order list and makes the AI re-plan; a task that is only
+// created (as tried before) is dropped at once, the character moving a few centimetres.
+constexpr uintptr_t kAddOrder = 0x5086d0;
+constexpr uint8_t kAddOrderPrologue[] = {0x48, 0x8b, 0xc4, 0x48, 0x89, 0x58, 0x20, 0x55, 0x41, 0x54};
+using AddOrderFn = void (*)(uintptr_t, int, Hand*, const float*, bool);
+
+bool guardedAddOrder(AddOrderFn fn, uintptr_t ai, int type, Hand* target, const float* pos, bool player) {
+    __try {
+        fn(ai, type, target, pos, player);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool orderMoveTo(uintptr_t character, const float pos[3]) {
-    uintptr_t base = mem::moduleBase();
-    uint8_t p[sizeof(kCreateTaskPrologue)];
-    uintptr_t owner = 0, ctx = 0, queue = 0, vt = 0, addFn = 0, handVt = 0;
-    if (!mem::isA(character, ".?AVCharacterHuman@@") || !mem::readBytes(base + kCreateTask, p, sizeof(p)) ||
-        std::memcmp(p, kCreateTaskPrologue, sizeof(p)) != 0 || !mem::readPtr(character + kCharTaskOwner, owner) ||
-        !owner || !mem::readPtr(owner + kTaskContextOff, ctx) || !ctx ||
-        !mem::readPtr(character + kCharTaskQueue, queue) || !queue || !mem::readPtr(queue, vt) ||
-        !mem::readPtr(vt + kAddTaskVt, addFn) || !mem::readPtr(base + kNullHand, handVt))
+    uintptr_t base = mem::moduleBase(), owner = 0, ai = 0, handVt = 0;  // AI: *(*(character + 0x650) + 0x20)
+    uint8_t p[sizeof(kAddOrderPrologue)];
+    if (!mem::isA(character, ".?AVCharacterHuman@@") || !mem::readBytes(base + kAddOrder, p, sizeof(p)) ||
+        std::memcmp(p, kAddOrderPrologue, sizeof(p)) != 0 || !mem::readPtr(character + kCharTaskOwner, owner) || !owner || !mem::readPtr(owner + 0x20, ai) ||
+        !ai || !mem::readPtr(base + kNullHand, handVt))
         return false;
     Hand target{handVt, 0xb, 0, 0, 0, 0};  // no target object: a plain move to a position
-    uintptr_t task = guardedCreate(reinterpret_cast<CreateTaskFn>(base + kCreateTask), ctx, &target, pos);
-    if (!task) return false;
-    return guardedAdd(reinterpret_cast<AddTaskFn>(addFn), queue, task);
+    return guardedAddOrder(reinterpret_cast<AddOrderFn>(base + kAddOrder), ai, kTaskMove, &target, pos, true);
+}
+
+namespace {
+constexpr uintptr_t kCharMovementVtable = 0x16fcc88;  // RVA of CharMovement's vtable (1.0.68)
+constexpr uintptr_t kSetDestinationSlot = 0x90;
+
+bool callSetDestination(uintptr_t fn, uintptr_t mv, const float* pos, int mode) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, const float*, int, int)>(fn)(mv, pos, mode, 0);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+}  // namespace
+
+uintptr_t charMovement(uintptr_t character) {
+    static size_t offset = 0;  // found once: the same for every character
+    const uintptr_t vt = mem::moduleBase() + kCharMovementVtable;
+    auto isMovement = [&](uintptr_t p) {
+        uintptr_t v = 0;
+        return p && mem::readPtr(p, v) && v == vt;
+    };
+    uintptr_t p = 0;
+    if (offset && mem::readPtr(character + offset, p) && isMovement(p)) return p;
+    for (size_t off = 8; off < 0x1000; off += 8)
+        if (mem::readPtr(character + off, p) && isMovement(p)) {
+            if (offset != off) log("orders: CharMovement at character + 0x%zx", off);
+            offset = off;
+            return p;
+        }
+    return 0;
+}
+
+bool setDestination(uintptr_t character, const float pos[3], int mode) {
+    uintptr_t mv = charMovement(character), vt = 0, fn = 0;
+    if (!mv || !mem::readPtr(mv, vt) || !mem::readPtr(vt + kSetDestinationSlot, fn) || !fn) return false;
+    return callSetDestination(fn, mv, pos, mode);
 }
 
 }  // namespace wok

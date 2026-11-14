@@ -1,4 +1,4 @@
-# AI orders (Kenshi 1.0.68) — in progress
+# AI orders (Kenshi 1.0.68)
 
 Goal: make remote players' avatars walk/run with their animations instead of following by teleport.
 
@@ -14,3 +14,16 @@ Goal: make remote players' avatars walk/run with their animations instead of fol
   used by a right-click move, or the avatars' AI being active. Avatars follow by teleport meanwhile.
 - `GameWorld::destroy` RVA `0x799af0` `(GameWorld*, RootObject*, int, const char* reason)` removes an
   object; used to remove the avatar of a player who left (verified).
+
+## Working move order (verified 2026-11-14)
+- **Add an order**: RVA `0x5086d0` `(ai, int taskType, hand* target, const Vector3* pos, bool playerOrder)`,
+  where `ai = *(*(character + 0x650) + 0x20)`. It builds the task with the factory (`0x32ebd0`), stores it in
+  the AI's order list (`playerOrder`: the list at `ai + 0x88`, count `+0x90`, data `+0x98`, an existing order
+  of the same type and target is kept instead), then calls `ai->vtable[0x18]` to re-plan.
+- Type 1 (`Task_Move`) with an empty `hand` (`{hand vtable (RVA 0x1e3a5f8 holds it), 0xb, 0...}`) walks the
+  character to the position with its own pathfinding and animations (~5 units/s walking). Verified on the
+  player's character.
+- Why the earlier try failed: a task made by the factory and only passed to `vtable[0x18]` is never stored in
+  an order list, so the AI drops it (the character moves a few centimetres).
+- `CharMovement` (vtable RVA `0x16fcc88`, at `character + 0x640`): `vtable[0x90]` is setDestination
+  `(this, const Vector3*, int mode, int)`, `vtable[0x80]` moves to an object. Called alone, the AI overrides it.

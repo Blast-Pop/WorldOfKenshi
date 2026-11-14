@@ -608,7 +608,7 @@ void onF2() {
     if (!copyRaw(ch + 0x48, pos, sizeof(pos))) return;
     pos[0] += 100.0f;
     bool ok = orderMoveTo(ch, pos);
-    log("move: order to (%.1f, %.1f, %.1f): %s", pos[0], pos[1], pos[2], ok ? "given" : "FAILED");
+    log("move: addOrder Task_Move to (%.1f, %.1f, %.1f): %s", pos[0], pos[1], pos[2], ok ? "given" : "FAILED");
     g_tpChar = ch;
     g_tpUntil = GetTickCount64() / 1000.0 + 4.0;
     g_tpNextLog = 0;
