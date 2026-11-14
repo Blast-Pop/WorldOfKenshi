@@ -442,3 +442,26 @@ TEST_CASE("players_learn_each_others_names") {
     CHECK(newcomerLearnt);
     CHECK(firstLearnt);
 }
+
+TEST_CASE("death_is_permanent_and_the_player_stays_connected") {
+    Fixture f;
+    SessionConfig cfg = f.config();
+    SessionManager sm(cfg);
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    REQUIRE(f.store.create(42, sampleChar()));
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 42;
+    std::strcpy(h.name, "p");
+    h.token = t;
+    sm.onPacket(1, encode(h), 0.0);
+    auto out = sm.onPacket(1, encode(CharacterDied{}), 1.0);
+    CHECK(all<CharacterDied>(out).size() == 1);
+    CHECK(!f.store.load(42));                 // gone from the server
+    CreateCharacter cc;
+    cc.name = "Second";
+    cc.race = "r";
+    CHECK(all<CharacterData>(sm.onPacket(1, encode(cc), 2.0)).size() == 1);  // a new one, same connection
+}

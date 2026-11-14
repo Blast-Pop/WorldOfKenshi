@@ -68,6 +68,9 @@ struct ClientState {
     bool characterSent = false;  // CreateCharacter already sent during this connection
     bool characterRestored = false;
     std::map<uint8_t, float> statsSent;  // skills the server already has
+    bool dead = false;                   // our character died; reported, waiting for the server
+    double nextDeathCheck = 0;
+    uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
     wok::Items items;
     bool itemsOk = false;
     std::string inventorySent;           // inventory text the server already has
@@ -144,6 +147,8 @@ void onFrame(float dt) {
     if (!connected) {
         s.characterSent = false;
         s.characterRestored = false;
+        s.dead = false;
+        s.deadCharacter = 0;
     }
 
     // Returning player: Kenshi's New Game only loads the world; bring back the server character
@@ -173,7 +178,19 @@ void onFrame(float dt) {
         }
     }
     // Continuous save (spec 7.7): once a second, send the skills that changed since last time.
-    if (connected && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextStatsPoll) {
+    // Permanent death (server rule): report it once; the server retires the character.
+    if (connected && !s.dead && s.net->character() && (s.characterRestored || s.characterSent) &&
+        s.now >= s.nextDeathCheck) {
+        s.nextDeathCheck = s.now + 1.0;
+        if (wok::isDead(s.reader.character())) {
+            s.dead = true;
+            s.deadCharacter = s.reader.character();  // never re-register this body
+            s.net->reportDeath();
+            wok::log("character: died, reported to the server (permanent death)");
+        }
+    }
+
+    if (connected && !s.dead && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextStatsPoll) {
         s.nextStatsPoll = s.now + 1.0;
         wok::StatsUpdate u;
         for (auto& st : wok::readStats(s.reader.character())) {
@@ -189,7 +206,7 @@ void onFrame(float dt) {
     }
     if (!connected) s.statsSent.clear();
     // Same for the inventory, as a whole, every 2 s when it changed.
-    if (connected && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextInventoryPoll) {
+    if (connected && !s.dead && s.net->character() && (s.characterRestored || s.characterSent) && s.now >= s.nextInventoryPoll) {
         s.nextInventoryPoll = s.now + 2.0;
         std::string inv = wok::readInventory(s.reader.character());
         if (inv != s.inventorySent && inv.size() <= wok::kMaxInventoryBytes) {
@@ -202,7 +219,8 @@ void onFrame(float dt) {
 
     // First visit: once the player has made their character with Kenshi's own New Game flow,
     // register it on the server (name, race and look by FCS string ID).
-    if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character()) {
+    if (connected && !s.characterSent && !s.net->hasCharacter() && s.reader.character() &&
+        s.reader.character() != s.deadCharacter) {
         if (auto c = wok::readIdentity(s.reader.character())) {
             s.net->createCharacter(*c);
             s.characterSent = true;
@@ -212,6 +230,14 @@ void onFrame(float dt) {
     }
     s.wasConnected = connected;
     for (auto& m : s.net->drainIncoming()) {
+        if (std::holds_alternative<wok::CharacterDied>(m)) {  // retired: make a new one, still connected
+            s.dead = false;
+            s.characterSent = false;
+            s.characterRestored = false;
+            s.statsSent.clear();
+            if (s.menu) s.menu->restartForNewCharacter();
+            continue;
+        }
         if (auto* ps = std::get_if<wok::PlayerState>(&m)) {
             if (s.now - s.lastRemoteLog[ps->playerId] >= 5.0) {  // light trace, 1 line / 5 s / player
                 s.lastRemoteLog[ps->playerId] = s.now;

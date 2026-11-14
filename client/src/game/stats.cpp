@@ -1,6 +1,7 @@
 #include "stats.hpp"
 
 #include "game_memory.hpp"
+#include "../log.hpp"
 
 #include <windows.h>
 
@@ -121,6 +122,21 @@ int writeStats(uintptr_t character, const std::vector<StatValue>& values) {
             }
     }
     return written;
+}
+
+bool isDead(uintptr_t character) {
+    if (!character) return false;
+    uint32_t count = 0;
+    uintptr_t parts = 0;
+    if (!mem::readBytes(character + kPartCount, &count, sizeof(count)) || count < 3 || !mem::readPtr(character + kParts, parts))
+        return false;
+    for (uint32_t i = 0; i < 3; ++i) {
+        uintptr_t part = 0;
+        float hp = 0;
+        if (mem::readPtr(parts + 8 * i, part) && part && mem::readBytes(part + kPartFieldA, &hp, sizeof(hp)) && hp <= -100.0f)
+            return true;
+    }
+    return false;
 }
 
 }  // namespace wok

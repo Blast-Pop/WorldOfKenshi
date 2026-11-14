@@ -27,6 +27,9 @@ constexpr const char* kMigrations[] = {
     "ALTER TABLE characters ADD COLUMN template TEXT NOT NULL DEFAULT '';",
     "ALTER TABLE characters ADD COLUMN stats BLOB NOT NULL DEFAULT x'';",
     "ALTER TABLE characters ADD COLUMN inventory BLOB NOT NULL DEFAULT x'';",
+    "CREATE TABLE IF NOT EXISTS dead_characters (steam_id INTEGER NOT NULL, name TEXT NOT NULL, race TEXT NOT NULL,"
+    " appearance BLOB NOT NULL, x REAL, y REAL, z REAL, template TEXT, stats BLOB, inventory BLOB,"
+    " died_at INTEGER NOT NULL);",
 };
 
 // Stats on disk: id (1 byte) + value (float, 4 bytes little-endian) per skill.
@@ -159,6 +162,17 @@ bool CharacterStore::create(uint64_t steamId, const CharacterData& c) {
     s.id(1, steamId).text(2, c.name).text(3, c.race).blob(4, c.appearance.data(), c.appearance.size());
     s.real(5, c.x).real(6, c.y).real(7, c.z).real(8, c.yaw).text(9, c.templateId);
     return s.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+}
+
+bool CharacterStore::retire(uint64_t steamId) {
+    Stmt keep(db_, "INSERT INTO dead_characters(steam_id, name, race, appearance, x, y, z, template, stats, inventory, died_at) "
+                   "SELECT steam_id, name, race, appearance, x, y, z, template, stats, inventory, strftime('%s','now') "
+                   "FROM characters WHERE steam_id = ?1");
+    keep.id(1, steamId);
+    if (keep.step() != SQLITE_DONE || sqlite3_changes(db_) != 1) return false;
+    Stmt del(db_, "DELETE FROM characters WHERE steam_id = ?1");
+    del.id(1, steamId);
+    return del.step() == SQLITE_DONE;
 }
 
 void CharacterStore::saveStats(uint64_t steamId, const std::vector<StatValue>& stats) {

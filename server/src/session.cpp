@@ -70,6 +70,19 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         handleStats(c, *st);
         return {};
     }
+    if (std::holds_alternative<CharacterDied>(*msg)) {
+        // Permanent death: the character is retired; the player stays connected and makes a new one.
+        if (!c.hasCharacter || !cfg_.store) return {};
+        cfg_.store->retire(c.steamId);
+        c.hasCharacter = false;
+        c.characterName.clear();
+        c.positionDirty = c.statsDirty = c.inventoryDirty = false;
+        c.inventory.clear();
+        std::vector<Outgoing> out{Outgoing{conn, CharacterDied{}}};
+        for (auto& [otherId, other] : conns_)
+            if (otherId != conn && other.player) out.push_back({otherId, PlayerLeft{*c.player}});
+        return out;
+    }
     return {};  // server-to-client messages are ignored when received from a client
 }
 

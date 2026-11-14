@@ -29,6 +29,7 @@ public:
     std::vector<Message> drainIncoming();             // game thread
     std::optional<AuthToken> takeIssuedToken();       // new token to persist, once
     std::optional<CharacterData> character() const;   // our server-side character, once known
+    void reportDeath();                                 // permanent death of our character
     Status status() const { return status_; }
     RejectReason rejectReason() const { return reject_; }
     PlayerId playerId() const { return playerId_; }
@@ -46,6 +47,7 @@ private:
     mutable std::mutex mutex_;
     std::optional<PlayerState> outgoing_;
     std::optional<CreateCharacter> outgoingCreate_;
+    bool outgoingDeath_ = false;
     std::map<uint8_t, float> outgoingStats_;
     std::optional<std::vector<uint8_t>> outgoingInventory_;
     std::vector<Message> incoming_;

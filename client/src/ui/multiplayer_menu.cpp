@@ -104,7 +104,7 @@ void MultiplayerMenu::applyPauseMenu() {
     if (!resume) return;                                                 // pause menu not open
     // A world started from multiplayer never touches local saves, even after a disconnect (the exit
     // dialog would otherwise reveal Save again): hide New/Save/Load until back on the title screen.
-    bool mp = multiplayerWorld_;
+    bool mp = multiplayerWorld_ && !newGameAsked_;  // after a death, New Game is the way on
     for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
         if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
             mygui::setVisible(b, !mp);
@@ -547,6 +547,38 @@ void MultiplayerMenu::applyConnectedMenu() {
     mygui::click(newGame);
 }
 
+void MultiplayerMenu::driveNewGame(float dt) {
+    if (confirmWindow_ > 0) {  // Kenshi may ask to confirm leaving the current world
+        confirmWindow_ -= dt;
+        if (mygui::Widget* yes = mygui::findBySuffixExcept("_ButtonA", kLoadingPrefix, 4)) {
+            log("ui: confirming New Game");
+            mygui::click(yes);
+            confirmWindow_ = 0;
+        }
+    }
+    if (!newGameAsked_) return;
+    newGameTimer_ += dt;
+    if (newGameTimer_ < 1.5f) return;
+    newGameTimer_ = 0;
+    if (mygui::Widget* newGame = mygui::findBySuffix("_NewGameButton", 3)) {
+        log("ui: character dead, starting a new character (New Game)");
+        newGameAsked_ = false;
+        confirmWindow_ = 5.0f;
+        mygui::click(newGame);
+        return;
+    }
+    // The pause menu is closed: open it with Escape (hardware scan code, as Kenshi reads input).
+    INPUT in[2] = {};
+    for (INPUT& i : in) {
+        i.type = INPUT_KEYBOARD;
+        i.ki.wScan = 0x01;
+        i.ki.dwFlags = KEYEVENTF_SCANCODE;
+    }
+    in[1].ki.dwFlags |= KEYEVENTF_KEYUP;
+    SendInput(2, in, sizeof(INPUT));
+    log("ui: opening the pause menu for New Game");
+}
+
 void MultiplayerMenu::refreshStatus() {
     std::string s;
     if (!error_.empty()) {
@@ -593,6 +625,7 @@ void MultiplayerMenu::enforceNormalSpeed() {
 }
 
 void MultiplayerMenu::update(float dt) {
+    driveNewGame(dt);
     if (!mygui::available()) return;
     pollTimer_ += dt;
     if (pollTimer_ >= 0.5f) {

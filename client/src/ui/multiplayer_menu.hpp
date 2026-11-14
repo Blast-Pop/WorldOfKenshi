@@ -83,6 +83,14 @@ private:
 public:
     // Called by the client once the returning player's character is back in place.
     void setWorldReady() { worldReady_ = true; }
+    // Permanent death: run Kenshi's New Game from the pause menu, staying connected.
+    void restartForNewCharacter() { newGameAsked_ = true; newGameTimer_ = 0; }
+
+private:
+    bool newGameAsked_ = false;
+    float newGameTimer_ = 0;  // seconds since the last attempt
+    float confirmWindow_ = 0; // seconds left to accept Kenshi's "lose progress?" dialog
+    void driveNewGame(float dt);
 };
 
 }  // namespace wok

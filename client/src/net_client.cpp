@@ -80,6 +80,13 @@ void ClientNet::sendInventory(std::vector<uint8_t> items) {
     outgoingInventory_ = std::move(items);
 }
 
+void ClientNet::reportDeath() {
+    std::lock_guard lock(mutex_);
+    outgoingDeath_ = true;
+    outgoingStats_.clear();
+    outgoingInventory_.reset();
+}
+
 std::vector<Message> ClientNet::drainIncoming() {
     std::lock_guard lock(mutex_);
     return std::exchange(incoming_, {});
@@ -151,6 +158,12 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                         }
                         continue;
                     }
+                    if (std::holds_alternative<CharacterDied>(*m)) {  // retired: a new one is needed
+                        std::lock_guard lock(mutex_);
+                        character_.reset();
+                        hasCharacter_ = false;
+                        log("net: the server retired our dead character");
+                    }
                     if (auto* cd = std::get_if<CharacterData>(&*m)) {
                         std::lock_guard lock(mutex_);
                         character_ = *cd;
@@ -176,12 +189,14 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
             if (status_ == Status::Connected) {
                 std::optional<PlayerState> out;
                 std::optional<CreateCharacter> create;
+                bool death = false;
                 std::map<uint8_t, float> stats;
                 std::optional<std::vector<uint8_t>> inventory;
                 {
                     std::lock_guard lock(mutex_);
                     out = std::exchange(outgoing_, std::nullopt);
                     create = std::exchange(outgoingCreate_, std::nullopt);
+                    death = std::exchange(outgoingDeath_, false);
                     // Only after the character exists on the server (it ignores stats before).
                     if (!create && character_) {
                         stats = std::exchange(outgoingStats_, {});
@@ -194,6 +209,10 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                 }
                 if (create) {
                     auto b = encode(*create);
+                    net.send(b, true);
+                }
+                if (death) {
+                    auto b = encode(CharacterDied{});
                     net.send(b, true);
                 }
                 if (inventory) {

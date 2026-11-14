@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "error: default spawn '%s' is not in the spawn points\n", args.defaultSpawn.c_str());
             return 1;
         }
-        // Until players can pick their town, every new character starts at the default one.
+        // Every new character starts at the default town.
         cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
     }
     static SteamAuth steamAuth;

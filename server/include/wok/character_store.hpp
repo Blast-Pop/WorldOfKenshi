@@ -25,6 +25,8 @@ public:
 
     std::optional<CharacterData> load(uint64_t steamId);
     bool create(uint64_t steamId, const CharacterData& c);  // false if the player already has one
+    // Permanent death: moves the character to dead_characters (kept for the server admin).
+    bool retire(uint64_t steamId);
     void savePosition(uint64_t steamId, float x, float y, float z, float yaw);
     void saveStats(uint64_t steamId, const std::vector<StatValue>& stats);  // replaces all saved skills
     void saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory);
