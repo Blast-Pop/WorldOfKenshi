@@ -96,6 +96,7 @@ void connectToServer() {
     if (!s.steamId) s.steamId = wok::localSteamId();
     auto tokens = loadTokens();
     auto it = tokens.find(wok::serverKey(s.cfg.host, s.cfg.port));
+    wok::cancelSteamAuthTicket();  // one live ticket at a time
     auto ticket = wok::steamAuthTicket();  // lets a Steam-enabled server skip the browser login
     s.net->start(s.cfg, s.steamId, it == tokens.end() ? wok::AuthToken{} : it->second,
                  std::string(ticket.begin(), ticket.end()));
@@ -136,7 +137,10 @@ void onFrame(float dt) {
     }
 
     bool connected = s.net->status() == wok::ClientNet::Status::Connected;
-    if (s.wasConnected && !connected) s.avatars.clear();
+    if (s.wasConnected && !connected) {
+        s.avatars.clear();
+        wok::cancelSteamAuthTicket();  // a ticket stays valid until cancelled: no replay after we leave
+    }
     if (!connected) {
         s.characterSent = false;
         s.characterRestored = false;

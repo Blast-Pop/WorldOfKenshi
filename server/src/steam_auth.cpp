@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <cstring>
+#include <map>
+#include <mutex>
 #include <thread>
 
 #ifdef _WIN32
@@ -13,6 +16,9 @@
 #endif
 
 namespace wok {
+
+std::mutex& verdictMutex();
+std::map<uint64_t, int>& verdicts();
 
 namespace {
 
@@ -56,7 +62,55 @@ using LicenceFn = int (*)(void*, uint64_t, uint32_t);
 using EndFn = void (*)(void*, uint64_t);
 using RunFn = void (*)();
 
+// ValidateAuthTicketResponse_t (Steamworks): Steam's verdict on a BeginAuthSession ticket.
+constexpr int kValidateAuthTicketResponse = 143;  // k_iSteamUserCallbacks (100) + 43
+#ifdef _WIN32
+constexpr size_t kResponseOffset = 8;   // CSteamID, then the enum (pack 8)
+constexpr int kResponseSize = 24;
+#else
+constexpr size_t kResponseOffset = 8;   // pack 4 on Linux: CSteamID (8), enum (4), CSteamID (8)
+constexpr int kResponseSize = 20;
+#endif
+
+// Same declarations as the Steamworks CCallbackBase, so the compiler lays out the same vtable the
+// Steam API library calls into.
+class CallbackBase {
+public:
+    virtual void Run(void* param) = 0;
+    virtual void Run(void* param, bool ioFailure, uint64_t call) = 0;
+    virtual int GetCallbackSizeBytes() = 0;
+
+protected:
+    uint8_t flags_ = 0x02;  // k_ECallbackFlagsGameServer: deliver from the game-server pipe
+    int callbackId_ = kValidateAuthTicketResponse;
+};
+
+class AuthResponseCallback : public CallbackBase {
+public:
+    void Run(void* param) override {
+        uint64_t steamId = 0;
+        int response = -1;
+        std::memcpy(&steamId, param, 8);
+        std::memcpy(&response, static_cast<char*>(param) + kResponseOffset, 4);
+        std::lock_guard lock(verdictMutex());
+        verdicts()[steamId] = response;
+    }
+    void Run(void* param, bool, uint64_t) override { Run(param); }
+    int GetCallbackSizeBytes() override { return kResponseSize; }
+};
+
+AuthResponseCallback g_authResponse;
+
 }  // namespace
+
+std::mutex& verdictMutex() {
+    static std::mutex m;
+    return m;
+}
+std::map<uint64_t, int>& verdicts() {
+    static std::map<uint64_t, int> v;  // SteamID -> EAuthSessionResponse (0 = OK)
+    return v;
+}
 
 SteamAuth::~SteamAuth() {
     if (gs_ && shutdownFn_) reinterpret_cast<RunFn>(shutdownFn_)();
@@ -125,6 +179,13 @@ bool SteamAuth::start(const std::string& library, uint16_t gamePort) {
         std::printf("steam: anonymous game-server logon failed (browser login only)\n");
         return false;
     }
+    using RegisterFn = void (*)(void*, int);
+    if (auto reg = reinterpret_cast<RegisterFn>(symbol(lib_, "SteamAPI_RegisterCallback"))) {
+        reg(&g_authResponse, kValidateAuthTicketResponse);
+    } else {
+        std::printf("steam: cannot listen to ticket verdicts (browser login only)\n");
+        return false;
+    }
     gs_ = gs;
     std::printf("steam: logged on, players are checked with Steam (no browser login)\n");
     return true;
@@ -132,11 +193,27 @@ bool SteamAuth::start(const std::string& library, uint16_t gamePort) {
 
 bool SteamAuth::begin(uint64_t steamId, const std::string& ticket) {
     if (!gs_ || ticket.empty() || ticket.size() > 1024) return false;
+    {
+        std::lock_guard lock(verdictMutex());
+        verdicts().erase(steamId);  // a new check: wait for Steam's verdict on this ticket
+    }
     return reinterpret_cast<BeginFn>(beginFn_)(gs_, ticket.data(), static_cast<int>(ticket.size()), steamId) == 0;
 }
 
 int SteamAuth::licence(uint64_t steamId) {
-    return gs_ ? reinterpret_cast<LicenceFn>(licenceFn_)(gs_, steamId, kKenshiAppId) : 2;
+    if (!gs_) return 2;
+    int verdict = -1;
+    {
+        std::lock_guard lock(verdictMutex());
+        if (auto it = verdicts().find(steamId); it != verdicts().end()) verdict = it->second;
+    }
+    // Only Steam's verdict proves the ticket is valid and unused (not cancelled, not replayed).
+    if (verdict < 0) return 2;
+    if (verdict != 0) {
+        std::printf("[steam] %llu refused by Steam (auth session response %d)\n", static_cast<unsigned long long>(steamId), verdict);
+        return 1;
+    }
+    return reinterpret_cast<LicenceFn>(licenceFn_)(gs_, steamId, kKenshiAppId);
 }
 
 void SteamAuth::end(uint64_t steamId) {

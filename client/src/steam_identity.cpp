@@ -32,6 +32,35 @@ uint64_t localSteamId() {
     return id;
 }
 
+namespace {
+uint32_t g_ticketHandle = 0;
+void* steamUser() {
+    HMODULE steam = GetModuleHandleA("steam_api64.dll");
+    if (!steam) return nullptr;
+    using GetHandleFn = int (*)();
+    using SteamClientFn = void* (*)();
+    using GetUserFn = void* (*)(void* client, int hUser, int hPipe, const char* version);
+    auto getUser = reinterpret_cast<GetHandleFn>(GetProcAddress(steam, "SteamAPI_GetHSteamUser"));
+    auto getPipe = reinterpret_cast<GetHandleFn>(GetProcAddress(steam, "SteamAPI_GetHSteamPipe"));
+    auto client = reinterpret_cast<SteamClientFn>(GetProcAddress(steam, "SteamClient"));
+    auto clientGetUser = reinterpret_cast<GetUserFn>(GetProcAddress(steam, "SteamAPI_ISteamClient_GetISteamUser"));
+    if (!getUser || !getPipe || !client || !clientGetUser) return nullptr;
+    void* c = client();
+    return c ? clientGetUser(c, getUser(), getPipe(), "SteamUser019") : nullptr;
+}
+}  // namespace
+
+void cancelSteamAuthTicket() {
+    HMODULE steam = GetModuleHandleA("steam_api64.dll");
+    auto cancel = steam ? reinterpret_cast<void (*)(void*, uint32_t)>(GetProcAddress(steam, "SteamAPI_ISteamUser_CancelAuthTicket"))
+                        : nullptr;
+    void* user = steamUser();
+    if (!cancel || !user || !g_ticketHandle) return;
+    cancel(user, g_ticketHandle);
+    log("steam: session ticket cancelled");
+    g_ticketHandle = 0;
+}
+
 std::vector<uint8_t> steamAuthTicket() {
     HMODULE steam = GetModuleHandleA("steam_api64.dll");
     if (!steam) return {};
@@ -52,6 +81,7 @@ std::vector<uint8_t> steamAuthTicket() {
     uint32_t written = 0;
     uint32_t handle = getTicket(user, ticket.data(), static_cast<int>(ticket.size()), &written);
     ticket.resize(handle && written <= 1024 ? written : 0);
+    if (handle) g_ticketHandle = handle;
     log("steam: session ticket %s (%u bytes)", ticket.empty() ? "unavailable" : "obtained", written);
     return ticket;
 }

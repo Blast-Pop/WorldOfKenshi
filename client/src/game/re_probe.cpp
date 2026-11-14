@@ -449,6 +449,7 @@ void onF4() {
             std::fprintf(f, "%llu\n%s\n", static_cast<unsigned long long>(localSteamId()), hex.c_str());
             std::fclose(f);
         }
+        cancelSteamAuthTicket();  // security test: this ticket must now be refused everywhere
     }
     uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||

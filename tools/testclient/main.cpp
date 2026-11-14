@@ -40,6 +40,7 @@ struct Args {
     bool follow = false;
     float offset = 40.0f;
     double delay = 0.5;
+    std::string ticketHex;  // Steam session ticket to present (security tests)
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -55,6 +56,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
         else if (k == "--y") a.cy = static_cast<float>(std::atof(v));
         else if (k == "--z") a.cz = static_cast<float>(std::atof(v));
         else if (k == "--steamid") a.steamId = std::strtoull(v, nullptr, 10);
+        else if (k == "--ticket-hex") a.ticketHex = v;
         else if (k == "--seconds") a.seconds = std::atof(v);
         else if (k == "--follow") a.follow = std::atoi(v) != 0;
         else if (k == "--offset") a.offset = static_cast<float>(std::atof(v));
@@ -109,6 +111,8 @@ int main(int argc, char** argv) {
                 if (ev.kind == NetEvent::Connected) {
                     Hello h{};
                     h.steamId = a.steamId;
+                    for (size_t i = 0; i + 1 < a.ticketHex.size(); i += 2)
+                        h.ticket += static_cast<char>(std::strtol(a.ticketHex.substr(i, 2).c_str(), nullptr, 16));
                     std::strncpy(h.name, a.name.c_str(), sizeof(h.name) - 1);
                     auto b = encode(h);
                     net.send(b, true);
@@ -125,6 +129,9 @@ int main(int argc, char** argv) {
                             std::printf("rejected: %s\n", reasonText(ack->reason));
                             rc = 3;
                         }
+                    } else if (std::holds_alternative<AuthChallenge>(*m)) {
+                        std::printf("not let in: the server asks for a Steam login in the browser\n");
+                        rc = 4;
                     } else if (auto* s = std::get_if<PlayerState>(&*m)) {
                         if (a.follow && target == 0) {
                             target = s->playerId;

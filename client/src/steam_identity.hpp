@@ -11,5 +11,8 @@ uint64_t localSteamId();
 // A Steam session ticket proving this player to a game server (ISteamUser::GetAuthSessionTicket);
 // the server checks it with Steam (BeginAuthSession). Empty if Steam is unavailable.
 std::vector<uint8_t> steamAuthTicket();
+// Invalidates the last ticket with Steam (call once the server accepted it, or gave up): a ticket
+// stays valid until cancelled, so this stops anyone replaying it elsewhere.
+void cancelSteamAuthTicket();
 
 }  // namespace wok
