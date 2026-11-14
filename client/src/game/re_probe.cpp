@@ -6,6 +6,7 @@
 #include <core/paths.hpp>
 #include "../ui/mygui_abi.hpp"
 #include "items.hpp"
+#include "orders.hpp"
 #include "spawner.hpp"
 
 #include <windows.h>
@@ -596,51 +597,21 @@ uintptr_t guardedFind2(uintptr_t fn, uintptr_t manager, const mygui::Vc10String*
 }
 
 void onF2() {
-    // Item test: create an Iron Club (rebirth mod template) with Kenshi's factory and give it to
-    // the selected character.
+    // Order test: the selected character must WALK 100 units along x (Kenshi's Task_Move).
     uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
         rttiName(ch) != ".?AVCharacterHuman@@") {
-        log("give: select a character in game first");
+        log("move: select a character in game first");
         return;
     }
-    Spawner spawner;
-    Items items;
-    if (!spawner.init(g_base + kGameWorld) || !items.init(g_base + kGameWorld)) return;
-    // Template and type of the weapon the character holds (hip section = Weapon I).
-    uintptr_t inv = 0, secs = 0, hip = 0, vb = 0, held = 0, heldData = 0;
-    int type = 0;
-    std::string id;
-    if (readQ(ch + 0x2e8, inv) && readQ(inv + 0x78, secs) && readQ(secs, hip) && readQ(hip + 0x40, vb) &&
-        readQ(vb, held) && held && readQ(held + 0x40, heldData) && heldData) {
-        copyRaw(heldData + 0x50, &type, 4);
-        id = readVc10String(heldData + 0x58);
-    }
-    uintptr_t manu = 0, model = 0;
-    readQ(held + 0xc0, manu);
-    readQ(held + 0xc8, model);
-    auto typeOf = [](uintptr_t gd) {
-        int t = -1;
-        if (gd) copyRaw(gd + 0x50, &t, 4);
-        return t;
-    };
-    log("give: weapon '%s' type %d, +0xc0 '%s' type %d, +0xc8 '%s' type %d", id.c_str(), type,
-        manu ? readVc10String(manu + 0x58).c_str() : "-", typeOf(manu), model ? readVc10String(model + 0x58).c_str() : "-",
-        typeOf(model));
-    // Lookups: both candidate functions, by the weapon's own id and type.
-    log("give: lookup 0x6bfda0 -> %p", reinterpret_cast<void*>(spawner.findGameData(id, type)));
-    {
-        using Find2 = uintptr_t (*)(uintptr_t, const mygui::Vc10String*, int);
-        mygui::Vc10String sid(id);
-        uintptr_t r = guardedFind2(reinterpret_cast<uintptr_t>(reinterpret_cast<Find2>(g_base + 0x6bfe60)),
-                                   g_base + kGameWorld + 0x20, &sid, type);
-        log("give: lookup 0x6bfe60 -> %p (wanted %p)", reinterpret_cast<void*>(r), reinterpret_cast<void*>(heldData));
-    }
-    // Creation: (manufacturer, weapon, model) as the factory's weapon branch reads them.
-    uintptr_t item = items.create(manu, heldData, model);
-    bool given = items.give(ch, item);
-    log("give: created %p (%s) given: %s", reinterpret_cast<void*>(item), item ? rttiName(item).c_str() : "-",
-        given ? "yes" : "no");
+    float pos[3];
+    if (!copyRaw(ch + 0x48, pos, sizeof(pos))) return;
+    pos[0] += 100.0f;
+    bool ok = orderMoveTo(ch, pos);
+    log("move: order to (%.1f, %.1f, %.1f): %s", pos[0], pos[1], pos[2], ok ? "given" : "FAILED");
+    g_tpChar = ch;
+    g_tpUntil = GetTickCount64() / 1000.0 + 4.0;
+    g_tpNextLog = 0;
 }
 
 void tpTick() {

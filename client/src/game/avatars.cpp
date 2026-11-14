@@ -2,6 +2,7 @@
 
 #include "../log.hpp"
 
+#include <cmath>
 #include <cstring>
 
 namespace wok {
@@ -20,9 +21,9 @@ void AvatarManager::onMessage(const Message& msg, double nowSec) {
     } else if (auto* left = std::get_if<PlayerLeft>(&msg)) {
         auto it = avatars_.find(left->playerId);
         if (it != avatars_.end()) {
-            // TODO(Task 9): remove the character from the world once the despawn call is known.
-            log("avatar: player %u left (character %p stays until despawn is implemented)", left->playerId,
-                reinterpret_cast<void*>(it->second.character));
+            bool removed = it->second.character && spawner_.destroy(it->second.character);
+            log("avatar: player %u left, character %p %s", left->playerId, reinterpret_cast<void*>(it->second.character),
+                removed ? "removed" : "not removed");
             avatars_.erase(it);
         }
     }
@@ -59,9 +60,10 @@ void AvatarManager::update(double nowSec) {
                 pos[0], pos[1], pos[2]);
             continue;
         }
-        // Teleport only on a real change (network rate is 10 Hz) to avoid hammering the physics.
-        float dx = pos[0] - a.lastPos[0], dz = pos[2] - a.lastPos[2];
-        if (dx * dx + dz * dz > 0.25f) {
+        // Follow the network position by teleport (walking with Kenshi's own move orders is not
+        // working yet: docs/re/orders.md).
+        float tx = pos[0] - a.lastPos[0], tz = pos[2] - a.lastPos[2];
+        if (tx * tx + tz * tz > 0.25f) {
             spawner_.setPosition(a.character, pos);
             std::memcpy(a.lastPos, pos, sizeof(pos));
         }

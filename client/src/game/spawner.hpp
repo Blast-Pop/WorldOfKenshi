@@ -18,6 +18,8 @@ public:
     // New squad of `faction` at `pos` holding one default character. Returns the Character*, 0 on failure.
     uintptr_t spawnCharacter(uintptr_t faction, const float pos[3]) const;
     bool isAlive(uintptr_t character) const;  // still a valid CharacterHuman
+    // Removes a character from the world (GameWorld::destroy), e.g. a player who left.
+    bool destroy(uintptr_t character) const;
     void setPosition(uintptr_t character, const float pos[3]) const;  // teleport (physics included)
 
     // By FCS string ID and GameData type (the game indexes its data by type; GameData + 0x50 holds

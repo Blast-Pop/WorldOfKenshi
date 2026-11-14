@@ -77,6 +77,15 @@ uintptr_t guardedFaction(uintptr_t fn, uintptr_t platoon) {
     }
 }
 
+bool guardedDestroy(uintptr_t fn, uintptr_t gw, uintptr_t obj) {
+    __try {
+        reinterpret_cast<void (*)(uintptr_t, uintptr_t, int, const char*)>(fn)(gw, obj, 0, "World of Kenshi: player left");
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool guardedTeleport(uintptr_t fn, uintptr_t movement, const float* pos) {
     __try {
         reinterpret_cast<void (*)(uintptr_t, const float*)>(fn)(movement, pos);
@@ -164,6 +173,17 @@ uintptr_t Spawner::spawnCharacter(uintptr_t faction, const float pos[3]) const {
         return 0;
     }
     return ch;
+}
+
+bool Spawner::destroy(uintptr_t character) const {
+    // GameWorld::destroy (RVA 0x799af0): (GameWorld*, RootObject*, int, const char* reason).
+    constexpr uintptr_t kDestroy = 0x799af0;
+    constexpr uint8_t kPrologue[] = {0x40, 0x55, 0x56, 0x57, 0x41, 0x54};
+    uint8_t p[sizeof(kPrologue)];
+    if (!ok_ || !isAlive(character) || !mem::readBytes(mem::moduleBase() + kDestroy, p, sizeof(p)) ||
+        std::memcmp(p, kPrologue, sizeof(p)) != 0)
+        return false;
+    return guardedDestroy(mem::moduleBase() + kDestroy, gw_, character);
 }
 
 bool Spawner::isAlive(uintptr_t character) const { return character && mem::isA(character, ".?AVCharacterHuman@@"); }

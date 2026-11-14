@@ -28,6 +28,8 @@ private:
         uintptr_t character = 0;
         double nextSpawnTry = 0;
         float lastPos[3] = {0, 0, 0};
+        double nextTrace = 0;
+        double nextOrder = 0;
     };
     Spawner spawner_;
     std::unordered_map<PlayerId, Avatar> avatars_;
