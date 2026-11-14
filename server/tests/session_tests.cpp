@@ -122,8 +122,9 @@ TEST_CASE("late_joiner_gets_existing_states") {
     sm.onPacket(1, stateBytes(a, 3.0f), 0.1);
     sm.onConnect(2, 0.2);
     auto out = sm.onPacket(2, helloBytes(12), 0.2);
-    REQUIRE(out.size() == 2);
+    REQUIRE(!out.empty());
     CHECK(std::holds_alternative<HelloAck>(out[0].msg));
+    CHECK(sentOf<PlayerInfo>(out).size() == 2);  // both players learn the other's name
     auto states = sentOf<PlayerState>(out);
     REQUIRE(states.size() == 1);
     CHECK(states[0].first == 2);

@@ -418,3 +418,27 @@ TEST_CASE("steam_ticket_logs_in_without_browser_and_refuses_non_owners") {
     // Steam unreachable or a bad ticket: the browser login of this server, as before.
     CHECK(all<AuthChallenge>(helloWith(3, 76561198000000003ull, "bad")).size() == 1);
 }
+
+TEST_CASE("players_learn_each_others_names") {
+    Fixture f;
+    AuthToken t1{}, t2{};
+    t1.fill(9);
+    t2.fill(10);
+    f.store.setToken(42, t1);
+    f.store.setToken(43, t2);
+    CharacterData a = sampleChar(), b = sampleChar();
+    a.name = "Nine";
+    b.name = "Pao";
+    REQUIRE(f.store.create(42, a));
+    REQUIRE(f.store.create(43, b));
+    f.hello(1, 42, t1);
+    auto out = f.hello(2, 43, t2);
+    bool newcomerLearnt = false, firstLearnt = false;
+    for (auto& o : out)
+        if (auto* p = std::get_if<PlayerInfo>(&o.msg)) {
+            if (o.to == 2 && p->name == "Nine") newcomerLearnt = true;
+            if (o.to == 1 && p->name == "Pao") firstLearnt = true;
+        }
+    CHECK(newcomerLearnt);
+    CHECK(firstLearnt);
+}

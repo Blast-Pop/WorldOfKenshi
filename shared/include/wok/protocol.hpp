@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 6.
+// World of Kenshi wire protocol, version 7.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 6;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 7;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -44,6 +44,7 @@ enum class MsgType : uint8_t {
     StatsUpdate = 11,
     InventoryUpdate = 12,
     WorldTime = 13,
+    PlayerInfo = 14,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -159,8 +160,16 @@ struct WorldTime {
     bool operator==(const WorldTime&) const = default;
 };
 
+// Who another player is (server -> client): shown above their avatar.
+struct PlayerInfo {
+    PlayerId playerId = 0;
+    std::string name;  // their character's name
+    bool operator==(const PlayerInfo&) const = default;
+};
+
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
-                             CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime>;
+                             CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
+                             PlayerInfo>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

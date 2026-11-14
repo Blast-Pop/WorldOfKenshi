@@ -18,6 +18,10 @@ bool AvatarManager::init(uintptr_t gameWorld) { return spawner_.init(gameWorld);
 void AvatarManager::onMessage(const Message& msg, double nowSec) {
     if (auto* s = std::get_if<PlayerState>(&msg)) {
         avatars_[s->playerId].interp.push(nowSec, *s);
+    } else if (auto* info = std::get_if<PlayerInfo>(&msg)) {
+        auto& a = avatars_[info->playerId];
+        a.name = info->name;
+        a.named = false;
     } else if (auto* left = std::get_if<PlayerLeft>(&msg)) {
         auto it = avatars_.find(left->playerId);
         if (it != avatars_.end()) {
@@ -58,7 +62,12 @@ void AvatarManager::update(double nowSec) {
             a.character = spawner_.spawnCharacter(faction_, pos);
             log("avatar: player %u -> character %p at (%.1f, %.1f, %.1f)", id, reinterpret_cast<void*>(a.character),
                 pos[0], pos[1], pos[2]);
+            a.named = false;
             continue;
+        }
+        if (!a.named && !a.name.empty()) {  // the player's name above their avatar
+            Spawner::setName(a.character, a.name);
+            a.named = true;
         }
         // Follow the network position by teleport (walking with Kenshi's own move orders is not
         // working yet: docs/re/orders.md).

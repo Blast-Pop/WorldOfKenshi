@@ -27,6 +27,8 @@ private:
         Interpolator interp;
         uintptr_t character = 0;
         double nextSpawnTry = 0;
+        std::string name;    // the remote player's character name
+        bool named = false;
         float lastPos[3] = {0, 0, 0};
         double nextTrace = 0;
         double nextOrder = 0;

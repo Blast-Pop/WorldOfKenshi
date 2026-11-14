@@ -44,6 +44,7 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
     }
     if (auto* h = std::get_if<Hello>(&*msg)) {
         if (c.player || !c.nonce.empty()) return {};  // duplicate Hello: ignore
+        c.helloName = std::string(h->name, strnlen(h->name, sizeof(h->name)));
         return handleHello(conn, c, *h, nowSec);
     }
     if (std::holds_alternative<ServerInfoRequest>(*msg)) {  // server browser query, no login needed
@@ -179,6 +180,13 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
     ack.token = newToken;
     std::vector<Outgoing> out{Outgoing{conn, ack}};
     if (character) out.push_back({conn, *character});
+    // Names: the newcomer learns the others', the others learn the newcomer's.
+    c.characterName = character ? character->name : c.helloName;
+    for (auto& [otherId, other] : conns_) {
+        if (otherId == conn || !other.player) continue;
+        if (!other.characterName.empty()) out.push_back({conn, PlayerInfo{*other.player, other.characterName}});
+        if (!c.characterName.empty()) out.push_back({otherId, PlayerInfo{*c.player, c.characterName}});
+    }
     if (cfg_.worldTime) out.push_back({conn, cfg_.worldTime(nowSec)});
     for (auto& [otherId, other] : conns_)
         if (otherId != conn && other.player && other.lastState) out.push_back({conn, *other.lastState});
@@ -206,7 +214,11 @@ std::vector<Outgoing> SessionManager::handleCreate(ConnId conn, Conn& c, const C
     }
     if (!cfg_.store->create(c.steamId, d)) return {};
     c.hasCharacter = true;
-    return {Outgoing{conn, d}};
+    c.characterName = d.name;
+    std::vector<Outgoing> out{Outgoing{conn, d}};
+    for (auto& [otherId, other] : conns_)
+        if (otherId != conn && other.player) out.push_back({otherId, PlayerInfo{*c.player, d.name}});
+    return out;
 }
 
 std::vector<Outgoing> SessionManager::handleState(ConnId conn, Conn& c, PlayerState s) {

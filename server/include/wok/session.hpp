@@ -93,6 +93,8 @@ private:
         uint64_t steamPending = 0;       // SteamID whose session ticket Steam is checking
         double steamPendingSince = 0.0;
         bool hasCharacter = false;
+        std::string characterName;       // shown to the other players
+        std::string helloName;           // name sent in Hello (test bots have no character)
         bool positionDirty = false;
         std::map<uint8_t, float> stats;  // latest known skills of the character
         bool statsDirty = false;
