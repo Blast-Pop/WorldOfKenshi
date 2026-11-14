@@ -126,7 +126,7 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_5") { CHECK(WOK_PROTOCOL_VERSION == 5);
+TEST_CASE("protocol_version_is_6") { CHECK(WOK_PROTOCOL_VERSION == 6);
     CHECK(decode(encode(WorldTime{12, 6.5f})) == std::optional<Message>(WorldTime{12, 6.5f}));
     CHECK_FALSE(decode(encode(WorldTime{1, 25.0f})).has_value()); }
 

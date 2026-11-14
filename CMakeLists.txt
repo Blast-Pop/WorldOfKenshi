@@ -42,3 +42,8 @@ if(WIN32)
   target_link_libraries(wok_tests PRIVATE wok_client_core)
 endif()
 add_test(NAME wok_tests COMMAND wok_tests)
+
+if(WIN32)
+  # Prototype: Steam session ticket check by a game server (docs/m2-auth.md).
+  add_executable(steamauth_probe tools/steamauth_probe/main.cpp)
+endif()

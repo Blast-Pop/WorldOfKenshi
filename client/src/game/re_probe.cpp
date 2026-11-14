@@ -1,6 +1,9 @@
 #include "re_probe.hpp"
 
 #include "../log.hpp"
+#include "../steam_identity.hpp"
+
+#include <core/paths.hpp>
 #include "../ui/mygui_abi.hpp"
 #include "items.hpp"
 #include "spawner.hpp"
@@ -434,6 +437,19 @@ bool printable(const std::string& s) {
 }
 
 void onF4() {
+    {  // Steam session ticket for tools/steamauth_probe (one-login prototype)
+        auto ticket = steamAuthTicket();
+        static const char* d = "0123456789abcdef";
+        std::string hex;
+        for (uint8_t b : ticket) {
+            hex += d[b >> 4];
+            hex += d[b & 15];
+        }
+        if (FILE* f = std::fopen(modFile(modDir(), "steam_ticket.txt").c_str(), "w")) {
+            std::fprintf(f, "%llu\n%s\n", static_cast<unsigned long long>(localSteamId()), hex.c_str());
+            std::fclose(f);
+        }
+    }
     uintptr_t pi = 0, sel = 0, ch = 0;
     if (!readQ(g_base + kGameWorld + kPlayerInterfaceOff, pi) || !readQ(pi + 0x2c0, sel) || !readQ(sel, ch) ||
         rttiName(ch) != ".?AVCharacterHuman@@") {

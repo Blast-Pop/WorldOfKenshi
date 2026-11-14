@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 5.
+// World of Kenshi wire protocol, version 6.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 5;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 6;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -23,6 +23,7 @@ constexpr size_t kMaxUrlBytes = 512;
 constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;
 constexpr size_t kMaxStats = 64;
+constexpr size_t kMaxTicketBytes = 512;  // identity ticket from the master server
 constexpr size_t kMaxInventoryBytes = 32768;  // the client's inventory text (opaque to the server)  // skill ids are 1..kMaxStats (docs/re/stats.md)
 
 using PlayerId = uint32_t;
@@ -59,6 +60,7 @@ struct Hello {
     uint64_t steamId = 0;
     char name[32] = {};  // must contain a NUL terminator
     AuthToken token{};   // token issued by this server earlier, zero on a first visit
+    std::string ticket;  // identity ticket signed by the master server for this server, may be empty
     bool operator==(const Hello&) const;
 };
 

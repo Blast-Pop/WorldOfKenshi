@@ -32,4 +32,28 @@ uint64_t localSteamId() {
     return id;
 }
 
+std::vector<uint8_t> steamAuthTicket() {
+    HMODULE steam = GetModuleHandleA("steam_api64.dll");
+    if (!steam) return {};
+    using GetHandleFn = int (*)();
+    using SteamClientFn = void* (*)();
+    using GetUserFn = void* (*)(void* client, int hUser, int hPipe, const char* version);
+    using GetTicketFn = uint32_t (*)(void* user, void* buffer, int size, uint32_t* written);
+    auto getUser = reinterpret_cast<GetHandleFn>(GetProcAddress(steam, "SteamAPI_GetHSteamUser"));
+    auto getPipe = reinterpret_cast<GetHandleFn>(GetProcAddress(steam, "SteamAPI_GetHSteamPipe"));
+    auto client = reinterpret_cast<SteamClientFn>(GetProcAddress(steam, "SteamClient"));
+    auto clientGetUser = reinterpret_cast<GetUserFn>(GetProcAddress(steam, "SteamAPI_ISteamClient_GetISteamUser"));
+    auto getTicket = reinterpret_cast<GetTicketFn>(GetProcAddress(steam, "SteamAPI_ISteamUser_GetAuthSessionTicket"));
+    if (!getUser || !getPipe || !client || !clientGetUser || !getTicket) return {};
+    void* c = client();
+    void* user = c ? clientGetUser(c, getUser(), getPipe(), "SteamUser019") : nullptr;
+    if (!user) return {};
+    std::vector<uint8_t> ticket(1024);
+    uint32_t written = 0;
+    uint32_t handle = getTicket(user, ticket.data(), static_cast<int>(ticket.size()), &written);
+    ticket.resize(handle && written <= 1024 ? written : 0);
+    log("steam: session ticket %s (%u bytes)", ticket.empty() ? "unavailable" : "obtained", written);
+    return ticket;
+}
+
 }  // namespace wok

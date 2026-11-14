@@ -36,3 +36,19 @@ owns a Steam account, **without a publisher key** and without the Steamworks SDK
 - Steamworks game-server ticket validation (`BeginAuthSession`): needs the SDK and a game-server logon
   for Kenshi's app id; unsettled.
 - Steam Web API ticket check: needs a publisher key.
+
+## Update 2026-11-13: Steam session tickets work (one login for every server, no central server)
+
+Aeglen rejected any central "official" login service. The `BeginAuthSession` route was therefore
+prototyped (`tools/steamauth_probe`) and **works** with the `steam_api64.dll` Kenshi ships:
+
+- Client: `ISteamUser::GetAuthSessionTicket` (SteamUser019) gives a ~234-byte ticket.
+- Server: `SteamInternal_GameServer_Init` (authentication mode) with app id 233860, an **anonymous**
+  game-server logon (`LogOnAnonymous`), then `BeginAuthSession(ticket, steamId)` → OK, and
+  `UserHasLicenseForApp(steamId, 233860)` → 0 (the player owns Kenshi) once Steam answered.
+
+Plan: the client sends its ticket in `Hello.ticket` (protocol 6); a server with Steam available
+accepts the player when Steam validates the ticket (and the licence), with no browser step and no
+per-server token. Steam OpenID stays as the fallback for servers without the Steam API. A Linux
+server needs `libsteam_api.so` (Steamworks SDK redistributable, kept out of the repository) and
+`steamclient.so` (SteamCMD).

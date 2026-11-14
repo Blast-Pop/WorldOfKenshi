@@ -8,7 +8,7 @@ namespace wok {
 
 bool Hello::operator==(const Hello& o) const {
     return protocolVersion == o.protocolVersion && steamId == o.steamId &&
-           std::memcmp(name, o.name, sizeof(name)) == 0 && token == o.token;
+           std::memcmp(name, o.name, sizeof(name)) == 0 && token == o.token && ticket == o.ticket;
 }
 
 namespace {
@@ -59,6 +59,7 @@ void write(ByteWriter& w, const Hello& m) {
     w.u64(m.steamId);
     w.raw(m.name, sizeof(m.name));
     w.raw(m.token.data(), m.token.size());
+    writeString(w, m.ticket);
 }
 void write(ByteWriter& w, const HelloAck& m) {
     w.u8(static_cast<uint8_t>(m.reason));
@@ -136,6 +137,7 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             m.steamId = r.u64();
             r.raw(m.name, sizeof(m.name));
             r.raw(m.token.data(), m.token.size());
+            if (!readBytes(r, kMaxTicketBytes, m.ticket)) return std::nullopt;
             if (std::memchr(m.name, 0, sizeof(m.name)) == nullptr) return std::nullopt;
             return m;
         }
