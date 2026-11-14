@@ -40,6 +40,20 @@ ClientConfig parseConfig(std::string_view text) {
             if (!n.empty() && parseAddress(a)) cfg.servers.push_back({std::string(n), std::string(a)});
         } else if (key == "master") {
             cfg.masterUrl = std::string(value);
+        } else if (key == "chat_size") {
+            size_t comma = value.find(',');
+            int w = 0, h = 0;
+            if (comma != std::string_view::npos &&
+                std::from_chars(value.data(), value.data() + comma, w).ec == std::errc{} &&
+                std::from_chars(value.data() + comma + 1, value.data() + value.size(), h).ec == std::errc{} &&
+                w >= 100 && h >= 50 && w <= 10000 && h <= 10000) {
+                cfg.chatWidth = w;
+                cfg.chatHeight = h;
+            }
+        } else if (key == "chat_opacity") {
+            float v = 0;
+            auto [p, ec] = std::from_chars(value.data(), value.data() + value.size(), v);
+            if (ec == std::errc{} && v >= 20.0f && v <= 100.0f) cfg.chatOpacity = v;
         } else if (key == "name") {
             cfg.name = std::string(value.substr(0, 31));  // Hello::name is 32 bytes incl. NUL
         }
@@ -53,6 +67,8 @@ std::string serializeConfig(const ClientConfig& cfg) {
                       "# Servers shown in the Multiplayer window: server=Name,host:port\n";
     for (auto& s : cfg.servers) out += "server=" + s.name + "," + s.address + "\n";
     if (cfg.masterUrl != kDefaultMasterUrl) out += "master=" + cfg.masterUrl + "\n";
+    out += "chat_opacity=" + std::to_string(static_cast<int>(cfg.chatOpacity + 0.5f)) + "\n";
+    out += "chat_size=" + std::to_string(cfg.chatWidth) + "," + std::to_string(cfg.chatHeight) + "\n";
     return out;
 }
 

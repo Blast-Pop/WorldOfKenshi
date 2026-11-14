@@ -26,6 +26,8 @@ struct ClientConfig {
     std::string name = "Player";
     std::vector<ServerEntry> servers;  // "server=Name,host:port" lines, shown in addition to the master list
     std::string masterUrl = kDefaultMasterUrl;  // "master=" (empty value keeps the default)
+    float chatOpacity = 85.0f;                  // "chat_opacity=", percent (20..100)
+    int chatWidth = 775, chatHeight = 210;      // "chat_size=W,H", pixels
 };
 
 struct Address {

@@ -7,6 +7,7 @@
 #include "game/game_memory.hpp"
 #include "game/direct_control.hpp"
 #include "ui/chat.hpp"
+#include "ui/options_tab.hpp"
 #include "game/identity.hpp"
 #include "game/inventory.hpp"
 #include "game/items.hpp"
@@ -77,6 +78,8 @@ struct ClientState {
     double nextCreateDiag = 0;
     wok::DirectControl control;          // WASD movement
     std::unique_ptr<wok::Chat> chat;     // in-game chat (spec 7.8)
+    wok::MultiplayerOptions options;     // our tab in Kenshi's Options
+    double nextOptionsPoll = 0;
     float hungerKept = 0;               // hunger before the last clock move
     double hungerGuardUntil = 0;        // until then, the clock move must not make us hungry
     uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
@@ -416,6 +419,27 @@ void onFrame(float dt) {
         }
     }
     if (!s.chat) s.chat = std::make_unique<wok::Chat>([](const wok::ChatSend& m) { g_state->net->sendChat(m); });
+    if (s.now >= s.nextOptionsPoll) {  // our Options tab; save a changed setting
+        s.nextOptionsPoll = s.now + 0.5;
+        static bool loaded = false;
+        if (!loaded) {
+            loaded = true;
+            s.options.chatOpacity = s.cfg.chatOpacity;
+            s.chat->setSize(s.cfg.chatWidth, s.cfg.chatHeight);
+        }
+        wok::ensureOptionsTab(s.options);
+        float v = s.options.chatOpacity < 20.0f ? 20.0f : (s.options.chatOpacity > 100.0f ? 100.0f : s.options.chatOpacity);
+        if (static_cast<int>(v + 0.5f) != static_cast<int>(s.cfg.chatOpacity + 0.5f)) {
+            s.cfg.chatOpacity = v;
+            saveConfig(s.cfg);
+        }
+    }
+    s.chat->setOpacity(s.options.chatOpacity);
+    if (s.chat->takeResized()) {  // the player dragged the chat frame's corner
+        s.cfg.chatWidth = s.chat->width();
+        s.cfg.chatHeight = s.chat->height();
+        saveConfig(s.cfg);
+    }
     s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent));
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
