@@ -742,29 +742,25 @@ bool callSetPaused(bool paused) {
 }  // namespace
 
 // Kenshi's level editor (Shift+F12) edits the world: it cannot be opened in a server world. Its
-// "open" case in Kenshi's command handler (RVA 0x77bf8f, "mov esi, 1") becomes a jump to that
-// handler's exit (RVA 0x77d3f4) while blocked; the original bytes come back otherwise.
+// on/off switch (RVA 0x77be90, setEditorMode(this, bool): pauses the world, flags objects, opens
+// Kenshi_LevelEditor.layout) returns at once while blocked; the original byte comes back otherwise.
 void blockLevelEditor(bool block) {
     static bool blocked = false;
     if (block == blocked) return;
-    constexpr uintptr_t kSite = 0x77bf8f, kExit = 0x77d3f4;
-    static const uint8_t kOriginal[5] = {0xbe, 0x01, 0x00, 0x00, 0x00};
-    uint8_t jump[5] = {0xe9};
-    const int32_t rel = static_cast<int32_t>(kExit - (kSite + 5));
-    std::memcpy(jump + 1, &rel, 4);
+    constexpr uintptr_t kSite = 0x77be90;
+    constexpr uint8_t kOriginal = 0x48, kReturn = 0xc3;  // "mov rax, rsp" / "ret"
     uint8_t* site = reinterpret_cast<uint8_t*>(mem::moduleBase() + kSite);
-    uint8_t now[5];
-    if (!mem::readBytes(reinterpret_cast<uintptr_t>(site), now, 5) ||
-        std::memcmp(now, block ? kOriginal : jump, 5) != 0) {
+    uint8_t now = 0;
+    if (!mem::readBytes(reinterpret_cast<uintptr_t>(site), &now, 1) || now != (block ? kOriginal : kReturn)) {
         log("ui: level editor block skipped (unexpected code at the patch site)");
         blocked = block;  // never retry on an unknown game version
         return;
     }
     DWORD old = 0;
-    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old)) return;
-    std::memcpy(site, block ? jump : kOriginal, 5);
-    VirtualProtect(site, 5, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    if (!VirtualProtect(site, 1, PAGE_EXECUTE_READWRITE, &old)) return;
+    *site = block ? kReturn : kOriginal;
+    VirtualProtect(site, 1, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), site, 1);
     blocked = block;
     log("ui: level editor (Shift+F12) %s", block ? "disabled in multiplayer" : "available again");
 }
