@@ -576,6 +576,7 @@ void MultiplayerMenu::applyConnectedMenu() {
     // Returning player: cover the screen before Kenshi opens its start selection, so the automated
     // steps (start, editor) are never seen.
     if (net_.hasCharacter()) showLoading("Joining the server");
+    rebuilding_ = true;  // until the character is in place (returning) or sent (new)
     mygui::click(newGame);
 }
 

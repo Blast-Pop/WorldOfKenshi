@@ -82,7 +82,10 @@ private:
 
 public:
     // Called by the client once the returning player's character is back in place.
-    void setWorldReady() { worldReady_ = true; }
+    void setWorldReady() {
+        worldReady_ = true;
+        rebuilding_ = false;
+    }
     // Permanent death: run Kenshi's New Game from the pause menu, staying connected.
     void restartForNewCharacter() { newGameAsked_ = true; newGameTimer_ = 0; }
     // Permanent death: asks the player "New character" (restartForNewCharacter) or "Exit".
@@ -92,7 +95,7 @@ public:
 
 private:
     bool newGameAsked_ = false;
-    bool rebuilding_ = false;  // Kenshi's New Game is rebuilding the world: let it pause
+    bool rebuilding_ = false;  // Kenshi's New Game is building the world: let it pause (time lock off)
     float newGameTimer_ = 0;  // seconds since the last attempt
     float confirmWindow_ = 0; // seconds left to accept Kenshi's "lose progress?" dialog
     void driveNewGame(float dt);
