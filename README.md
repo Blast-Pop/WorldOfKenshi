@@ -52,3 +52,7 @@ ctest --preset windows-debug
 ## License
 
 MIT — see `LICENSE`. Kenshi is © Lo-Fi Games; this project is not affiliated with them.
+
+---
+
+Made with the 🧠 of Claude, with all the ❤️ of Blast-Pop.
