@@ -31,6 +31,11 @@ constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
 constexpr const char* kDelete = "WokDeleteCharacter";
+constexpr const char* kDirect = "WokDirectConnect";
+constexpr const char* kDirectWindow = "WokDirectWindow";
+constexpr const char* kDirectAddress = "WokDirectAddress";
+constexpr const char* kDirectJoin = "WokDirectJoin";
+constexpr const char* kDirectCancel = "WokDirectCancel";
 constexpr const char* kDeathWindow = "WokDeathWindow";
 constexpr const char* kDeathNew = "WokDeathNew";
 constexpr const char* kDeathExit = "WokDeathExit";
@@ -83,7 +88,8 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDelete, kDeathNew, kDeathExit})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDelete, kDirect, kDirectJoin, kDirectCancel, kDeathNew,
+                          kDeathExit})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -222,9 +228,15 @@ void MultiplayerMenu::openWindow() {
     auto del = mygui::createChild(w, "Button", "Kenshi_Button2",
                                   {kListLeft + half + 2 * kMargin + quarter, infoTop, quarter, 0.07f}, kDelete);
     mygui::setProperty(del, "Caption", "Delete character");
-    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft, buttonsTop, half, 0.10f}, kConnect);
+    // Connect | Direct connect | Close, equal widths.
+    const float third = (kListWidth - 2 * kMargin) / 3;
+    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft, buttonsTop, third, 0.10f}, kConnect);
     mygui::setProperty(connect, "Caption", "Connect");
-    auto close = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft + half + kMargin, buttonsTop, half, 0.10f}, kClose);
+    auto direct = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft + third + kMargin, buttonsTop, third, 0.10f},
+                                     kDirect);
+    mygui::setProperty(direct, "Caption", "Direct connect");
+    auto close = mygui::createChild(w, "Button", "Kenshi_Button1",
+                                    {kListLeft + 2 * (third + kMargin), buttonsTop, third, 0.10f}, kClose);
     mygui::setProperty(close, "Caption", "Close");
 
     windowOpen_ = true;
@@ -305,6 +317,44 @@ void MultiplayerMenu::onClick(const std::string& name) {
     } else if (name == kUnlink) {
         unlink_();
         error_ = "Account unlinked: the next connection will ask Steam again.";
+    } else if (name == kDirect) {
+        // A server that is not in the public list: type its address.
+        mygui::destroy(mygui::findWidget(kDirectWindow));
+        mygui::Widget* d = mygui::createRoot("Window", "Kenshi_WindowCX", {0.35f, 0.40f, 0.30f, 0.20f}, "Popup", kDirectWindow);
+        if (!d) return;
+        mygui::setProperty(d, "Caption", "Direct connect (address:port)");
+        auto addr = mygui::createChild(d, "EditBox", "Kenshi_EditBox", {0.06f, 0.12f, 0.88f, 0.28f}, kDirectAddress);
+        auto join = mygui::createChild(d, "Button", "Kenshi_Button1", {0.06f, 0.52f, 0.42f, 0.32f}, kDirectJoin);
+        mygui::setProperty(join, "Caption", "Connect");
+        auto cancel = mygui::createChild(d, "Button", "Kenshi_Button1", {0.52f, 0.52f, 0.42f, 0.32f}, kDirectCancel);
+        mygui::setProperty(cancel, "Caption", "Cancel");
+        if (addr) mygui::setKeyFocus(addr);
+    } else if (name == kDirectCancel) {
+        mygui::destroy(mygui::findWidget(kDirectWindow));
+    } else if (name == kDirectJoin) {
+        mygui::Widget* addr = mygui::findWidget(kDirectAddress);
+        const char* raw = addr ? mygui::editText(addr) : nullptr;
+        auto parsed = parseAddress(raw ? raw : "");
+        if (!parsed) {
+            error_ = "Direct connect: type the server address, e.g. 203.0.113.5 or 203.0.113.5:27800.";
+            return;
+        }
+        auto st = net_.status();
+        if (st == ClientNet::Status::Connecting || st == ClientNet::Status::Connected) return;
+        mygui::setKeyFocus(nullptr);
+        mygui::destroy(mygui::findWidget(kDirectWindow));
+        cfg_.host = parsed->host;
+        cfg_.port = parsed->port;
+        // Remember it: it shows in the server list from now on (wok_client.ini, "server=").
+        const std::string address = parsed->host + ":" + std::to_string(parsed->port);
+        bool known = false;
+        for (const ServerEntry& e : cfg_.servers)
+            if (auto ea = parseAddress(e.address); ea && ea->host == parsed->host && ea->port == parsed->port) known = true;
+        if (!known) cfg_.servers.push_back({"Private server " + address, address});
+        saveConfig_();
+        error_.clear();
+        log("ui: direct connect to %s", address.c_str());
+        connect_();  // the Multiplayer window stays open to show the connection status
     } else if (name == kDelete) {
         if (net_.status() != ClientNet::Status::Disconnected && net_.status() != ClientNet::Status::Rejected) {
             error_ = "Already connected: delete your character from the main menu.";
@@ -701,15 +751,14 @@ void MultiplayerMenu::refreshStatus() {
 
 namespace {
 // Kenshi's own time controls (docs/re/game-world.md). Calling them keeps every system in step:
-// setPaused tells the sound, physics and UI managers, which a raw write of the flag did not (that
-// left conversations open forever and broke the sound).
+// raw writes of the flag left conversations open forever, and the low-level setters broke the sound.
 constexpr uintptr_t kGameWorld = 0x2134110;      // RVA of the GameWorld object
 constexpr uintptr_t kGameSpeed = 0x700;          // GameWorld: float speed (0 paused, 1, 2, 5)
 constexpr uintptr_t kPausedFlag = 0x8b9;         // GameWorld: byte, set by setPaused
-constexpr uintptr_t kSetSpeed = 0x787cb0;        // void setSpeed(GameWorld*, float)
-constexpr uintptr_t kSetPaused = 0x787d40;       // void setPaused(GameWorld*, bool)
-constexpr uint8_t kSetSpeedPrologue[] = {0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18};
-constexpr uint8_t kSetPausedPrologue[] = {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10};
+constexpr uintptr_t kSetSpeed = 0x787e40;        // void setGameSpeed(GameWorld*, float, bool sound): speed + audio state
+constexpr uintptr_t kSetPaused = 0x787fb0;       // void userPause(GameWorld*, bool): the player's pause, back to the last speed
+constexpr uint8_t kSetSpeedPrologue[] = {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x6c, 0x24, 0x10};
+constexpr uint8_t kSetPausedPrologue[] = {0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x6c, 0x24, 0x18};
 
 bool prologueIs(uintptr_t rva, const uint8_t (&expected)[10]) {
     uint8_t got[10];
@@ -718,7 +767,8 @@ bool prologueIs(uintptr_t rva, const uint8_t (&expected)[10]) {
 
 bool callSetSpeedRaw(float speed) {
     __try {
-        reinterpret_cast<void (*)(uintptr_t, float)>(mem::moduleBase() + kSetSpeed)(mem::moduleBase() + kGameWorld, speed);
+        reinterpret_cast<void (*)(uintptr_t, float, bool)>(mem::moduleBase() + kSetSpeed)(mem::moduleBase() + kGameWorld,
+                                                                                       speed, false);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -772,21 +822,21 @@ void blockLevelEditor(bool block) {
 
 void MultiplayerMenu::enforceNormalSpeed() {
     // A multiplayer world never stops: not for the Escape menu, Space, a conversation, nor fast
-    // speeds. Undo any of them through Kenshi's own setSpeed / setPaused.
+    // speeds. Undone through Kenshi's own userPause / setGameSpeed, which also keep its sound engine
+    // state ("Game_Speed") in step; the lower-level setters left the sound broken.
     const uintptr_t gw = mem::moduleBase() + kGameWorld;
     float speed = 1.0f;
     uint8_t paused = 0;
     if (!mem::readBytes(gw + kGameSpeed, &speed, sizeof(speed)) || !mem::readBytes(gw + kPausedFlag, &paused, 1))
         return;
-    if (speed != 1.0f) {
-        if (callSetSpeed(1.0f)) log("ui: game speed %.0f refused in multiplayer, back to normal", speed);
-    }
-    if (paused) {
+    if (paused || speed <= 0.0f) {
         if (callSetPaused(false) && !menuPauseLogged_) {
-            log("ui: pause refused in multiplayer (Kenshi's setPaused)");
+            log("ui: pause refused in multiplayer (Kenshi's userPause)");
             menuPauseLogged_ = true;
         }
+        return;  // userPause restores the last speed; a fast one is handled next frame
     }
+    if (speed != 1.0f && callSetSpeed(1.0f)) log("ui: game speed %.0f refused in multiplayer, back to normal", speed);
 }
 
 void MultiplayerMenu::update(float dt) {

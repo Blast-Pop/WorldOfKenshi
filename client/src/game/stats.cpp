@@ -52,6 +52,8 @@ constexpr uint8_t kBloodId = 48;
 constexpr uint8_t kPartFirstId = 49;
 constexpr uint8_t kPartSecondId = 56;
 constexpr uintptr_t kBlood = 0x4c8;
+constexpr uint8_t kHungerId = 64;  // the last id the protocol allows (kMaxStats)
+constexpr uintptr_t kHunger = 0x4b8;
 constexpr uintptr_t kPartCount = 0x5f0;  // u32
 constexpr uintptr_t kParts = 0x5f8;      // HealthPartStatus**
 constexpr uintptr_t kPartFieldA = 0x40;
@@ -59,7 +61,8 @@ constexpr uintptr_t kPartFieldB = 0x54;
 constexpr uint32_t kMaxParts = 7;
 
 std::vector<std::pair<uint8_t, uintptr_t>> healthSlots(uintptr_t character) {
-    std::vector<std::pair<uint8_t, uintptr_t>> out{{kBloodId, character + kBlood}};
+    // Blood (48) and hunger (64, character + 0x4b8, 300 = full: Kenshi's death routine reads it there).
+    std::vector<std::pair<uint8_t, uintptr_t>> out{{kBloodId, character + kBlood}, {kHungerId, character + kHunger}};
     uint32_t n = 0;
     uintptr_t parts = 0;
     if (!mem::readBytes(character + kPartCount, &n, 4) || !mem::readPtr(character + kParts, parts) || !parts) return out;
