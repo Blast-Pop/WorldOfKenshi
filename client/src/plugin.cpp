@@ -223,6 +223,7 @@ void onFrame(float dt) {
         s.reader.character() != s.deadCharacter) {
         if (auto c = wok::readIdentity(s.reader.character())) {
             s.net->createCharacter(*c);
+            if (s.menu) s.menu->newCharacterSent();
             s.characterSent = true;
             s.statsSent.clear();  // the first stats poll sends every skill of the new character
             wok::log("character: sent '%s' (%s, look %zu bytes) to the server", c->name.c_str(), c->race.c_str(), c->appearance.size());
@@ -235,7 +236,7 @@ void onFrame(float dt) {
             s.characterSent = false;
             s.characterRestored = false;
             s.statsSent.clear();
-            if (s.menu) s.menu->restartForNewCharacter();
+            if (s.menu) s.menu->showDeathWindow();
             continue;
         }
         if (auto* ps = std::get_if<wok::PlayerState>(&m)) {

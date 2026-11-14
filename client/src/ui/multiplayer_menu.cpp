@@ -30,6 +30,9 @@ constexpr const char* kClose = "WokClose";
 constexpr const char* kStatus = "WokStatus";
 constexpr const char* kServerPrefix = "WokServer";
 constexpr const char* kUnlink = "WokUnlink";
+constexpr const char* kDeathWindow = "WokDeathWindow";
+constexpr const char* kDeathNew = "WokDeathNew";
+constexpr const char* kDeathExit = "WokDeathExit";
 constexpr const char* kLoadingPrefix = "WokLoading_";
 constexpr const char* kLoadingRoot = "WokLoadingCover";
 constexpr float kLoadingTimeoutSec = 75.0f;  // never leave a player stuck behind the cover
@@ -79,7 +82,7 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 // dereferenced: MyGUI widgets are destroyed with their layout.
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
-    for (const char* n : {kButton, kConnect, kClose, kUnlink})
+    for (const char* n : {kButton, kConnect, kClose, kUnlink, kDeathNew, kDeathExit})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -260,7 +263,36 @@ void MultiplayerMenu::refreshRows() {
     }
 }
 
+void MultiplayerMenu::showDeathWindow() {
+    mygui::destroy(mygui::findWidget(kDeathWindow));
+    mygui::Widget* w = mygui::createRoot("Window", "Kenshi_WindowCX", {0.375f, 0.40f, 0.25f, 0.20f}, "Popup", kDeathWindow);
+    if (!w) return;
+    mygui::setProperty(w, "Caption", "Your character has died");
+    auto add = [&](const char* name, const char* caption, float left) {
+        if (auto b = mygui::createChild(w, "Button", "Kenshi_Button1", {left, 0.45f, 0.40f, 0.30f}, name))
+            mygui::setProperty(b, "Caption", caption);
+    };
+    add(kDeathNew, "New character", 0.06f);
+    add(kDeathExit, "Exit", 0.54f);
+    log("ui: death window shown");
+}
+
 void MultiplayerMenu::onClick(const std::string& name) {
+    if (name == kDeathNew || name == kDeathExit) {
+        mygui::destroy(mygui::findWidget(kDeathWindow));
+        if (name == kDeathNew) {
+            log("ui: death window -> New character");
+            restartForNewCharacter();
+        } else {
+            // Kenshi cannot return to its title screen from a world: leaving means quitting.
+            // Nothing is saved locally in multiplayer, so the game can close right away.
+            log("ui: death window -> Exit, disconnecting and closing the game");
+            disconnect_();
+            Sleep(300);  // let the disconnect reach the server
+            ExitProcess(0);
+        }
+        return;
+    }
     if (name == kButton) {
         openWindow();
     } else if (name == kClose) {
@@ -563,6 +595,7 @@ void MultiplayerMenu::driveNewGame(float dt) {
     if (mygui::Widget* newGame = mygui::findBySuffix("_NewGameButton", 3)) {
         log("ui: character dead, starting a new character (New Game)");
         newGameAsked_ = false;
+        rebuilding_ = true;
         confirmWindow_ = 5.0f;
         mygui::click(newGame);
         return;
@@ -636,7 +669,7 @@ void MultiplayerMenu::update(float dt) {
         // Players never control a multiplayer world's time (no pause, no speed-up): once the world
         // is really being played (not in the character editor or behind our loading screen).
         timeLocked_ = multiplayerWorld_ && inGame_() && net_.status() == ClientNet::Status::Connected &&
-                      !loadingShown_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
+                      !loadingShown_ && !rebuilding_ && !mygui::findShownBySuffix("_ConfirmButton", 12);
         for (const char* suffix : {"_SpeedButtonsPanel", "_SpeedArrowLeft", "_SpeedArrowRight", "_PausedPanel"})
             if (mygui::Widget* w = mygui::findBySuffix(suffix, 12)) mygui::setVisible(w, !timeLocked_);
         if (windowOpen_ && !mygui::findWidget(kWindow)) {  // window closed by the game (e.g. menu rebuilt)
