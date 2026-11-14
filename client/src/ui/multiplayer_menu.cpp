@@ -742,13 +742,14 @@ bool callSetPaused(bool paused) {
 }  // namespace
 
 // Kenshi's level editor (Shift+F12) edits the world: it cannot be opened in a server world. Its
-// on/off switch (RVA 0x77be90, setEditorMode(this, bool): pauses the world, flags objects, opens
-// Kenshi_LevelEditor.layout) returns at once while blocked; the original byte comes back otherwise.
+// toggle (RVA 0x7f3720: creates the editor and switches editor mode on, or switches it off and
+// deletes it) returns at once while blocked; the original byte comes back otherwise. Not the inner
+// setEditorMode (0x77be90): the game also calls that one with "off" when a world loads.
 void blockLevelEditor(bool block) {
     static bool blocked = false;
     if (block == blocked) return;
-    constexpr uintptr_t kSite = 0x77be90;
-    constexpr uint8_t kOriginal = 0x48, kReturn = 0xc3;  // "mov rax, rsp" / "ret"
+    constexpr uintptr_t kSite = 0x7f3720;
+    constexpr uint8_t kOriginal = 0x40, kReturn = 0xc3;  // "push rdi" (REX) / "ret"
     uint8_t* site = reinterpret_cast<uint8_t*>(mem::moduleBase() + kSite);
     uint8_t now = 0;
     if (!mem::readBytes(reinterpret_cast<uintptr_t>(site), &now, 1) || now != (block ? kOriginal : kReturn)) {
