@@ -11,7 +11,6 @@ namespace wok {
 
 namespace {
 constexpr size_t kShownLines = 8;
-constexpr float kTop = 0.29f;  // above Kenshi's bottom-left panels (relative to the screen)
 constexpr double kFadeSec = 20.0;  // a message stays this long unless the input is open
 constexpr const char* kInput = "WokChatInput";
 std::string lineName(size_t i) { return "WokChatLine" + std::to_string(i); }
@@ -33,23 +32,51 @@ void Chat::onMessage(const ChatMessage& m, double nowSec) {
 
 namespace {
 constexpr const char* kBox = "WokChatBox";
-constexpr float kLineH = 0.024f;                                // one line, relative to the screen
-constexpr float kPad = 0.008f;                                  // inner margin
-constexpr float kInputH = 0.032f;
-constexpr float kBoxH = kPad * 3 + kLineH * kShownLines + kInputH;
-constexpr float kBoxW = 0.42f;
+// The frame in pixels (Aeglen: 775 x 210), its bottom where the old frame's was (53% of the height).
+constexpr int kBoxWpx = 775, kBoxHpx = 210, kPadPx = 8, kInputHpx = 28;
+constexpr float kBottom = 0.53f;
+constexpr float kLineHpx = float(kBoxHpx - 3 * kPadPx - kInputHpx) / kShownLines;
+
+// Size of the game window's client area (MyGUI pixels match it).
+void gameViewSize(int& w, int& h) {
+    w = GetSystemMetrics(SM_CXSCREEN);
+    h = GetSystemMetrics(SM_CYSCREEN);
+    struct Find {
+        HWND hwnd = nullptr;
+    } f;
+    EnumWindows(
+        [](HWND hwnd, LPARAM lp) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid != GetCurrentProcessId() || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER)) return TRUE;
+            reinterpret_cast<Find*>(lp)->hwnd = hwnd;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&f));
+    RECT r;
+    if (f.hwnd && GetClientRect(f.hwnd, &r) && r.right > 0 && r.bottom > 0) {
+        w = r.right;
+        h = r.bottom;
+    }
+}
 
 // The chat frame (Kenshi's beige info panel look); lines and the input line live inside it.
 mygui::Widget* chatBox(bool create) {
     mygui::Widget* box = mygui::findWidget(kBox);
     if (box || !create) return box;
-    box = mygui::createRoot("Widget", "Kenshi_GenericTextBoxSkin", {0.01f, kTop, kBoxW, kBoxH}, "Popup", kBox);
-    if (box) mygui::setProperty(box, "NeedMouse", "false");
+    int vw = 0, vh = 0;
+    gameViewSize(vw, vh);
+    box = mygui::createRoot("Widget", "Kenshi_GenericTextBoxSkin", {0.01f, 0.3f, 0.4f, 0.2f}, "Popup", kBox);
+    if (!box) return nullptr;
+    mygui::setCoord(box, vw / 100, static_cast<int>(vh * kBottom) - kBoxHpx, kBoxWpx, kBoxHpx);
+    mygui::setProperty(box, "NeedMouse", "false");
     return box;
 }
 
-// A rectangle inside the box, given in screen-relative units from the box's top-left corner.
-mygui::FloatCoord inBox(float x, float y, float w, float h) { return {x / kBoxW, y / kBoxH, w / kBoxW, h / kBoxH}; }
+// A rectangle inside the box, in pixels from its top-left corner (children use relative coords).
+mygui::FloatCoord inBox(float x, float y, float w, float h) {
+    return {x / kBoxWpx, y / kBoxHpx, w / kBoxWpx, h / kBoxHpx};
+}
 }  // namespace
 
 void Chat::open() {
@@ -57,7 +84,7 @@ void Chat::open() {
     if (!box) return;
     mygui::destroy(mygui::findWidget(kInput));
     mygui::Widget* in = mygui::createChild(box, "EditBox", "Kenshi_EditBox",
-                                           inBox(kPad, kPad * 2 + kLineH * kShownLines, kBoxW - 2 * kPad, kInputH), kInput);
+                                           inBox(kPadPx, kPadPx * 2 + kLineHpx * kShownLines, kBoxWpx - 2 * kPadPx, kInputHpx), kInput);
     if (!in) return;
     mygui::setProperty(in, "MaxTextLength", "200");
     mygui::setKeyFocus(in);
@@ -114,7 +141,7 @@ void Chat::redraw(double nowSec) {
         }
         if (!w) {
             w = mygui::createChild(box, "TextBox", "Kenshi_TextboxStandardText",
-                                   inBox(kPad, kPad + kLineH * i, kBoxW - 2 * kPad, kLineH), lineName(i));
+                                   inBox(kPadPx, kPadPx + kLineHpx * i, kBoxWpx - 2 * kPadPx, kLineHpx), lineName(i));
             if (!w) continue;
             mygui::setProperty(w, "NeedMouse", "false");
         }
