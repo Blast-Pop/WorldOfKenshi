@@ -606,7 +606,8 @@ void onF2() {
     }
     float pos[3];
     if (!copyRaw(ch + 0x48, pos, sizeof(pos))) return;
-    pos[0] += 100.0f;
+    static int turn = 0;
+    if (turn++ % 2 == 0) pos[0] += 100.0f; else pos[2] += 100.0f;  // alternate x / z
     bool ok = orderMoveTo(ch, pos);
     log("move: addOrder Task_Move to (%.1f, %.1f, %.1f): %s", pos[0], pos[1], pos[2], ok ? "given" : "FAILED");
     g_tpChar = ch;

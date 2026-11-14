@@ -5,6 +5,7 @@
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
 #include "game/game_memory.hpp"
+#include "game/direct_control.hpp"
 #include "game/identity.hpp"
 #include "game/inventory.hpp"
 #include "game/items.hpp"
@@ -72,6 +73,7 @@ struct ClientState {
     bool dead = false;                   // our character died; reported, waiting for the server
     double nextDeathCheck = 0;
     double nextCreateDiag = 0;
+    wok::DirectControl control;          // WASD movement
     float hungerKept = 0;               // hunger before the last clock move
     double hungerGuardUntil = 0;        // until then, the clock move must not make us hungry
     uintptr_t deadCharacter = 0;         // the retired body, still in the world until New Game
@@ -322,6 +324,18 @@ void onFrame(float dt) {
     }
     lap(FrameProfile::Incoming);
     if (s.avatarsOk) s.avatars.update(s.now);
+    // Direct control (dev toggle Ctrl+Shift+F3 until the Options checkbox exists).
+    {
+        static bool wasDown = false;
+        bool down = (GetAsyncKeyState(VK_F3) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                    (GetAsyncKeyState(VK_SHIFT) & 0x8000);
+        if (down && !wasDown) s.control.setEnabled(!s.control.enabled());
+        wasDown = down;
+        if (s.control.enabled() && s.readerOk) {
+            s.reader.read(s.now);
+            s.control.update(s.now, s.reader.character(), false);
+        }
+    }
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 
