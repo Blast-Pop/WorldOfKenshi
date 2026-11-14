@@ -3,7 +3,24 @@
 An open-source multiplayer mod for [Kenshi](https://lofigames.com/): dedicated servers,
 a server-specific character per player, and every player's actions replicated to the others.
 
-> Status: early development. Milestone 1 — two players see each other walk in game.
+> Status: **alpha 0.1**. Expect bugs.
+
+## Features (alpha 0.1)
+
+- Multiplayer button in Kenshi's main menu (no injector) and a server list.
+- Steam login: the server checks the Steam account and Kenshi ownership. No browser, no extra account.
+- Characters live on the server: position, skills, health, inventory, equipment, money and look are
+  saved continuously.
+- Players see each other, with their names (other players still move by short teleports).
+- Permanent death: a dead character is gone; the player makes a new one or leaves.
+- Server-side time: no pause, no speed-up; the world keeps going while players are offline.
+- Dedicated server for Linux and Windows; anyone can host one (no central official server).
+
+## Installing the client (players)
+
+Download the release zip, extract it anywhere and run `install.bat`; it asks for (or finds) your
+Kenshi folder. Start Kenshi from Steam and click **Multiplayer** in the main menu.
+`uninstall.bat` restores Kenshi as it was.
 
 ## How it works (short)
 
