@@ -105,6 +105,14 @@ Mods keep the community alive: a modded server must be a normal case, not an exc
 - **World time (decided 2026-11-13)**: the server owns the world clock. It advances from real elapsed time at Kenshi's normal rate, even with nobody online, and is saved in the database. Clients never set it: they align their game clock to the server's every few seconds.
 - **Frozen zones (decided 2026-11-13)**: a zone nobody simulates is frozen; when it thaws, the elapsed time is applied in summary (crops grow, food rots, wounded NPCs heal, traders restock) instead of being replayed.
 
+### 7.8 Player chat (requested 2026-11-14)
+- Two channels, both relayed by the server (never peer to peer):
+  - **Global**: every player on the server.
+  - **Local**: players within a radius of the speaker (proximity chat, radius set by the server; the server measures it from the positions it already receives).
+- An in-game chat box (MyGUI, our own widgets): a key opens the input line, the player picks the channel (e.g. `/g` and `/l`, or a toggle), messages show the sender's character name and fade out after a while.
+- The server limits message length and rate (anti-spam), strips control characters, and logs messages; the server owner can mute or kick.
+- Messages are not saved in the character data; only the server log keeps them.
+
 ## 8. First milestone (M1): "it works"
 
 **Two players connect to the same server and see each other walk in game.**
