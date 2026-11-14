@@ -1,5 +1,5 @@
 #pragma once
-// World of Kenshi wire protocol, version 10.
+// World of Kenshi wire protocol, version 11.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
@@ -13,7 +13,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 10;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 11;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -23,6 +23,8 @@ constexpr size_t kMaxUrlBytes = 512;
 constexpr size_t kMaxServerNameBytes = 63;
 constexpr size_t kMaxServerDescriptionBytes = 255;
 constexpr size_t kMaxStats = 64;
+constexpr size_t kMaxMods = 255;
+constexpr size_t kMaxModNameBytes = 128;
 constexpr size_t kMaxTicketBytes = 512;  // identity ticket from the master server
 constexpr size_t kMaxInventoryBytes = 32768;  // the client's inventory text (opaque to the server)  // skill ids are 1..kMaxStats (docs/re/stats.md)
 
@@ -53,7 +55,7 @@ enum class RejectReason : uint8_t {
     VersionMismatch = 2,
     Banned = 3,
     BadAuth = 4,
-    ModMismatch = 5,  // reserved for the server-imposed mod list (spec 7.6)
+    ModMismatch = 5,  // the player's mods differ from the server's list (spec 7.6); HelloAck::serverMods says it
 };
 enum class AnimState : uint8_t { Idle = 0, Walk = 1, Run = 2 };
 
@@ -63,6 +65,7 @@ struct Hello {
     char name[32] = {};  // must contain a NUL terminator
     AuthToken token{};   // token issued by this server earlier, zero on a first visit
     std::string ticket;  // identity ticket signed by the master server for this server, may be empty
+    std::vector<std::string> mods;  // the player's active mods, in load order (data/__mods.list)
     bool operator==(const Hello&) const;
 };
 
@@ -71,6 +74,7 @@ struct HelloAck {
     PlayerId playerId = 0;
     bool hasCharacter = false;  // true => a CharacterData follows
     AuthToken token{};          // non-zero only when the server issues a new token
+    std::vector<std::string> serverMods;  // with ModMismatch: the mods this server requires, in order
     bool operator==(const HelloAck&) const = default;
 };
 

@@ -8,7 +8,7 @@ namespace wok {
 
 bool Hello::operator==(const Hello& o) const {
     return protocolVersion == o.protocolVersion && steamId == o.steamId &&
-           std::memcmp(name, o.name, sizeof(name)) == 0 && token == o.token && ticket == o.ticket;
+           std::memcmp(name, o.name, sizeof(name)) == 0 && token == o.token && ticket == o.ticket && mods == o.mods;
 }
 
 namespace {
@@ -54,18 +54,33 @@ bool readStats(ByteReader& r, std::vector<StatValue>& out) {
     return true;
 }
 
+void writeModList(ByteWriter& w, const std::vector<std::string>& mods) {
+    const size_t n = mods.size() < kMaxMods ? mods.size() : kMaxMods;
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) writeString(w, mods[i]);
+}
+bool readModList(ByteReader& r, std::vector<std::string>& mods) {
+    uint8_t n = r.u8();
+    if (!r.ok()) return false;
+    mods.resize(n);
+    for (auto& m : mods)
+        if (!readBytes(r, kMaxModNameBytes, m)) return false;
+    return true;
+}
 void write(ByteWriter& w, const Hello& m) {
     w.u16(m.protocolVersion);
     w.u64(m.steamId);
     w.raw(m.name, sizeof(m.name));
     w.raw(m.token.data(), m.token.size());
     writeString(w, m.ticket);
+    writeModList(w, m.mods);
 }
 void write(ByteWriter& w, const HelloAck& m) {
     w.u8(static_cast<uint8_t>(m.reason));
     w.u32(m.playerId);
     w.u8(m.hasCharacter ? 1 : 0);
     w.raw(m.token.data(), m.token.size());
+    writeModList(w, m.serverMods);
 }
 void write(ByteWriter& w, const PlayerState& m) {
     w.u32(m.playerId);
@@ -151,7 +166,7 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             m.steamId = r.u64();
             r.raw(m.name, sizeof(m.name));
             r.raw(m.token.data(), m.token.size());
-            if (!readBytes(r, kMaxTicketBytes, m.ticket)) return std::nullopt;
+            if (!readBytes(r, kMaxTicketBytes, m.ticket) || !readModList(r, m.mods)) return std::nullopt;
             if (std::memchr(m.name, 0, sizeof(m.name)) == nullptr) return std::nullopt;
             return m;
         }
@@ -165,6 +180,7 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             if (has > 1) return std::nullopt;
             m.hasCharacter = has == 1;
             r.raw(m.token.data(), m.token.size());
+            if (!readModList(r, m.serverMods)) return std::nullopt;
             return m;
         }
         case MsgType::PlayerState: {

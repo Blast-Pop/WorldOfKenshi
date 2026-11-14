@@ -126,7 +126,11 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_10") { CHECK(WOK_PROTOCOL_VERSION == 10);
+TEST_CASE("protocol_version_is_11") { CHECK(WOK_PROTOCOL_VERSION == 11);
+    HelloAck refused;
+    refused.reason = RejectReason::ModMismatch;
+    refused.serverMods = {"Many More Hairs", "MoodLighting"};
+    CHECK(decode(encode(refused)) == std::optional<Message>(refused));
     PlayerInfo look{4, "Nine", "17-gamedata.quack", "tpl", {1, 2, 3}};
     CHECK(decode(encode(look)) == std::optional<Message>(look));
     CHECK(decode(encode(CharacterDied{})) == std::optional<Message>(CharacterDied{}));

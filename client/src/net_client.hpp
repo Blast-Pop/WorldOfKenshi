@@ -32,6 +32,8 @@ public:
     void reportDeath();                                 // permanent death of our character
     Status status() const { return status_; }
     RejectReason rejectReason() const { return reject_; }
+    // After a ModMismatch refusal: what to change, in words ("Missing: A, B. Remove: C.").
+    std::string modAdvice() const;
     PlayerId playerId() const { return playerId_; }
     bool hasCharacter() const { return hasCharacter_; }
 
@@ -42,6 +44,7 @@ private:
     std::atomic<bool> running_{false};
     std::atomic<Status> status_{Status::Disconnected};
     std::atomic<RejectReason> reject_{RejectReason::None};
+    std::vector<std::string> myMods_, serverMods_;  // set when connecting / when refused for mods
     std::atomic<PlayerId> playerId_{0};
     std::atomic<bool> hasCharacter_{false};
     mutable std::mutex mutex_;

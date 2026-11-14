@@ -46,6 +46,7 @@ struct Args {
     std::string spawnFile;
     std::string defaultSpawn;
     bool forceSpawn = false;  // new characters always start at the spawn rule, not Kenshi's start
+    std::string modsFile;     // the server's mod list, one name per line (as in Kenshi's data/__mods.list)
     std::string name = "World of Kenshi server";
     std::string description;
     bool master = false;         // also serve the master server list
@@ -81,6 +82,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.spawnPoints.push_back(sp);
         } else if (k == "--spawn-file" && hasValue) {
             a.spawnFile = argv[++i];
+        } else if (k == "--mods-file" && hasValue) {
+            a.modsFile = argv[++i];
         } else if (k == "--force-spawn") {
             a.forceSpawn = true;
         } else if (k == "--default-spawn" && hasValue) {
@@ -114,7 +117,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
                          "                  [--http-port N] [--public-url http://HOST:PORT] [--spawn X,Y,Z]\n"
                          "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
                          "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
-                         "                  [--default-spawn Name] [--force-spawn] [--master] [--announce http://MASTER:27801]\n"
+                         "                  [--default-spawn Name] [--force-spawn] [--mods-file path] [--master] [--announce http://MASTER:27801]\n"
                          "                  [--no-steam] [--steam-api path/to/steam_api64.dll|libsteam_api.so]\n");
             return false;
         }
@@ -197,6 +200,20 @@ int main(int argc, char** argv) {
         cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
     }
     cfg.forceSpawn = args.forceSpawn;
+    if (!args.modsFile.empty()) {  // copy of a Kenshi data/__mods.list: one mod per line, in load order
+        std::ifstream in(args.modsFile);
+        if (!in) {
+            std::fprintf(stderr, "error: cannot read the mod list %s\n", args.modsFile.c_str());
+            return 1;
+        }
+        std::vector<std::string> mods;
+        for (std::string line; std::getline(in, line);) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            if (!line.empty() && line[0] != '#') mods.push_back(line);
+        }
+        std::printf("mods: %zu required (%s)\n", mods.size(), args.modsFile.c_str());
+        cfg.requiredMods = std::move(mods);
+    }
     static SteamAuth steamAuth;
     if (args.steam && steamAuth.start(args.steamApi, args.port)) {
         cfg.beginSteamAuth = [](uint64_t id, const std::string& t) { return steamAuth.begin(id, t); };

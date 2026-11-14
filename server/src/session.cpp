@@ -103,6 +103,12 @@ std::vector<Outgoing> SessionManager::reject(ConnId conn, RejectReason reason) {
 
 std::vector<Outgoing> SessionManager::handleHello(ConnId conn, Conn& c, const Hello& h, double nowSec) {
     if (h.protocolVersion != WOK_PROTOCOL_VERSION) return reject(conn, RejectReason::VersionMismatch);
+    if (cfg_.requiredMods && h.mods != *cfg_.requiredMods) {  // spec 7.6: same mods, same order
+        requestClose(conn);
+        HelloAck ack{RejectReason::ModMismatch, 0};
+        ack.serverMods = *cfg_.requiredMods;
+        return {Outgoing{conn, ack}};
+    }
     if (cfg_.bannedSteamIds.contains(h.steamId)) return reject(conn, RejectReason::Banned);
     if (playerCount() >= cfg_.maxPlayers) return reject(conn, RejectReason::ServerFull);
 

@@ -1,6 +1,7 @@
 #include "net_client.hpp"
 
 #include "log.hpp"
+#include "core/paths.hpp"
 
 #include <wok/transport.hpp>
 
@@ -10,8 +11,25 @@
 
 #include <chrono>
 #include <cstring>
+#include <fstream>
+#include <algorithm>
 
 namespace wok {
+
+namespace {
+// The player's active mods in load order: Kenshi's data/__mods.list (one name per line).
+std::vector<std::string> activeMods() {
+    std::string dir = modDir();  // <Kenshi>/WorldOfKenshi
+    dir = dir.substr(0, dir.find_last_of("\\/"));
+    std::ifstream in(dir + "\\data\\__mods.list");
+    std::vector<std::string> mods;
+    for (std::string line; std::getline(in, line);) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        if (!line.empty()) mods.push_back(line);
+    }
+    return mods;
+}
+}  // namespace
 
 namespace {
 
@@ -87,6 +105,23 @@ void ClientNet::reportDeath() {
     outgoingInventory_.reset();
 }
 
+std::string ClientNet::modAdvice() const {
+    std::lock_guard lock(mutex_);
+    auto has = [](const std::vector<std::string>& v, const std::string& m) {
+        return std::find(v.begin(), v.end(), m) != v.end();
+    };
+    std::string missing, extra;
+    for (const auto& m : serverMods_)
+        if (!has(myMods_, m)) missing += (missing.empty() ? "" : ", ") + m;
+    for (const auto& m : myMods_)
+        if (!has(serverMods_, m)) extra += (extra.empty() ? "" : ", ") + m;
+    std::string out;
+    if (!missing.empty()) out += "Missing: " + missing + ". ";
+    if (!extra.empty()) out += "Turn off: " + extra + ". ";
+    if (out.empty()) out = "Same mods, different load order: match the server's order. ";
+    return out;
+}
+
 std::vector<Message> ClientNet::drainIncoming() {
     std::lock_guard lock(mutex_);
     return std::exchange(incoming_, {});
@@ -126,6 +161,11 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                     h.token = token;
                     h.ticket = ticket;
                     std::strncpy(h.name, cfg.name.c_str(), sizeof(h.name) - 1);
+                    h.mods = activeMods();
+                    {
+                        std::lock_guard lock(mutex_);
+                        myMods_ = h.mods;
+                    }
                     auto b = encode(h);
                     net.send(b, true);
                     log("net: connected, Hello sent (%s)", token == AuthToken{} ? "first visit" : "with token");
@@ -152,6 +192,10 @@ void ClientNet::run(ClientConfig cfg, uint64_t steamId, AuthToken token, std::st
                             log("net: joined as player %u (%s)", ack->playerId,
                                 ack->hasCharacter ? "has a character" : "no character yet");
                         } else {
+                            {
+                                std::lock_guard lock(mutex_);
+                                serverMods_ = ack->serverMods;
+                            }
                             reject_ = ack->reason;
                             status_ = Status::Rejected;
                             log("net: rejected (reason %u)", static_cast<unsigned>(ack->reason));

@@ -686,7 +686,11 @@ void MultiplayerMenu::refreshStatus() {
             case ClientNet::Status::Connected:
                 s = std::string("Connected - ") + (net_.hasCharacter() ? "character found" : "no character yet");
                 break;
-            case ClientNet::Status::Rejected: s = std::string("Refused: ") + rejectText(net_.rejectReason()); break;
+            case ClientNet::Status::Rejected:
+                s = net_.rejectReason() == RejectReason::ModMismatch
+                        ? std::string("Your mods differ from the server's. ") + net_.modAdvice()
+                        : std::string("Refused: ") + rejectText(net_.rejectReason());
+                break;
         }
     }
     if (s != lastStatus_) {

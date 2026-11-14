@@ -492,3 +492,28 @@ TEST_CASE("new_character_keeps_its_kenshi_start_position") {
     CHECK(made[0].x == 500.0f);
     CHECK(made[0].z == -700.0f);
 }
+
+TEST_CASE("players_need_the_server_mods") {
+    Fixture f;
+    SessionConfig cfg = f.config();
+    cfg.requiredMods = std::vector<std::string>{"Many More Hairs", "MoodLighting"};
+    SessionManager sm(cfg);
+    AuthToken t{};
+    t.fill(9);
+    f.store.setToken(42, t);
+    sm.onConnect(1, 0.0);
+    Hello h{};
+    h.steamId = 42;
+    std::strcpy(h.name, "p");
+    h.token = t;
+    h.mods = {"MoodLighting", "Many More Hairs"};  // right mods, wrong order
+    auto acks = all<HelloAck>(sm.onPacket(1, encode(h), 0.0));
+    REQUIRE(acks.size() == 1);
+    CHECK(acks[0].reason == RejectReason::ModMismatch);
+    CHECK(acks[0].serverMods.size() == 2);
+    sm.onConnect(2, 1.0);
+    h.mods = {"Many More Hairs", "MoodLighting"};
+    acks = all<HelloAck>(sm.onPacket(2, encode(h), 1.0));
+    REQUIRE(acks.size() == 1);
+    CHECK(acks[0].reason == RejectReason::None);
+}
