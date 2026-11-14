@@ -249,8 +249,17 @@ void Chat::dragCorner() {
     mouseWasDown_ = down;
 }
 
-void Chat::update(double nowSec, bool active) {
+void Chat::update(double nowSec, bool active, bool hidden) {
     if (!mygui::available()) return;
+    if (active && hidden) {  // pause menu open: put the chat away until it closes
+        if (typing_) close(false);
+        dragging_ = false;
+        mygui::destroy(mygui::findWidget(kBox));
+        drawnCount_ = 0;
+        lastDrawn_ = -1;
+        enterWasDown_ = true;
+        return;
+    }
     if (!active) {
         if (typing_) close(false);
         if (drawnCount_) {

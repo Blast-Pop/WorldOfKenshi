@@ -16,7 +16,8 @@ public:
     explicit Chat(std::function<void(const ChatSend&)> send) : send_(std::move(send)) {}
     void onMessage(const ChatMessage& m, double nowSec);
     // Every frame. `active`: in a server world (otherwise the chat is hidden and closed).
-    void update(double nowSec, bool active);
+    // `hidden`: a menu covers the game (pause menu): no frame, no typing, messages kept.
+    void update(double nowSec, bool active, bool hidden = false);
     bool typing() const { return typing_; }
     void setOpacity(float percent) { opacity_ = percent; }
     // Frame size in pixels (saved by the caller when the player resizes it).

@@ -440,7 +440,13 @@ void onFrame(float dt) {
         s.cfg.chatHeight = s.chat->height();
         saveConfig(s.cfg);
     }
-    s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent));
+    static bool pauseMenuOpen = false;  // Kenshi's pause (Escape) menu, checked 5 times a second
+    static double nextPauseCheck = 0;
+    if (s.now >= nextPauseCheck) {
+        nextPauseCheck = s.now + 0.2;
+        pauseMenuOpen = wok::mygui::findShownBySuffix("_ResumeButton", 3) != nullptr;
+    }
+    s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent), pauseMenuOpen);
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 
