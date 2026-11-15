@@ -13,8 +13,8 @@ namespace wok {
 
 namespace {
 constexpr float kHeadHeight = 2.4f;  // label anchor above the feet
-constexpr int kTagW = 220, kTagH = 22;
-constexpr int kLiftPx = 20;  // a little above the head
+constexpr int kTagW = 260, kTagH = 32;  // Kenshi_CharacterNamePanel.layout
+constexpr int kLiftPx = 45;  // above the head
 constexpr size_t kMaxTags = 32;
 std::string tagName(size_t i) { return "WokNameTag" + std::to_string(i); }
 
@@ -181,14 +181,16 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
         const std::string name = tagName(used);
         mygui::Widget* w = mygui::findWidget(name);
         if (!w) {
-            w = mygui::createRoot("TextBox", "Kenshi_TextboxStandardText", {0, 0, 0.1f, 0.02f}, "Popup", name);
+            // Kenshi's own name tag look (Kenshi_CharacterNamePanel.layout, NameTagUnselected colour).
+            w = mygui::createRoot("TextBox", "Kenshi_TextboxStandardText_Large", {0, 0, 0.1f, 0.03f}, "Back", name);
             if (!w) continue;
             mygui::setProperty(w, "TextAlign", "Center");
-            mygui::setProperty(w, "TextColour", "0.95 0.85 0.45");
+            mygui::setProperty(w, "TextColour", "0.7 0.7 0.7");
             mygui::setProperty(w, "TextShadow", "true");
+            mygui::setProperty(w, "TextShadowColour", "0.28 0.28 0.28");
             mygui::setProperty(w, "NeedMouse", "false");
         }
-        mygui::setProperty(w, "Caption", tags[i].name);
+        mygui::setProperty(w, "Caption", "[" + tags[i].name + "]");
         mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2 - kLiftPx, kTagW, kTagH);
         ++used;
     }
