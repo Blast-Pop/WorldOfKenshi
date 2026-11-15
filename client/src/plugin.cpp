@@ -487,7 +487,7 @@ void onFrame(float dt) {
     if (s.avatarsOk) {  // other players' names above their heads
         std::vector<wok::NameTag> tags;
         if (connected && s.avatars.inGame() && !pauseMenuOpen)
-            for (auto& t : s.avatars.nameTags()) tags.push_back({t.name, {t.pos[0], t.pos[1], t.pos[2]}});
+            for (auto& t : s.avatars.nameTags()) tags.push_back({t.name, t.character});
         wok::updateNameTags(tags, !tags.empty());
     }
     if (s.sharedOk && connected && s.characterRestored && !s.dead)

@@ -3,6 +3,7 @@
 #include "../game/direct_control.hpp"
 #include "../log.hpp"
 #include "mygui_abi.hpp"
+#include "../game/game_memory.hpp"
 
 #include <windows.h>
 
@@ -19,7 +20,10 @@ std::string tagName(size_t i) { return "WokNameTag" + std::to_string(i); }
 using MatrixFn = const float* (*)(const void* self);
 using RefVecFn = const float* (*)(const void* self);          // const Vector3& getter
 using ValVecFn = float* (*)(const void* self, float* out);    // Vector3 returned by value
+using NodeOfFn = void* (*)(const void* movable);
 struct Calls {
+    NodeOfFn parentNode = nullptr;
+    ValVecFn nodePosition = nullptr;
     MatrixFn projection = nullptr;
     RefVecFn position = nullptr;
     ValVecFn right = nullptr, up = nullptr, direction = nullptr;
@@ -28,6 +32,10 @@ const Calls& calls() {
     static Calls c = [] {
         Calls r;
         if (HMODULE m = GetModuleHandleA("OgreMain_x64.dll")) {
+            r.parentNode = reinterpret_cast<NodeOfFn>(
+                GetProcAddress(m, "?getParentSceneNode@MovableObject@Ogre@@QEBAPEAVSceneNode@2@XZ"));
+            r.nodePosition =
+                reinterpret_cast<ValVecFn>(GetProcAddress(m, "?_getDerivedPosition@Node@Ogre@@QEBA?AVVector3@2@XZ"));
             r.projection =
                 reinterpret_cast<MatrixFn>(GetProcAddress(m, "?getProjectionMatrix@Frustum@Ogre@@UEBAAEBVMatrix4@2@XZ"));
             r.position = reinterpret_cast<RefVecFn>(GetProcAddress(m, "?getDerivedPosition@Camera@Ogre@@QEBAAEBVVector3@2@XZ"));
@@ -62,6 +70,41 @@ bool readCamera(CameraFrame& f) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
+}
+
+// Where a character is drawn (render space, same as the camera's): the scene node of its body, an
+// Ogre::Entity held by its appearance (character + 0x448). Game positions (character + 0x48) are
+// in another space: Kenshi keeps the rendered world near the camera.
+bool renderPositionRaw(uintptr_t entity, float out[3]) {
+    const Calls& c = calls();
+    __try {
+        void* node = c.parentNode(reinterpret_cast<void*>(entity));
+        if (!node) return false;
+        c.nodePosition(node, out);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool renderPosition(uintptr_t character, float out[3]) {
+    const Calls& c = calls();
+    uintptr_t appearance = 0;
+    if (!c.parentNode || !c.nodePosition || !mem::readPtr(character + 0x448, appearance) || !appearance) return false;
+    static uintptr_t entityOffset = 0;  // found once
+    uintptr_t entity = 0;
+    if (!entityOffset || !mem::readPtr(appearance + entityOffset, entity) || !mem::isA(entity, ".?AVEntity@Ogre@@")) {
+        entity = 0;
+        for (uintptr_t off = 8; off < 0x400 && !entity; off += 8) {
+            uintptr_t p = 0;
+            if (mem::readPtr(appearance + off, p) && p > 0x10000 && mem::isA(p, ".?AVEntity@Ogre@@")) {
+                entity = p;
+                entityOffset = off;
+                log("tags: body entity at appearance + 0x%llx", static_cast<unsigned long long>(off));
+            }
+        }
+    }
+    return entity && renderPositionRaw(entity, out);
 }
 
 // Ogre matrices are row-major: out = m * (x, y, z, w).
@@ -104,7 +147,9 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
     if (ok && (frame++ % 120 == 0 || vw == 0)) viewSize(vw, vh);  // window size, re-read now and then
     size_t used = 0;
     for (size_t i = 0; ok && i < tags.size() && used < kMaxTags; ++i) {
-        const float world[4] = {tags[i].pos[0], tags[i].pos[1] + kHeadHeight, tags[i].pos[2], 1.0f};
+        float feet[3];
+        if (!renderPosition(tags[i].character, feet)) continue;
+        const float world[4] = {feet[0], feet[1] + kHeadHeight, feet[2], 1.0f};
         const float d[3] = {world[0] - cam.pos[0], world[1] - cam.pos[1], world[2] - cam.pos[2]};
         auto dot = [&](const float* a) { return a[0] * d[0] + a[1] * d[1] + a[2] * d[2]; };
         // Camera space: x right, y up, looking down -z.

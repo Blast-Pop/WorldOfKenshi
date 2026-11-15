@@ -140,8 +140,7 @@ std::vector<AvatarManager::Tag> AvatarManager::nameTags() const {
     std::vector<Tag> out;
     for (auto& [id, a] : avatars_) {
         if (!a.character || a.name.empty()) continue;
-        Tag t{a.name, {}};
-        if (mem::readBytes(a.character + 0x48, t.pos, sizeof(t.pos))) out.push_back(std::move(t));
+        out.push_back({a.name, a.character});
     }
     return out;
 }

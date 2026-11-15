@@ -20,7 +20,7 @@ public:
     bool inGame() const { return spawner_.inGame(); }
     struct Tag {
         std::string name;
-        float pos[3];
+        uintptr_t character;
     };
     std::vector<Tag> nameTags() const;  // other players' names and where their avatars stand
     bool isAvatar(uintptr_t character) const {

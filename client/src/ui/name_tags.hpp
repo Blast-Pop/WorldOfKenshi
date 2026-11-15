@@ -2,6 +2,7 @@
 // Other players' names, always shown above their avatars so players recognise each other: our own
 // MyGUI labels placed every frame by projecting the avatar's head with the game camera.
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -9,7 +10,7 @@ namespace wok {
 
 struct NameTag {
     std::string name;
-    float pos[3];  // the avatar's feet (world)
+    uintptr_t character = 0;  // the avatar (its body's scene node gives the render position)
 };
 
 // Every frame; an empty list (or `visible` false) removes the labels.

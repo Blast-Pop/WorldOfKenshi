@@ -249,3 +249,14 @@ TEST_CASE("cell_owner_is_the_earliest_player_and_npcs_reach_neighbours") {
     CHECK(sentOf<NpcSnapshot>(sm.onPacket(2, encode(snap), 1.2)).empty());
     CHECK(sentOf<CellOwners>(sm.tick(2.0)).empty());  // nothing changed: nothing sent
 }
+
+TEST_CASE("a_newcomer_gets_the_cell_owners") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    sm.onPacket(1, stateBytes(a, 100.0f), 0.1);
+    sm.tick(1.0);  // a owns its cell
+    sm.onConnect(2, 2.0);
+    auto out = sm.onPacket(2, helloBytes(12), 2.0);
+    REQUIRE(sentOf<CellOwners>(out).size() == 1);
+    CHECK(sentOf<CellOwners>(out)[0].second.cells.size() == 1);
+}
