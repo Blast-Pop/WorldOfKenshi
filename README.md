@@ -3,9 +3,9 @@
 An open-source multiplayer mod for [Kenshi](https://lofigames.com/): dedicated servers,
 a server-specific character per player, and every player's actions replicated to the others.
 
-> Status: **alpha 0.2**. Expect bugs.
+> Status: **alpha 0.3**. Expect bugs.
 
-## Features (alpha 0.2)
+## Features (alpha 0.3)
 
 - Multiplayer button in Kenshi's main menu (no injector) and a server list.
 - Steam login: the server checks the Steam account and Kenshi ownership. No browser, no extra account.
@@ -21,11 +21,15 @@ a server-specific character per player, and every player's actions replicated to
   delete their character on a server.
 - Server-side time: no pause, no speed-up; the world keeps going while players are offline, and the
   game shows the server's day.
+- Other players wear their exact face and body; their names show above their heads.
+- **Shared world (early)**: each area is simulated by one player's game and its NPCs are shown to
+  the players nearby (combat and trading with them are not synced yet).
+- Hunger is saved; **Direct connect** for private servers.
 - Dedicated server for Linux and Windows; anyone can host one (no central official server).
 
 ## Installing the client (players)
 
-Download `WorldOfKenshi-alpha-0.2.zip` from the releases, extract it anywhere and run `install.bat`;
+Download `WorldOfKenshi-alpha-0.3.zip` from the releases, extract it anywhere and run `install.bat`;
 it finds your Kenshi folder (or asks for it). Start Kenshi from Steam and click **Multiplayer** in
 the main menu. `uninstall.bat` restores Kenshi as it was. Requires Kenshi 1.0.68 (Steam).
 
@@ -34,7 +38,7 @@ talk only to players nearby.
 
 ## Hosting a server
 
-**Windows**: download `WorldOfKenshi-server-windows-alpha-0.2.zip`, set your server's name and the path
+**Windows**: download `WorldOfKenshi-server-windows-alpha-0.3.zip`, set your server's name and the path
 to Kenshi's `steam_api64.dll` in `start_server.bat`, open UDP 27800 and TCP 27801, and run it. The
 server shows up in every player's server list.
 

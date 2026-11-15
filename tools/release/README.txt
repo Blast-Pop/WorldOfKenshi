@@ -1,4 +1,4 @@
-World of Kenshi - alpha 0.2
+World of Kenshi - alpha 0.3
 ===========================
 
 A multiplayer mod for Kenshi (Steam version 1.0.68). This is an ALPHA: expect bugs.
@@ -25,6 +25,10 @@ Good to know
   Options > Multiplayer.
 - A server may require a mod list: if yours differs, the Multiplayer window tells you what to change.
 - Delete character (Multiplayer window) removes your character on the selected server.
+- Direct connect (Multiplayer window): join a private server by its address.
+- Other players' names show above their heads (Options > Multiplayer: on/off, distance).
+- Shared world (early): in an area, one player's game runs the NPCs and everyone nearby
+  sees the same ones. Combat and trading with those NPCs are not synced yet.
 - Single player is untouched: just use Continue / New Game as usual.
 
 Uninstall
