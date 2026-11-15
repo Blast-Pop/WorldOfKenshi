@@ -1,4 +1,4 @@
-World of Kenshi - alpha 0.3.1
+World of Kenshi - alpha 0.3.2
 ===========================
 
 A multiplayer mod for Kenshi (Steam version 1.0.68). This is an ALPHA: expect bugs.
@@ -26,6 +26,7 @@ Good to know
 - A server may require a mod list: if yours differs, the Multiplayer window tells you what to change.
 - Delete character (Multiplayer window) removes your character on the selected server.
 - Direct connect (Multiplayer window): join a private server by its address.
+- Report a bug (Multiplayer window): sends your description and logs to the developer.
 - Automatic updates: the mod installs new versions from GitHub when Kenshi starts (restart Kenshi
   to use them). Turn it off in Options > Multiplayer or with auto_update=0 in wok_client.ini.
 - Other players' names show above their heads (Options > Multiplayer: on/off, distance).

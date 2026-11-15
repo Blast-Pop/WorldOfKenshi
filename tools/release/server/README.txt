@@ -1,4 +1,4 @@
-World of Kenshi - dedicated server (alpha 0.3.1), Windows
+World of Kenshi - dedicated server (alpha 0.3.2), Windows
 =======================================================
 
 1. Open start_server.bat in a text editor and set NAME, DESCRIPTION and the path to
