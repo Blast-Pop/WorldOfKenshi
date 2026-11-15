@@ -57,6 +57,7 @@ struct Args {
     std::string steamApi = "./libsteam_api.so";
 #endif
     std::string announceUrl;     // master to announce this server to, e.g. http://1.2.3.4:27801
+    WorldRules rules;            // game rates (Kenshi's advanced options), 1.25 by default
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -84,6 +85,14 @@ bool parseArgs(int argc, char** argv, Args& a) {
             a.spawnFile = argv[++i];
         } else if (k == "--mods-file" && hasValue) {
             a.modsFile = argv[++i];
+        } else if ((k == "--production-speed" || k == "--building-speed" || k == "--research-speed") && hasValue) {
+            float v = 0;
+            if (std::sscanf(argv[++i], "%f", &v) != 1 || !(v >= kMinRuleRate && v <= kMaxRuleRate)) {
+                std::fprintf(stderr, "error: %s must be between %.1f and %.1f\n", k.c_str(), kMinRuleRate, kMaxRuleRate);
+                return false;
+            }
+            (k == "--production-speed" ? a.rules.productionSpeed
+                                       : k == "--building-speed" ? a.rules.buildingSpeed : a.rules.researchSpeed) = v;
         } else if (k == "--force-spawn") {
             a.forceSpawn = true;
         } else if (k == "--default-spawn" && hasValue) {
@@ -118,7 +127,8 @@ bool parseArgs(int argc, char** argv, Args& a) {
                          "                  [--test-bots] [--name TEXT] [--description TEXT]\n"
                          "                  [--spawn-point Name:X,Y,Z ...] [--spawn-file towns.txt]\n"
                          "                  [--default-spawn Name] [--force-spawn] [--mods-file path] [--master] [--announce http://MASTER:27801]\n"
-                         "                  [--no-steam] [--steam-api path/to/steam_api64.dll|libsteam_api.so]\n");
+                         "                  [--no-steam] [--steam-api path/to/steam_api64.dll|libsteam_api.so]\n"
+                         "                  [--production-speed X] [--building-speed X] [--research-speed X] (default 1.25)\n");
             return false;
         }
     }
@@ -200,6 +210,9 @@ int main(int argc, char** argv) {
         cfg.pickSpawn = [idx](size_t) { return static_cast<size_t>(idx); };
     }
     cfg.forceSpawn = args.forceSpawn;
+    cfg.rules = args.rules;
+    std::printf("rules: production x%.2f, building x%.2f, research x%.2f\n", cfg.rules.productionSpeed,
+                cfg.rules.buildingSpeed, cfg.rules.researchSpeed);
     if (!args.modsFile.empty()) {  // copy of a Kenshi data/__mods.list: one mod per line, in load order
         std::ifstream in(args.modsFile);
         if (!in) {

@@ -61,6 +61,7 @@ enum class MsgType : uint8_t {
     NpcSnapshot = 20,
     NpcRecords = 21,
     NpcBind = 22,
+    WorldRules = 23,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -244,6 +245,16 @@ struct NpcBind {
     bool operator==(const NpcBind&) const = default;
 };
 
+// The server's game rules (server -> client, on joining): Kenshi's "advanced options" rates, the
+// same for every player. Without time acceleration a 1x game is very slow, hence 1.25 by default.
+inline constexpr float kMinRuleRate = 0.1f, kMaxRuleRate = 10.0f;
+struct WorldRules {
+    float productionSpeed = 1.25f;  // mines, farms and crafting buildings
+    float buildingSpeed = 1.25f;
+    float researchSpeed = 1.25f;
+    bool operator==(const WorldRules&) const = default;
+};
+
 inline int32_t cellOf(float coord) { return static_cast<int32_t>(std::floor(coord / kCellSize)); }
 
 // Chat (spec 7.8). Global: every player; local: players near the speaker.
@@ -279,7 +290,7 @@ struct PlayerInfo {
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
                              CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
                              PlayerInfo, CharacterDied, ChatSend, ChatMessage, CellOwners, NpcInfo, NpcSnapshot,
-                             NpcRecords, NpcBind>;
+                             NpcRecords, NpcBind, WorldRules>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

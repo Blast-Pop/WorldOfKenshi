@@ -137,6 +137,11 @@ void write(ByteWriter& w, const NpcRecords& m) {
         w.u8(c.dead ? 1 : 0);
     }
 }
+void write(ByteWriter& w, const WorldRules& m) {
+    w.f32(m.productionSpeed);
+    w.f32(m.buildingSpeed);
+    w.f32(m.researchSpeed);
+}
 void write(ByteWriter& w, const NpcBind& m) {
     const size_t n = m.bindings.size() < kMaxNpcBindings ? m.bindings.size() : kMaxNpcBindings;
     w.u8(static_cast<uint8_t>(n));
@@ -223,6 +228,7 @@ constexpr MsgType typeOf(const NpcInfo&) { return MsgType::NpcInfo; }
 constexpr MsgType typeOf(const NpcSnapshot&) { return MsgType::NpcSnapshot; }
 constexpr MsgType typeOf(const NpcRecords&) { return MsgType::NpcRecords; }
 constexpr MsgType typeOf(const NpcBind&) { return MsgType::NpcBind; }
+constexpr MsgType typeOf(const WorldRules&) { return MsgType::WorldRules; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -338,6 +344,15 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             if (!r.ok()) return std::nullopt;
             return m;
         }
+        case MsgType::WorldRules: {
+            WorldRules m;
+            m.productionSpeed = r.f32();
+            m.buildingSpeed = r.f32();
+            m.researchSpeed = r.f32();
+            for (float v : {m.productionSpeed, m.buildingSpeed, m.researchSpeed})
+                if (!finite(v) || v < kMinRuleRate || v > kMaxRuleRate) return std::nullopt;
+            return m;
+        }
         case MsgType::NpcBind: {
             NpcBind m;
             uint8_t n = r.u8();
@@ -449,7 +464,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::NpcBind))
+        type > static_cast<uint8_t>(MsgType::WorldRules))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

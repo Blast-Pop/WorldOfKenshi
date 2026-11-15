@@ -11,6 +11,7 @@
 #include "game/shared_npcs.hpp"
 #include "ui/chat.hpp"
 #include "updater.hpp"
+#include "game/world_rules.hpp"
 #include "ui/options_tab.hpp"
 #include "ui/name_tags.hpp"
 #include "game/identity.hpp"
@@ -40,10 +41,12 @@
 #include <cmath>
 #include <fstream>
 #include <algorithm>
+#include <optional>
 #include <map>
 #include <set>
 #include <unordered_set>
 #include <memory>
+#include <optional>
 #include <sstream>
 
 namespace {
@@ -84,6 +87,8 @@ struct ClientState {
     bool dead = false;                   // our character died; reported, waiting for the server
     double nextDeathCheck = 0;
     double nextCreateDiag = 0;
+    std::optional<wok::WorldRules> rules;  // the server's game rates, applied while in a world
+    double nextRulesApply = 0;
     std::vector<uint8_t> lookToApply;   // our saved look, applied once the editor has closed
     double lookAt = 0;
     wok::DirectControl control;          // WASD movement
@@ -337,6 +342,11 @@ void onFrame(float dt) {
             if (s.chat) s.chat->onMessage(*cm, s.now);
             continue;
         }
+        if (auto* wr = std::get_if<wok::WorldRules>(&m)) {
+            s.rules = *wr;
+            s.nextRulesApply = 0;
+            continue;
+        }
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)
         {
             if (s.menu) s.menu->setServerDay(wt->day);
@@ -473,6 +483,10 @@ void onFrame(float dt) {
         }
     }
     if (!s.chat) s.chat = std::make_unique<wok::Chat>([](const wok::ChatSend& m) { g_state->net->sendChat(m); });
+    if (s.rules && s.now >= s.nextRulesApply && s.avatarsOk && s.avatars.inGame()) {
+        s.nextRulesApply = s.now + 5.0;  // starting or loading a game resets Kenshi's rates
+        wok::applyWorldRules(*s.rules);
+    }
     if (s.now >= s.nextOptionsPoll) {  // our Options tab; save a changed setting
         s.nextOptionsPoll = s.now + 0.5;
         static bool loaded = false;

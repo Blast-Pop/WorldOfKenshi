@@ -324,6 +324,18 @@ TEST_CASE("a_record_the_new_owner_does_not_continue_is_forgotten") {
     CHECK(again[0].second.records[0].name == "Barman");
 }
 
+TEST_CASE("a_player_gets_the_servers_rules_on_joining") {
+    SessionConfig cfg;
+    cfg.rules.researchSpeed = 2.0f;
+    SessionManager sm(cfg);
+    sm.onConnect(1, 0.0);
+    auto rules = sentOf<WorldRules>(sm.onPacket(1, helloBytes(11, WOK_PROTOCOL_VERSION), 0.0));
+    REQUIRE(rules.size() == 1);
+    CHECK(rules[0].first == 1);
+    CHECK(rules[0].second.productionSpeed == 1.25f);  // the default
+    CHECK(rules[0].second.researchSpeed == 2.0f);
+}
+
 TEST_CASE("a_newcomer_gets_the_cell_owners") {
     SessionManager sm({});
     auto a = join(sm, 1, 11).playerId;

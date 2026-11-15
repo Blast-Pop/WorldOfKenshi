@@ -135,6 +135,9 @@ TEST_CASE("protocol_version_is_13") { CHECK(WOK_PROTOCOL_VERSION == 13);
     CHECK(decode(encode(snap)) == std::optional<Message>(snap));
     NpcRecords records{{{41, "Barman", "12-gamedata.base", 1.f, 2.f, 3.f, false}, {42, "Thug", "13-gamedata.base", 4.f, 5.f, 6.f, true}}};
     CHECK(decode(encode(records)) == std::optional<Message>(records));
+    WorldRules rules{1.25f, 2.0f, 0.5f};
+    CHECK(decode(encode(rules)) == std::optional<Message>(rules));
+    CHECK(!decode(encode(WorldRules{50.0f, 1.0f, 1.0f})));  // out of range
     NpcBind bind{{{5, 41}, {6, 42}}};
     CHECK(decode(encode(bind)) == std::optional<Message>(bind));
     ChatMessage said{ChatChannel::Local, 3, "Nine", "hello"};

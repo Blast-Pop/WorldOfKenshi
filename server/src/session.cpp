@@ -237,6 +237,7 @@ std::vector<Outgoing> SessionManager::accept(ConnId conn, Conn& c, const AuthTok
         if (!other.characterName.empty()) out.push_back({conn, infoOf(other)});
         if (!c.characterName.empty()) out.push_back({otherId, infoOf(c)});
     }
+    out.push_back({conn, cfg_.rules});
     if (cfg_.worldTime) out.push_back({conn, cfg_.worldTime(nowSec)});
     if (!cellOwners_.empty()) {  // shared world: who simulates what, for the newcomer (later only changes)
         CellOwners list;

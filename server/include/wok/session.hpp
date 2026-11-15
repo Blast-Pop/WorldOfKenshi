@@ -67,6 +67,7 @@ struct SessionConfig {
     // Mods every player must run, in load order (spec 7.6). Empty optional: any mods are accepted.
     std::optional<std::vector<std::string>> requiredMods;
     float chatLocalRadius = 100.0f;  // local chat reaches players this close to the speaker (game units)  // ignore the start position chosen in Kenshi (always use the spawn rule)
+    WorldRules rules;  // game rates every player gets (Kenshi's advanced options)
     std::function<WorldTime(double nowSec)> worldTime;  // the server's clock; none: no time sync
     // Steam session tickets (docs/m2-auth.md): when set, a Hello carrying a ticket is checked with
     // Steam instead of the browser login. beginSteamAuth returns true if Steam accepted the ticket
