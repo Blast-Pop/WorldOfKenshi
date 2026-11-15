@@ -6,6 +6,7 @@
 #include "game/avatars.hpp"
 #include "game/game_memory.hpp"
 #include "game/direct_control.hpp"
+#include "game/world_characters.hpp"
 #include "ui/chat.hpp"
 #include "ui/options_tab.hpp"
 #include "game/identity.hpp"
@@ -35,6 +36,7 @@
 #include <cmath>
 #include <fstream>
 #include <map>
+#include <set>
 #include <memory>
 #include <sstream>
 
@@ -366,46 +368,43 @@ void onFrame(float dt) {
         }
         wasDown = down;
     }
-    // RE probe Ctrl+Shift+F1: where is GameWorld's set of active characters? Look, two levels deep
-    // from GameWorld, for a hash-table node that holds the player's character pointer.
+    // RE probe Ctrl+Shift+F1: where is GameWorld's set of active characters? For every pointer in
+    // GameWorld, count distinct characters reachable as table -> node -> character (two hops).
     {
         static bool wasDown = false;
         bool down = (GetAsyncKeyState(VK_F1) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
                     (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-        if (down && !wasDown && s.readerOk) {
-            s.reader.read(s.now);
-            const uintptr_t ch = s.reader.character(), gw = wok::mem::moduleBase() + 0x2134110;
-            int hits = 0;
-            for (uintptr_t off = 0; off < 0x3000 && hits < 20; off += 8) {
+        if (down && !wasDown) {
+            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
+            for (uintptr_t off = 0; off < 0x3000; off += 8) {
                 uintptr_t a = 0;
                 if (!wok::mem::readPtr(gw + off, a) || a < 0x10000) continue;
-                for (uintptr_t i = 0; i < 0x400 && hits < 20; i += 8) {  // a bucket array, or a node
+                std::set<uintptr_t> chars;
+                for (uintptr_t i = 0; i < 0x800; i += 8) {
                     uintptr_t n = 0;
                     if (!wok::mem::readPtr(a + i, n) || n < 0x10000) continue;
-                    for (uintptr_t k = 0; k < 0x30; k += 8) {
+                    for (uintptr_t k = 0; k < 0x20; k += 8) {
                         uintptr_t v = 0;
-                        if (wok::mem::readPtr(n + k, v) && v == ch) {
-                            wok::log("probe: GameWorld+0x%llx -> [+0x%llx] -> node +0x%llx holds the player",
-                                     (unsigned long long)off, (unsigned long long)i, (unsigned long long)k);
-                            ++hits;
-                        }
+                        if (wok::mem::readPtr(n + k, v) && v > 0x10000 && wok::mem::isA(v, ".?AVCharacterHuman@@"))
+                            chars.insert(v);
                     }
                 }
+                if (chars.size() >= 3)
+                    wok::log("probe: GameWorld+0x%llx -> %zu distinct characters within 2 hops", (unsigned long long)off,
+                             chars.size());
             }
-            wok::log("probe: character set search done (%d hits, player %p)", hits, reinterpret_cast<void*>(ch));
-            for (uintptr_t off = 0x770; off <= 0x7c0; off += 8) {
-                uintptr_t v = 0;
-                wok::mem::readPtr(gw + off, v);
-                wok::log("probe: GameWorld+0x%llx = %016llx", (unsigned long long)off, (unsigned long long)v);
-            }
-            uintptr_t arr = 0;
-            wok::mem::readPtr(gw + 0x790, arr);
-            for (uintptr_t i = 0x180; i < 0x240; i += 8) {
-                uintptr_t v = 0, w = 0;
-                wok::mem::readPtr(arr + i, v);
-                if (v > 0x10000) wok::mem::readPtr(v, w);
-                wok::log("probe:   [+0x%llx] = %016llx (first qword %016llx)%s", (unsigned long long)i, (unsigned long long)v,
-                         (unsigned long long)w, wok::mem::isA(v, ".?AVCharacterHuman@@") ? " CHARACTER" : "");
+            wok::log("probe: character table search done");
+            float me[3] = {};
+            s.reader.read(s.now);
+            wok::mem::readBytes(s.reader.character() + 0x48, me, sizeof(me));
+            auto all = wok::activeCharacters();
+            wok::log("probe: %zu active characters", all.size());
+            for (size_t i = 0; i < all.size() && i < 40; ++i) {
+                float p[3] = {};
+                wok::mem::readBytes(all[i] + 0x48, p, sizeof(p));
+                std::string name = wok::mem::readString(all[i] + 0x18, 40);
+                wok::log("probe:   %p '%s' at %.0f units", reinterpret_cast<void*>(all[i]), name.c_str(),
+                         std::sqrt((p[0] - me[0]) * (p[0] - me[0]) + (p[2] - me[2]) * (p[2] - me[2])));
             }
         }
         wasDown = down;
