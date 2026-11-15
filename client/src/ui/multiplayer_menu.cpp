@@ -12,6 +12,7 @@
 
 #include <core/appearance.hpp>
 #include <core/paths.hpp>
+#include <core/update.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -37,6 +38,13 @@ constexpr const char* kDirectWindow = "WokDirectWindow";
 constexpr const char* kDirectAddress = "WokDirectAddress";
 constexpr const char* kDirectJoin = "WokDirectJoin";
 constexpr const char* kDirectCancel = "WokDirectCancel";
+constexpr const char* kReport = "WokReportBug";
+constexpr const char* kReportWindow = "WokReportWindow";
+constexpr const char* kReportTitle = "WokReportTitle";
+constexpr const char* kReportText = "WokReportText";
+constexpr const char* kReportStatus = "WokReportStatus";
+constexpr const char* kReportSend = "WokReportSend";
+constexpr const char* kReportCancel = "WokReportCancel";
 constexpr const char* kDeathWindow = "WokDeathWindow";
 constexpr const char* kDeathNew = "WokDeathNew";
 constexpr const char* kDeathExit = "WokDeathExit";
@@ -90,7 +98,7 @@ std::string rowName(size_t i) { return kServerPrefix + std::to_string(i); }
 std::string ownedName(void* w, size_t rows) {
     if (!w) return {};
     for (const char* n : {kButton, kConnect, kClose, kUnlink, kDelete, kDirect, kDirectJoin, kDirectCancel, kDeathNew,
-                          kDeathExit})
+                          kDeathExit, kReport, kReportSend, kReportCancel})
         if (mygui::findWidget(n) == w) return n;
     for (size_t i = 0; i < rows; ++i)
         if (mygui::findWidget(rowName(i)) == w) return rowName(i);
@@ -229,16 +237,17 @@ void MultiplayerMenu::openWindow() {
     auto del = mygui::createChild(w, "Button", "Kenshi_Button2",
                                   {kListLeft + half + 2 * kMargin + quarter, infoTop, quarter, 0.07f}, kDelete);
     mygui::setProperty(del, "Caption", "Delete character");
-    // Connect | Direct connect | Close, equal widths.
-    const float third = (kListWidth - 2 * kMargin) / 3;
-    auto connect = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft, buttonsTop, third, 0.10f}, kConnect);
-    mygui::setProperty(connect, "Caption", "Connect");
-    auto direct = mygui::createChild(w, "Button", "Kenshi_Button1", {kListLeft + third + kMargin, buttonsTop, third, 0.10f},
-                                     kDirect);
-    mygui::setProperty(direct, "Caption", "Direct connect");
-    auto close = mygui::createChild(w, "Button", "Kenshi_Button1",
-                                    {kListLeft + 2 * (third + kMargin), buttonsTop, third, 0.10f}, kClose);
-    mygui::setProperty(close, "Caption", "Close");
+    // Connect | Direct connect | Report a bug | Close, equal widths.
+    const float fourth = (kListWidth - 3 * kMargin) / 4;
+    auto button = [&](int slot, const char* name, const char* caption) {
+        auto b = mygui::createChild(w, "Button", "Kenshi_Button1",
+                                    {kListLeft + slot * (fourth + kMargin), buttonsTop, fourth, 0.10f}, name);
+        mygui::setProperty(b, "Caption", caption);
+    };
+    button(0, kConnect, "Connect");
+    button(1, kDirect, "Direct connect");
+    button(2, kReport, "Report a bug");
+    button(3, kClose, "Close");
 
     windowOpen_ = true;
     lastStatus_ = "?";
@@ -250,6 +259,57 @@ void MultiplayerMenu::openWindow() {
         if (auto a = parseAddress(listed_[i].address); a && a->host == cfg_.host && a->port == cfg_.port)
             select(static_cast<int>(i));
     refreshRows();
+}
+
+void MultiplayerMenu::openReportWindow() {
+    mygui::destroy(mygui::findWidget(kReportWindow));
+    mygui::Widget* d = mygui::createRoot("Window", "Kenshi_WindowCX", {0.30f, 0.22f, 0.40f, 0.50f}, "Popup", kReportWindow);
+    if (!d) return;
+    mygui::setProperty(d, "Caption", "Report a bug");
+    auto label = [&](float top, const char* text) {
+        auto l = mygui::createChild(d, "TextBox", "Kenshi_TextboxStandardText", {0.05f, top, 0.90f, 0.06f}, "");
+        mygui::setProperty(l, "Caption", text);
+        mygui::setProperty(l, "TextColour", kRowText);
+    };
+    label(0.04f, "Title (one line)");
+    auto title = mygui::createChild(d, "EditBox", "Kenshi_EditBox", {0.05f, 0.11f, 0.90f, 0.08f}, kReportTitle);
+    mygui::setProperty(title, "MaxTextLength", "90");
+    label(0.22f, "What happened? What were you doing, what did you expect?");
+    auto text = mygui::createChild(d, "EditBox", "Kenshi_EditBox", {0.05f, 0.29f, 0.90f, 0.38f}, kReportText);
+    mygui::setProperty(text, "MaxTextLength", "3000");
+    mygui::setProperty(text, "MultiLine", "true");
+    mygui::setProperty(text, "WordWrap", "true");
+    auto status = mygui::createChild(d, "TextBox", "Kenshi_TextboxStandardText", {0.05f, 0.69f, 0.90f, 0.10f},
+                                     kReportStatus);
+    mygui::setProperty(status, "Caption", "Your logs are attached (no personal files). Kenshi keeps running.");
+    mygui::setProperty(status, "TextColour", kStatusText);
+    auto send = mygui::createChild(d, "Button", "Kenshi_Button1", {0.05f, 0.82f, 0.43f, 0.12f}, kReportSend);
+    mygui::setProperty(send, "Caption", "Send");
+    auto cancel = mygui::createChild(d, "Button", "Kenshi_Button1", {0.52f, 0.82f, 0.43f, 0.12f}, kReportCancel);
+    mygui::setProperty(cancel, "Caption", "Close");
+    if (title) mygui::setKeyFocus(title);
+}
+
+void MultiplayerMenu::sendReport() {
+    if (reporter_.busy()) return;
+    auto textOf = [](const char* name) {
+        mygui::Widget* w = mygui::findWidget(name);
+        const char* raw = w ? mygui::editText(w) : nullptr;
+        return std::string(raw ? raw : "");
+    };
+    BugReportInfo info;
+    info.title = textOf(kReportTitle);
+    info.description = textOf(kReportText);
+    if (info.title.find_first_not_of(' ') == std::string::npos ||
+        info.description.find_first_not_of(" \r\n") == std::string::npos) {
+        mygui::setProperty(mygui::findWidget(kReportStatus), "Caption", "Please write a title and what happened.");
+        return;
+    }
+    info.version = kClientVersion;
+    if (net_.status() == ClientNet::Status::Connected) info.server = cfg_.host + ":" + std::to_string(cfg_.port);
+    if (auto c = net_.character()) info.character = c->name;
+    info.modDir = modDir();
+    reporter_.send(kReportUrl, std::move(info));
 }
 
 void MultiplayerMenu::closeWindow() {
@@ -330,6 +390,13 @@ void MultiplayerMenu::onClick(const std::string& name) {
         auto cancel = mygui::createChild(d, "Button", "Kenshi_Button1", {0.52f, 0.52f, 0.42f, 0.32f}, kDirectCancel);
         mygui::setProperty(cancel, "Caption", "Cancel");
         if (addr) mygui::setKeyFocus(addr);
+    } else if (name == kReport) {
+        openReportWindow();
+    } else if (name == kReportCancel) {
+        mygui::setKeyFocus(nullptr);
+        mygui::destroy(mygui::findWidget(kReportWindow));
+    } else if (name == kReportSend) {
+        sendReport();
     } else if (name == kDirectCancel) {
         mygui::destroy(mygui::findWidget(kDirectWindow));
     } else if (name == kDirectJoin) {
@@ -880,6 +947,10 @@ void MultiplayerMenu::update(float dt) {
             openWindow();
         }
         if (windowOpen_) refreshRows();
+        if (mygui::Widget* st = mygui::findWidget(kReportStatus)) {  // the report being sent
+            const std::string s = reporter_.status();
+            if (!s.empty()) mygui::setProperty(st, "Caption", s);
+        }
     }
     updateLoading(dt);  // every frame: no gap between Kenshi's loading screen and ours
     // The server's day in Kenshi's time panel. Kenshi rewrites that label with its local day all the
