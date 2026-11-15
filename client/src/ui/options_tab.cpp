@@ -22,6 +22,8 @@ constexpr uintptr_t kSetLineCheckbox = 0x158d4;      // (panel, const std::strin
 constexpr uintptr_t kSetLine = 0xf6d2;               // (panel, const std::string& name, const std::string& value, int, bool, bool)
 constexpr uintptr_t kAddSpace = 0x2d024;             // (panel, int, float)
 constexpr const char* kTabName = "Multiplayer";
+constexpr int kPanelId = 0x19;        // the id our panel and all its lines share
+constexpr float kLineHeight = 28.0f;  // as Kenshi's own option panels
 
 using CreateDatapanelFn = void* (*)(uintptr_t gui, const mygui::Vc10String* name, void* parent, bool flag);
 using SetLineSliderFn = void* (*)(void* panel, const mygui::Vc10String* text, int id, bool editable, float min,
@@ -92,33 +94,30 @@ bool addTab(void* tabControl, MultiplayerOptions& options) {
     mygui::Vc10String panelName(kTabName);
     void* panel = reinterpret_cast<CreateDatapanelFn>(base + kCreateDatapanel)(base + kForgottenGui, &panelName, tab, true);
     if (!panel) return false;
-    // Kenshi calls this right after making each of its option panels (vtable + 0xc0, argument 0x19):
-    // the panel's layout setup, without which its lines never show.
+    // Kenshi sets up each of its option panels right after making it: vtable + 0xc0 gives the panel
+    // its id (every line of the panel then passes that same id), vtable + 0xe0 its line height.
     {
         void** vt = *reinterpret_cast<void***>(panel);
-        reinterpret_cast<void (*)(void*, int)>(vt[0xc0 / 8])(panel, 0x19);
+        reinterpret_cast<void (*)(void*, int)>(vt[0xc0 / 8])(panel, kPanelId);
+        reinterpret_cast<void (*)(void*, float)>(vt[0xe0 / 8])(panel, kLineHeight);
     }
     // Lines grouped by category, like Kenshi's own tabs (title line, then its settings, then a gap).
     auto slider = [&](const char* text, float min, float max, float* value) {
         mygui::Vc10String label(text);
-        reinterpret_cast<SetLineSliderFn>(base + kSetLineSlider)(panel, &label, 0x19, true, min, max, value);
+        reinterpret_cast<SetLineSliderFn>(base + kSetLineSlider)(panel, &label, kPanelId, true, min, max, value);
     };
     auto checkbox = [&](const char* text, bool* value) {
         mygui::Vc10String label(text);
-        reinterpret_cast<SetLineCheckboxFn>(base + kSetLineCheckbox)(panel, &label, value, 0x17);
+        reinterpret_cast<SetLineCheckboxFn>(base + kSetLineCheckbox)(panel, &label, value, kPanelId);
     };
-    auto gap = [&] { reinterpret_cast<AddSpaceFn>(base + kAddSpace)(panel, 0x17, 10.0f); };
+    auto gap = [&] { reinterpret_cast<AddSpaceFn>(base + kAddSpace)(panel, kPanelId, 10.0f); };
 
     // Grouped by category (a title line through setLine left the whole panel empty).
     slider("Chat - box opacity", 20.0f, 100.0f, &options.chatOpacity);
-    log("options: line 1");
     slider("Chat - message fade time (s)", 5.0f, 120.0f, &options.chatFadeSec);
-    log("options: line 2");
     gap();
     checkbox("Players - show names", &options.showNames);
-    log("options: line 3");
     slider("Players - name tag distance", 50.0f, 2000.0f, &options.nameRange);
-    log("options: line 4");
     void* panelAny[2] = {};
     reinterpret_cast<MakePanelAnyFn>(base + kMakePanelAny)(panelAny, &panel);
     c.setItemData(tabControl, tab, panelAny);
