@@ -10,6 +10,7 @@
 #include "game/shared_npcs.hpp"
 #include "ui/chat.hpp"
 #include "ui/options_tab.hpp"
+#include "ui/name_tags.hpp"
 #include "game/identity.hpp"
 #include "game/inventory.hpp"
 #include "game/items.hpp"
@@ -459,6 +460,12 @@ void onFrame(float dt) {
         pauseMenuOpen = wok::mygui::findShownBySuffix("_ResumeButton", 3) != nullptr;
     }
     s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent), pauseMenuOpen);
+    if (s.avatarsOk) {  // other players' names above their heads
+        std::vector<wok::NameTag> tags;
+        if (connected && s.avatars.inGame() && !pauseMenuOpen)
+            for (auto& t : s.avatars.nameTags()) tags.push_back({t.name, {t.pos[0], t.pos[1], t.pos[2]}});
+        wok::updateNameTags(tags, !tags.empty());
+    }
     if (s.sharedOk && connected && s.characterRestored && !s.dead)
         s.shared.update(
             s.now, s.net->playerId(), s.reader.character(),

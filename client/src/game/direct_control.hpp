@@ -23,4 +23,7 @@ private:
 // Horizontal forward direction of the game camera (x, z), normalised. False if unknown.
 bool cameraForward(float& x, float& z);
 
+// The game's Ogre::Camera (0 if not found yet).
+uintptr_t findGameCamera();
+
 }  // namespace wok

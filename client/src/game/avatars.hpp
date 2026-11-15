@@ -18,6 +18,11 @@ public:
     void update(double nowSec);  // game thread, every frame
     void clear();                // disconnected: forget every remote player
     bool inGame() const { return spawner_.inGame(); }
+    struct Tag {
+        std::string name;
+        float pos[3];
+    };
+    std::vector<Tag> nameTags() const;  // other players' names and where their avatars stand
     bool isAvatar(uintptr_t character) const {
         for (auto& [id, a] : avatars_)
             if (a.character == character) return true;

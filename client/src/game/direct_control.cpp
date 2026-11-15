@@ -53,6 +53,29 @@ const OgreCalls& ogre() {
 // The game camera (an Ogre::Camera, known by its exported vtable). Kenshi keeps it at +0x58 of its
 // camera object (made where "mainCamera" is created, RVA 0x818970); that object is found once from
 // GameWorld or PlayerInterface, then re-read each time (cheap, and safe if it changes).
+
+bool readCameraDirection(float dir[3]) {
+    const OgreCalls& c = ogre();
+    uintptr_t cam = findGameCamera();
+    if (!c.direction || !cam) return false;
+    __try {
+        c.direction(reinterpret_cast<void*>(cam), dir);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool keyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+
+bool gameHasFocus() {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    return pid == GetCurrentProcessId();
+}
+
+}  // namespace
+
 uintptr_t findGameCamera() {
     static uintptr_t cameraVt = [] {
         HMODULE m = GetModuleHandleA("OgreMain_x64.dll");
@@ -84,28 +107,6 @@ uintptr_t findGameCamera() {
     logged = true;
     return 0;
 }
-
-bool readCameraDirection(float dir[3]) {
-    const OgreCalls& c = ogre();
-    uintptr_t cam = findGameCamera();
-    if (!c.direction || !cam) return false;
-    __try {
-        c.direction(reinterpret_cast<void*>(cam), dir);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-bool keyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
-
-bool gameHasFocus() {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-    return pid == GetCurrentProcessId();
-}
-
-}  // namespace
 
 bool cameraForward(float& x, float& z) {
     float d[3];
