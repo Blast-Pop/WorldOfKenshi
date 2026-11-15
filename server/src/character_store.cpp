@@ -3,6 +3,7 @@
 #include <sqlite3.h>
 
 #include <cstring>
+#include <ctime>
 #include <stdexcept>
 
 namespace wok {
@@ -30,6 +31,8 @@ constexpr const char* kMigrations[] = {
     "CREATE TABLE IF NOT EXISTS dead_characters (steam_id INTEGER NOT NULL, name TEXT NOT NULL, race TEXT NOT NULL,"
     " appearance BLOB NOT NULL, x REAL, y REAL, z REAL, template TEXT, stats BLOB, inventory BLOB,"
     " died_at INTEGER NOT NULL);",
+    "CREATE TABLE IF NOT EXISTS npcs (id INTEGER PRIMARY KEY, template TEXT NOT NULL, name TEXT NOT NULL,"
+    " x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL, dead INTEGER NOT NULL, updated INTEGER NOT NULL);",
 };
 
 // Stats on disk: id (1 byte) + value (float, 4 bytes little-endian) per skill.
@@ -196,6 +199,43 @@ void CharacterStore::setWorldHours(double hours) {
     Stmt s(db_, "INSERT INTO world(key, value) VALUES('game_hours', ?1) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     s.real(1, hours).step();
+}
+
+std::vector<NpcRecord> CharacterStore::loadNpcs() {
+    constexpr int64_t kDay = 24 * 3600;
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    {
+        Stmt forget(db_, "DELETE FROM npcs WHERE updated < ?1 OR (dead = 1 AND updated < ?2)");
+        forget.id(1, static_cast<uint64_t>(now - 7 * kDay)).id(2, static_cast<uint64_t>(now - kDay)).step();
+    }
+    std::vector<NpcRecord> out;
+    Stmt s(db_, "SELECT id, name, template, x, y, z, dead FROM npcs");
+    while (s.step() == SQLITE_ROW) {
+        NpcRecord r;
+        r.id = static_cast<uint32_t>(sqlite3_column_int64(s.get(), 0));
+        r.name = columnText(s.get(), 1);
+        r.templateId = columnText(s.get(), 2);
+        r.x = static_cast<float>(sqlite3_column_double(s.get(), 3));
+        r.y = static_cast<float>(sqlite3_column_double(s.get(), 4));
+        r.z = static_cast<float>(sqlite3_column_double(s.get(), 5));
+        r.dead = sqlite3_column_int(s.get(), 6) != 0;
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+void CharacterStore::saveNpcs(const std::vector<NpcRecord>& records) {
+    if (records.empty()) return;
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    sqlite3_exec(db_, "BEGIN", nullptr, nullptr, nullptr);
+    for (const NpcRecord& r : records) {
+        Stmt s(db_, "INSERT INTO npcs(id, name, template, x, y, z, dead, updated) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
+                    "ON CONFLICT(id) DO UPDATE SET name = excluded.name, template = excluded.template, x = excluded.x, "
+                    "y = excluded.y, z = excluded.z, dead = excluded.dead, updated = excluded.updated");
+        s.id(1, r.id).text(2, r.name).text(3, r.templateId).real(4, r.x).real(5, r.y).real(6, r.z)
+            .id(7, r.dead ? 1 : 0).id(8, static_cast<uint64_t>(now)).step();
+    }
+    sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
 }
 
 void CharacterStore::savePosition(uint64_t steamId, float x, float y, float z, float yaw) {

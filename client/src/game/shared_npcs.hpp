@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace wok {
 
@@ -43,6 +44,9 @@ private:
                        const Send& send);
     void removeOthersNpcs(PlayerId me, uintptr_t self, const std::function<bool(uintptr_t)>& isAvatar);
     void drivePuppets(double nowSec, PlayerId me);
+    // Owner side: a newly seen NPC of ours takes over what the world remembers of it (position; a
+    // dead one is removed). True if it was removed.
+    bool applyRecord(uintptr_t character, uint32_t key, float pos[3], const Send& send);
 
     Spawner spawner_;
     bool ok_ = false;
@@ -53,6 +57,8 @@ private:
     std::unordered_set<uint32_t> announced_;
     uint32_t nextKey_ = 1;
     double nextReport_ = 0, nextAnnounceAll_ = 0, nextRemoval_ = 0;
+    std::vector<NpcRecord> records_;  // the world's memory of our cells, not matched to an NPC yet
+    int restored_ = 0, removedDead_ = 0;
     // Viewer side: puppets by (owner << 32 | key).
     std::unordered_map<uint64_t, Puppet> puppets_;
     std::unordered_set<uintptr_t> puppetChars_;

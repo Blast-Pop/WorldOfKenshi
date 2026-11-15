@@ -32,6 +32,10 @@ public:
     void saveInventory(uint64_t steamId, const std::vector<uint8_t>& inventory);
     std::optional<double> worldHours();  // game hours since the world began, if saved
     void setWorldHours(double hours);
+    // The world's NPCs (spec 7.3). Loading forgets the ones nobody has seen for a week, and the dead
+    // after a day (the place gets its people back, as in Kenshi).
+    std::vector<NpcRecord> loadNpcs();
+    void saveNpcs(const std::vector<NpcRecord>& records);
 
 private:
     sqlite3* db_ = nullptr;

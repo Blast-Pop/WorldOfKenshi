@@ -26,6 +26,27 @@ AuthToken tok(uint8_t seed) {
 }
 }  // namespace
 
+TEST_CASE("store_keeps_the_worlds_npcs") {
+    const auto path = (std::filesystem::temp_directory_path() / "wok_npcs_test.sqlite").string();
+    std::filesystem::remove(path);
+    {
+        CharacterStore store(path);
+        CHECK(store.loadNpcs().empty());
+        store.saveNpcs({{7, "Barman", "12-gamedata.base", 1.f, 2.f, 3.f, false}, {8, "Thug", "13-gamedata.base", 4.f, 5.f, 6.f, true}});
+        store.saveNpcs({{7, "Barman", "12-gamedata.base", 9.f, 2.f, 3.f, false}});  // moved
+    }
+    {
+        CharacterStore store(path);
+        auto npcs = store.loadNpcs();
+        REQUIRE(npcs.size() == 2);
+        for (auto& n : npcs) {
+            if (n.id == 7) CHECK(n.x == 9.f);
+            if (n.id == 8) CHECK(n.dead);
+        }
+    }
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("store_unknown_player_has_nothing") {
     CharacterStore s(":memory:");
     CHECK_FALSE(s.tokenFor(42).has_value());

@@ -32,7 +32,15 @@ std::string toHex(const AuthToken& t) {
 
 }  // namespace
 
-SessionManager::SessionManager(SessionConfig cfg) : cfg_(std::move(cfg)) {}
+SessionManager::SessionManager(SessionConfig cfg) : cfg_(std::move(cfg)) {
+    if (!cfg_.store) return;
+    for (NpcRecord& r : cfg_.store->loadNpcs()) {
+        if (r.id >= nextNpcRecord_) nextNpcRecord_ = r.id + 1;
+        const uint32_t id = r.id;
+        npcRecords_[id] = {std::move(r), true, false};
+    }
+    if (!npcRecords_.empty()) std::printf("[world] %zu NPC record(s) loaded\n", npcRecords_.size());
+}
 
 std::vector<Outgoing> SessionManager::onConnect(ConnId conn, double nowSec) {
     Conn c;
@@ -80,6 +88,10 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         return {};
     }
     if (auto* chat = std::get_if<ChatSend>(&*msg)) return handleChat(conn, c, *chat, nowSec);
+    if (auto* bind = std::get_if<NpcBind>(&*msg)) {
+        handleNpcBind(conn, c, *bind);
+        return {};
+    }
     if (std::holds_alternative<NpcInfo>(*msg) || std::holds_alternative<NpcSnapshot>(*msg))
         return relayNpc(conn, c, *msg);
     if (std::holds_alternative<CharacterDied>(*msg)) {
@@ -351,6 +363,16 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
         auto owners = updateCellOwners();
         out.insert(out.end(), owners.begin(), owners.end());
     }
+    if (cfg_.store && nowSec >= nextNpcSave_) {  // the world's memory, written in batches
+        nextNpcSave_ = nowSec + kNpcSaveIntervalSec;
+        std::vector<NpcRecord> changed;
+        for (auto& [id, m] : npcRecords_)
+            if (m.dirty && m.placed) {
+                changed.push_back(m.rec);
+                m.dirty = false;
+            }
+        cfg_.store->saveNpcs(changed);
+    }
     for (auto& [id, c] : conns_) {
         if (!c.steamPending || c.player) continue;
         uint64_t steamId = c.steamPending;
@@ -445,13 +467,87 @@ std::vector<Outgoing> SessionManager::updateCellOwners() {
             next[cell] = *std::min_element(players.begin(), players.end());
     }
     if (next == cellOwners_) return {};
+    std::map<PlayerId, std::vector<std::pair<int32_t, int32_t>>> gained;
+    for (auto& [cell, owner] : next)
+        if (auto old = cellOwners_.find(cell); old == cellOwners_.end() || old->second != owner)
+            gained[owner].push_back(cell);
     cellOwners_ = std::move(next);
     CellOwners list;
     for (auto& [cell, owner] : cellOwners_) list.cells.push_back({cell.first, cell.second, owner});
     std::vector<Outgoing> out;
+    // A new owner first gets what the world remembers of its cells, then the list that makes it owner.
+    for (auto& [id, c] : conns_)
+        if (c.player)
+            if (auto g = gained.find(*c.player); g != gained.end()) {
+                auto records = recordsFor(id, g->second);
+                out.insert(out.end(), records.begin(), records.end());
+            }
     for (auto& [id, c] : conns_)
         if (c.player) out.push_back({id, list});
     return out;
+}
+
+std::vector<Outgoing> SessionManager::recordsFor(ConnId conn, const std::vector<std::pair<int32_t, int32_t>>& gained) {
+    std::unordered_set<uint32_t> own;  // already followed by this player
+    for (auto& [key, record] : conns_[conn].npcKeys) own.insert(record);
+    std::unordered_set<uint32_t> given;
+    std::vector<Outgoing> out;
+    NpcRecords batch;
+    for (auto& [id, m] : npcRecords_) {
+        if (!m.placed || own.count(id)) continue;
+        const std::pair<int32_t, int32_t> cell{cellOf(m.rec.x), cellOf(m.rec.z)};
+        if (std::find(gained.begin(), gained.end(), cell) == gained.end()) continue;
+        given.insert(id);
+        batch.records.push_back(m.rec);
+        if (batch.records.size() == kMaxNpcRecordsPerMessage) {
+            out.push_back({conn, batch});
+            batch.records.clear();
+        }
+    }
+    if (!batch.records.empty()) out.push_back({conn, batch});
+    // Whoever followed those NPCs before no longer speaks for them.
+    for (auto& [otherId, other] : conns_)
+        if (otherId != conn) std::erase_if(other.npcKeys, [&](const auto& kv) { return given.count(kv.second) != 0; });
+    return out;
+}
+
+void SessionManager::handleNpcBind(ConnId conn, Conn& c, const NpcBind& m) {
+    for (const NpcBinding& b : m.bindings) {
+        if (!npcRecords_.count(b.record)) continue;
+        bool taken = false;
+        for (auto& [otherId, other] : conns_)
+            if (otherId != conn)
+                for (auto& [key, record] : other.npcKeys)
+                    if (record == b.record) taken = true;
+        if (!taken) c.npcKeys[b.key] = b.record;
+    }
+}
+
+void SessionManager::rememberNpc(Conn& c, const Message& m) {
+    if (auto* info = std::get_if<NpcInfo>(&m)) {
+        if (c.npcKeys.count(info->key) || npcRecords_.size() >= kMaxNpcRecords) return;
+        NpcMemory mem;  // an NPC the world did not know yet
+        mem.rec.id = nextNpcRecord_++;
+        mem.rec.name = info->name;
+        mem.rec.templateId = info->templateId;
+        c.npcKeys[info->key] = mem.rec.id;
+        npcRecords_[mem.rec.id] = std::move(mem);
+    } else if (auto* snap = std::get_if<NpcSnapshot>(&m)) {
+        for (const NpcState& s : snap->npcs) {
+            auto key = c.npcKeys.find(s.key);
+            if (key == c.npcKeys.end()) continue;
+            auto rec = npcRecords_.find(key->second);
+            if (rec == npcRecords_.end()) continue;
+            NpcMemory& mem = rec->second;
+            const float dx = s.x - mem.rec.x, dy = s.y - mem.rec.y, dz = s.z - mem.rec.z;
+            if (mem.placed && mem.rec.dead == s.dead && dx * dx + dy * dy + dz * dz < 1.0f) continue;
+            mem.rec.x = s.x;
+            mem.rec.y = s.y;
+            mem.rec.z = s.z;
+            mem.rec.dead = s.dead;
+            mem.placed = mem.dirty = true;
+        }
+    }
 }
 
 std::vector<Outgoing> SessionManager::relayNpc(ConnId conn, Conn& c, Message m) {
@@ -460,6 +556,7 @@ std::vector<Outgoing> SessionManager::relayNpc(ConnId conn, Conn& c, Message m) 
     for (auto& [cell, who] : cellOwners_)
         if (who == *c.player) owner = true;
     if (!owner || !c.lastState) return {};
+    rememberNpc(c, m);
     if (auto* info = std::get_if<NpcInfo>(&m)) info->owner = *c.player;
     if (auto* snap = std::get_if<NpcSnapshot>(&m)) snap->owner = *c.player;
     constexpr float kRelayRadius = 2.0f * kCellSize;

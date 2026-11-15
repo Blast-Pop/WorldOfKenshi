@@ -30,6 +30,9 @@ inline constexpr double kSteamAuthTimeoutSec = 10.0;
 inline constexpr uint64_t kMaxTestBotSteamId = 1000000;
 // A Steam login in progress survives reconnects of the same claimed SteamID for this long.
 inline constexpr double kPendingAuthTtlSec = 300.0;
+// The world's NPC records: saved this often, and no more than this many.
+inline constexpr double kNpcSaveIntervalSec = 5.0;
+inline constexpr size_t kMaxNpcRecords = 50000;
 
 struct Outgoing {
     ConnId to;
@@ -108,6 +111,7 @@ private:
         std::vector<uint8_t> inventory;  // latest known inventory (opaque)
         bool inventoryDirty = false;
         double lastSaved = 0.0;
+        std::unordered_map<uint32_t, uint32_t> npcKeys;  // this owner's NPC key -> world record
     };
 
     std::vector<Outgoing> handleHello(ConnId conn, Conn& c, const Hello& h, double nowSec);
@@ -121,6 +125,19 @@ private:
     std::vector<Outgoing> updateCellOwners();
     // An owner's NPC message, relayed to the players near it.
     std::vector<Outgoing> relayNpc(ConnId conn, Conn& c, Message m);
+    // The world's memory: every NPC an owner reported, kept (and saved) for the next owner.
+    struct NpcMemory {
+        NpcRecord rec;
+        bool placed = false;  // a position was reported
+        bool dirty = false;   // changed since the last save
+    };
+    void rememberNpc(Conn& c, const Message& m);
+    void handleNpcBind(ConnId conn, Conn& c, const NpcBind& m);
+    // The unclaimed records of the cells `player` just got, for it to match its own NPCs against.
+    std::vector<Outgoing> recordsFor(ConnId conn, const std::vector<std::pair<int32_t, int32_t>>& gained);
+    std::map<uint32_t, NpcMemory> npcRecords_;
+    uint32_t nextNpcRecord_ = 1;
+    double nextNpcSave_ = 0;
     std::map<std::pair<int32_t, int32_t>, PlayerId> cellOwners_;
     double nextCellUpdate_ = 0;
     void savePosition(Conn& c);

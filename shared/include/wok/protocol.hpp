@@ -59,6 +59,8 @@ enum class MsgType : uint8_t {
     CellOwners = 18,
     NpcInfo = 19,
     NpcSnapshot = 20,
+    NpcRecords = 21,
+    NpcBind = 22,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -214,6 +216,34 @@ struct NpcSnapshot {
     bool operator==(const NpcSnapshot&) const = default;
 };
 
+// The world's memory (spec 7.3). The server keeps every reported NPC as a record. A player who
+// becomes a cell's owner gets that cell's records (NpcRecords, server -> client), matches its own
+// NPCs to them and says which is which (NpcBind, client -> server); an NPC nobody bound gets a new
+// record. Added within protocol 13: older clients ignore NpcRecords and never send NpcBind.
+constexpr size_t kMaxNpcRecordsPerMessage = 16;
+constexpr size_t kMaxNpcBindings = 255;
+struct NpcRecord {
+    uint32_t id = 0;
+    std::string name;
+    std::string templateId;
+    float x = 0, y = 0, z = 0;
+    bool dead = false;
+    bool operator==(const NpcRecord&) const = default;
+};
+struct NpcRecords {
+    std::vector<NpcRecord> records;
+    bool operator==(const NpcRecords&) const = default;
+};
+struct NpcBinding {
+    uint32_t key = 0;     // the owner's key for the NPC (as in NpcInfo)
+    uint32_t record = 0;  // the record it continues
+    bool operator==(const NpcBinding&) const = default;
+};
+struct NpcBind {
+    std::vector<NpcBinding> bindings;
+    bool operator==(const NpcBind&) const = default;
+};
+
 inline int32_t cellOf(float coord) { return static_cast<int32_t>(std::floor(coord / kCellSize)); }
 
 // Chat (spec 7.8). Global: every player; local: players near the speaker.
@@ -248,7 +278,8 @@ struct PlayerInfo {
 
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
                              CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
-                             PlayerInfo, CharacterDied, ChatSend, ChatMessage, CellOwners, NpcInfo, NpcSnapshot>;
+                             PlayerInfo, CharacterDied, ChatSend, ChatMessage, CellOwners, NpcInfo, NpcSnapshot,
+                             NpcRecords, NpcBind>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

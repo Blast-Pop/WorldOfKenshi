@@ -123,6 +123,28 @@ void write(ByteWriter& w, const NpcInfo& m) {
     writeString(w, m.name);
     writeString(w, m.templateId);
 }
+void write(ByteWriter& w, const NpcRecords& m) {
+    const size_t n = m.records.size() < kMaxNpcRecordsPerMessage ? m.records.size() : kMaxNpcRecordsPerMessage;
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        const NpcRecord& c = m.records[i];
+        w.u32(c.id);
+        writeString(w, c.name);
+        writeString(w, c.templateId);
+        w.f32(c.x);
+        w.f32(c.y);
+        w.f32(c.z);
+        w.u8(c.dead ? 1 : 0);
+    }
+}
+void write(ByteWriter& w, const NpcBind& m) {
+    const size_t n = m.bindings.size() < kMaxNpcBindings ? m.bindings.size() : kMaxNpcBindings;
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        w.u32(m.bindings[i].key);
+        w.u32(m.bindings[i].record);
+    }
+}
 void write(ByteWriter& w, const NpcSnapshot& m) {
     w.u32(m.owner);
     const size_t n = m.npcs.size() < kMaxNpcsPerSnapshot ? m.npcs.size() : kMaxNpcsPerSnapshot;
@@ -199,6 +221,8 @@ constexpr MsgType typeOf(const ChatMessage&) { return MsgType::ChatMessage; }
 constexpr MsgType typeOf(const CellOwners&) { return MsgType::CellOwners; }
 constexpr MsgType typeOf(const NpcInfo&) { return MsgType::NpcInfo; }
 constexpr MsgType typeOf(const NpcSnapshot&) { return MsgType::NpcSnapshot; }
+constexpr MsgType typeOf(const NpcRecords&) { return MsgType::NpcRecords; }
+constexpr MsgType typeOf(const NpcBind&) { return MsgType::NpcBind; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -294,6 +318,36 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             m.key = r.u32();
             if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.templateId))
                 return std::nullopt;
+            return m;
+        }
+        case MsgType::NpcRecords: {
+            NpcRecords m;
+            uint8_t n = r.u8();
+            if (!r.ok() || n > kMaxNpcRecordsPerMessage) return std::nullopt;
+            m.records.resize(n);
+            for (auto& c : m.records) {
+                c.id = r.u32();
+                if (!readBytes(r, kMaxNameBytes, c.name) || !readBytes(r, kMaxStringIdBytes, c.templateId))
+                    return std::nullopt;
+                c.x = r.f32();
+                c.y = r.f32();
+                c.z = r.f32();
+                c.dead = r.u8() != 0;
+                if (!std::isfinite(c.x) || !std::isfinite(c.y) || !std::isfinite(c.z)) return std::nullopt;
+            }
+            if (!r.ok()) return std::nullopt;
+            return m;
+        }
+        case MsgType::NpcBind: {
+            NpcBind m;
+            uint8_t n = r.u8();
+            if (!r.ok()) return std::nullopt;
+            m.bindings.resize(n);
+            for (auto& b : m.bindings) {
+                b.key = r.u32();
+                b.record = r.u32();
+            }
+            if (!r.ok()) return std::nullopt;
             return m;
         }
         case MsgType::NpcSnapshot: {
@@ -395,7 +449,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::NpcSnapshot))
+        type > static_cast<uint8_t>(MsgType::NpcBind))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

@@ -250,6 +250,46 @@ TEST_CASE("cell_owner_is_the_earliest_player_and_npcs_reach_neighbours") {
     CHECK(sentOf<CellOwners>(sm.tick(2.0)).empty());  // nothing changed: nothing sent
 }
 
+TEST_CASE("the_world_remembers_npcs_for_the_next_owner") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    sm.onPacket(1, stateBytes(a, 100.0f), 0.1);
+    CHECK(sentOf<NpcRecords>(sm.tick(1.0)).empty());  // a new world remembers nothing
+    sm.onPacket(1, encode(NpcInfo{0, 5, "Barman", "12-gamedata.base"}), 1.1);
+    sm.onPacket(1, encode(NpcSnapshot{0, {{5, 300.f, 0.f, 0.f, 0.f, AnimState::Idle, false}}}), 1.2);
+    sm.onDisconnect(1);
+    sm.tick(2.0);
+    // The next owner of the place gets the NPC where it was left, before the list that makes it owner.
+    auto b = join(sm, 2, 12, WOK_PROTOCOL_VERSION, 2.5).playerId;
+    sm.onPacket(2, stateBytes(b, 150.0f), 2.6);
+    auto out = sm.tick(3.5);
+    auto recs = sentOf<NpcRecords>(out);
+    REQUIRE(recs.size() == 1);
+    CHECK(recs[0].first == 2);
+    REQUIRE(recs[0].second.records.size() == 1);
+    const NpcRecord rec = recs[0].second.records[0];
+    CHECK(rec.name == "Barman");
+    CHECK(rec.x == 300.f);
+    CHECK(!rec.dead);
+    REQUIRE(!out.empty());
+    CHECK(std::holds_alternative<NpcRecords>(out.front().msg));
+    CHECK(std::holds_alternative<CellOwners>(out.back().msg));
+    // b continues that record under its own key: no second record, and its changes are remembered.
+    sm.onPacket(2, encode(NpcBind{{{9, rec.id}}}), 3.6);
+    sm.onPacket(2, encode(NpcInfo{0, 9, "Barman", "12-gamedata.base"}), 3.7);
+    sm.onPacket(2, encode(NpcSnapshot{0, {{9, 400.f, 0.f, 0.f, 0.f, AnimState::Idle, true}}}), 3.8);
+    sm.onDisconnect(2);
+    sm.tick(4.5);
+    auto c = join(sm, 3, 13, WOK_PROTOCOL_VERSION, 5.0).playerId;
+    sm.onPacket(3, stateBytes(c, 120.0f), 5.1);
+    auto again = sentOf<NpcRecords>(sm.tick(6.0));
+    REQUIRE(again.size() == 1);
+    REQUIRE(again[0].second.records.size() == 1);
+    CHECK(again[0].second.records[0].id == rec.id);
+    CHECK(again[0].second.records[0].x == 400.f);
+    CHECK(again[0].second.records[0].dead);
+}
+
 TEST_CASE("a_newcomer_gets_the_cell_owners") {
     SessionManager sm({});
     auto a = join(sm, 1, 11).playerId;

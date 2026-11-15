@@ -21,6 +21,8 @@ constexpr double kReportInterval = 0.25;      // owner: NPC snapshots, 4 a secon
 constexpr double kAnnounceAllInterval = 10.0; // owner: every NPC's info again, for newcomers
 constexpr double kPuppetTimeout = 5.0;        // viewer: a puppet not reported for this long goes away
 constexpr float kTeleportGap = 40.0f;
+constexpr float kMatchRadius = 400.0f;        // owner: an NPC continues a record of the same kind this close
+constexpr float kRestoreGap = 5.0f;           // ...and is put back where it was if further than this
 constexpr const char* kPuppetFaction = "Drifters";
 
 uint64_t puppetId(PlayerId owner, uint32_t key) { return (static_cast<uint64_t>(owner) << 32) | key; }
@@ -46,6 +48,7 @@ void SharedNpcs::clear() {
     owners_.clear();
     keys_.clear();
     announced_.clear();
+    records_.clear();
 }
 
 PlayerId SharedNpcs::ownerOf(float x, float z) const {
@@ -59,6 +62,13 @@ void SharedNpcs::onMessage(const Message& msg, double nowSec) {
         for (const CellOwner& c : co->cells) owners_[{c.cx, c.cz}] = c.owner;
         log("shared: %zu cell owner(s) received", owners_.size());
         announced_.clear();  // a new map: tell the (possibly new) neighbours everything again
+    } else if (auto* recs = std::get_if<NpcRecords>(&msg)) {
+        for (const NpcRecord& r : recs->records) {
+            std::erase_if(records_, [&](const NpcRecord& old) { return old.id == r.id; });
+            records_.push_back(r);
+        }
+        log("shared: the server remembers %zu NPC(s) of our new cells (%zu to match)", recs->records.size(),
+            records_.size());
     } else if (auto* info = std::get_if<NpcInfo>(&msg)) {
         Puppet& p = puppets_[puppetId(info->owner, info->key)];
         p.name = info->name;
@@ -86,7 +96,13 @@ void SharedNpcs::reportOwnNpcs(double nowSec, PlayerId me, uintptr_t self,
         if (!mem::readBytes(ch + kCharPosition, pos, sizeof(pos)) || !std::isfinite(pos[0])) continue;
         if (ownerOf(pos[0], pos[2]) != me) continue;
         auto [it, added] = keys_.try_emplace(ch, nextKey_);
-        if (added) ++nextKey_;
+        if (added) {
+            ++nextKey_;
+            if (applyRecord(ch, it->second, pos, send)) {  // dead in the world's memory: gone here too
+                keys_.erase(it);
+                continue;
+            }
+        }
         const uint32_t key = it->second;
         if (announceAll || !announced_.count(key)) {
             send(NpcInfo{0, key, nameOf(ch), templateIdOf(ch)}, true);
@@ -99,6 +115,42 @@ void SharedNpcs::reportOwnNpcs(double nowSec, PlayerId me, uintptr_t self,
         }
     }
     if (!snap.npcs.empty()) send(snap, false);
+    if (restored_ || removedDead_) {
+        log("shared: %d NPC(s) continued from the server's memory, %d dead one(s) removed", restored_, removedDead_);
+        restored_ = removedDead_ = 0;
+    }
+}
+
+bool SharedNpcs::applyRecord(uintptr_t character, uint32_t key, float pos[3], const Send& send) {
+    if (records_.empty()) return false;
+    const std::string tpl = templateIdOf(character), name = nameOf(character);
+    size_t best = records_.size();
+    float bestD2 = kMatchRadius * kMatchRadius;
+    for (size_t i = 0; i < records_.size(); ++i) {
+        const NpcRecord& r = records_[i];
+        if (r.templateId != tpl || r.name != name) continue;
+        const float dx = r.x - pos[0], dz = r.z - pos[2];
+        if (dx * dx + dz * dz < bestD2) {
+            bestD2 = dx * dx + dz * dz;
+            best = i;
+        }
+    }
+    if (best == records_.size()) return false;
+    const NpcRecord r = records_[best];
+    records_.erase(records_.begin() + static_cast<std::ptrdiff_t>(best));
+    if (r.dead) {
+        if (!spawner_.destroy(character)) return false;
+        ++removedDead_;
+        return true;
+    }
+    send(NpcBind{{{key, r.id}}}, true);
+    if (bestD2 > kRestoreGap * kRestoreGap) {
+        float to[3] = {r.x, r.y, r.z};
+        spawner_.setPosition(character, to);
+        std::memcpy(pos, to, sizeof(to));
+    }
+    ++restored_;
+    return false;
 }
 
 void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::function<bool(uintptr_t)>& isAvatar) {
