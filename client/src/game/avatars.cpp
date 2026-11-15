@@ -115,8 +115,8 @@ void AvatarManager::update(double nowSec) {
         const float gap2 = dx * dx + dz * dz;
         if (nowSec >= a.nextTrace && gap2 > 25.0f) {  // trace only when an avatar lags behind
             a.nextTrace = nowSec + 5.0;
-            log("avatar: player %u at (%.1f, %.1f) wants (%.1f, %.1f) gap %.1f %s", id, here[0], here[2], pos[0], pos[2],
-                std::sqrt(gap2), a.walking ? "walking" : "idle");
+            log("avatar: player %u at (%.1f, %.1f) wants (%.1f, %.1f) gap %.1f %s, order list %d", id, here[0], here[2],
+                pos[0], pos[2], std::sqrt(gap2), a.walking ? "walking" : "idle", orderCount(a.character));
         }
         constexpr float kTeleportGap = 40.0f, kArrived = 1.0f;
         if (gap2 > kTeleportGap * kTeleportGap) {

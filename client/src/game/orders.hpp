@@ -9,6 +9,9 @@ namespace wok {
 // Orders `character` to move to `pos` (Vector3). False if the game functions are not as expected.
 bool orderMoveTo(uintptr_t character, const float pos[3]);
 
+// How many player orders the character's AI holds (its order list); -1 if unknown.
+int orderCount(uintptr_t character);
+
 // The character's movement component (CharMovement), found by its vtable; 0 if none.
 uintptr_t charMovement(uintptr_t character);
 

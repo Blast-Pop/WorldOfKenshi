@@ -77,6 +77,15 @@ bool orderMoveTo(uintptr_t character, const float pos[3]) {
     return guardedAddOrder(reinterpret_cast<AddOrderFn>(base + kAddOrder), ai, kTaskMove, &target, pos, true);
 }
 
+int orderCount(uintptr_t character) {
+    uintptr_t owner = 0, ai = 0;
+    uint32_t count = 0;
+    if (!mem::readPtr(character + kCharTaskOwner, owner) || !owner || !mem::readPtr(owner + 0x20, ai) || !ai ||
+        !mem::readBytes(ai + 0x90, &count, sizeof(count)))
+        return -1;
+    return static_cast<int>(count);
+}
+
 namespace {
 constexpr uintptr_t kCharMovementVtable = 0x16fcc88;  // RVA of CharMovement's vtable (1.0.68)
 constexpr uintptr_t kSetDestinationSlot = 0x90;
