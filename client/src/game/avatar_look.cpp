@@ -73,9 +73,11 @@ bool applyBodyFile(uintptr_t character, const std::vector<uint8_t>& bod2, const 
                        m, "??2?$AllocatedObject@V?$CategorisedAllocPolicy@$0A@@Ogre@@@Ogre@@SAPEAX_K@Z"))
                  : nullptr;
     }();
-    auto* gd = static_cast<uint8_t*>(ogreNew ? ogreNew(kGameDataSize) : std::calloc(1, kGameDataSize));
+    // From our own heap, as it has always been for avatars (a day of play without trouble); with
+    // Ogre's allocator the game crashed later in an unrelated character's creation.
+    (void)ogreNew;
+    auto* gd = static_cast<uint8_t*>(std::calloc(1, kGameDataSize));
     if (!gd) return false;
-    std::memset(gd, 0, kGameDataSize);
     mygui::Vc10String path(file);
     const bool ok = guardedApply(character, gd, &path);
     log("avatar: exact look %s from %s", ok ? "applied" : "NOT applied", file.c_str());

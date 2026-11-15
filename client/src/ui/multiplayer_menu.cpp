@@ -602,9 +602,9 @@ void MultiplayerMenu::applyConnectedMenu() {
                             log("ui: waiting for the character editor before restoring the look");
                             return;
                         }
-                        importFile_ = "WoK - " + data->name + ".bod2";
+                        importFile_ = "!WoK - " + data->name + ".bod2";
                         if (!body.empty() && importButton &&
-                            std::ofstream(exportedBodyPath("WoK - " + data->name), std::ios::binary)
+                            std::ofstream(exportedBodyPath("!WoK - " + data->name), std::ios::binary)
                                 .write(reinterpret_cast<const char*>(body.data()), body.size())) {
                             importStage_ = 1;
                             log("ui: restoring the look (%zu bytes), opening Import", body.size());

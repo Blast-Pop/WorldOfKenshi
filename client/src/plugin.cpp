@@ -216,8 +216,8 @@ void onFrame(float dt) {
             // The exact look goes straight onto the character (the editor's Import list can hide the
             // file when it holds many exports), once the character editor has closed: applying it
             // while the editor still holds the old look crashed the game.
-            s.lookToApply = data->appearance;
-            s.lookAt = s.now + 3.0;
+            // (Applying the saved look straight onto our own character crashed the game twice, so it
+            // is off: the look comes back through the editor's Import, whose file now sorts first.)
             int applied = wok::writeStats(s.reader.character(), data->stats);
             wok::log("stats: %d saved skills applied", applied);
             for (auto& st : data->stats) s.statsSent[st.id] = st.value;
