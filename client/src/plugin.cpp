@@ -37,8 +37,10 @@
 #include <cstdio>
 #include <cmath>
 #include <fstream>
+#include <algorithm>
 #include <map>
 #include <set>
+#include <unordered_set>
 #include <memory>
 #include <sstream>
 
@@ -378,44 +380,53 @@ void onFrame(float dt) {
         }
         wasDown = down;
     }
-    // RE probe Ctrl+Shift+F1: where is GameWorld's set of active characters? For every pointer in
-    // GameWorld, count distinct characters reachable as table -> node -> character (two hops).
+    // RE probe Ctrl+Shift+F1: which containers hold the characters near the player? Breadth-first over
+    // pointers from GameWorld (3 levels); every object pointing at characters within 1500 units is
+    // counted, the best ones logged with their path.
     {
         static bool wasDown = false;
         bool down = (GetAsyncKeyState(VK_F1) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
                     (GetAsyncKeyState(VK_SHIFT) & 0x8000);
-        if (down && !wasDown) {
-            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
-            for (uintptr_t off = 0; off < 0x3000; off += 8) {
-                uintptr_t a = 0;
-                if (!wok::mem::readPtr(gw + off, a) || a < 0x10000) continue;
-                std::set<uintptr_t> chars;
-                for (uintptr_t i = 0; i < 0x800; i += 8) {
-                    uintptr_t n = 0;
-                    if (!wok::mem::readPtr(a + i, n) || n < 0x10000) continue;
-                    for (uintptr_t k = 0; k < 0x20; k += 8) {
-                        uintptr_t v = 0;
-                        if (wok::mem::readPtr(n + k, v) && v > 0x10000 && wok::mem::isA(v, ".?AVCharacterHuman@@"))
-                            chars.insert(v);
-                    }
-                }
-                if (chars.size() >= 3)
-                    wok::log("probe: GameWorld+0x%llx -> %zu distinct characters within 2 hops", (unsigned long long)off,
-                             chars.size());
-            }
-            wok::log("probe: character table search done");
-            float me[3] = {};
+        if (down && !wasDown && s.readerOk) {
             s.reader.read(s.now);
+            float me[3] = {};
             wok::mem::readBytes(s.reader.character() + 0x48, me, sizeof(me));
-            auto all = wok::activeCharacters();
-            wok::log("probe: %zu active characters", all.size());
-            for (size_t i = 0; i < all.size() && i < 40; ++i) {
-                float p[3] = {};
-                wok::mem::readBytes(all[i] + 0x48, p, sizeof(p));
-                std::string name = wok::mem::readString(all[i] + 0x18, 40);
-                wok::log("probe:   %p '%s' at %.0f units", reinterpret_cast<void*>(all[i]), name.c_str(),
-                         std::sqrt((p[0] - me[0]) * (p[0] - me[0]) + (p[2] - me[2]) * (p[2] - me[2])));
+            const uintptr_t gw = wok::mem::moduleBase() + 0x2134110;
+            struct Node {
+                uintptr_t obj;
+                std::string path;
+            };
+            std::vector<Node> frontier{{gw, "GW"}};
+            std::unordered_set<uintptr_t> visited{gw};
+            std::vector<std::pair<size_t, std::string>> best;
+            for (int depth = 0; depth < 3 && !frontier.empty(); ++depth) {
+                std::vector<Node> next;
+                for (const Node& n : frontier) {
+                    std::set<uintptr_t> nearby;
+                    for (uintptr_t off = 0; off < 0x800; off += 8) {
+                        uintptr_t p = 0;
+                        if (!wok::mem::readPtr(n.obj + off, p) || p < 0x10000 || p > 0x7fffffffffff) continue;
+                        if (wok::mem::isA(p, ".?AVCharacterHuman@@")) {
+                            float c[3];
+                            if (wok::mem::readBytes(p + 0x48, c, sizeof(c)) &&
+                                (c[0] - me[0]) * (c[0] - me[0]) + (c[2] - me[2]) * (c[2] - me[2]) < 1500.0f * 1500.0f)
+                                nearby.insert(p);
+                            continue;
+                        }
+                        if (visited.size() < 300000 && visited.insert(p).second) {
+                            char buf[24];
+                            std::snprintf(buf, sizeof(buf), "+0x%llx", (unsigned long long)off);
+                            next.push_back({p, n.path + buf});
+                        }
+                    }
+                    if (nearby.size() >= 3) best.push_back({nearby.size(), n.path});
+                }
+                frontier = std::move(next);
             }
+            std::sort(best.begin(), best.end(), [](auto& a, auto& b) { return a.first > b.first; });
+            for (size_t i = 0; i < best.size() && i < 15; ++i)
+                wok::log("probe: %zu characters near the player via %s", best[i].first, best[i].second.c_str());
+            wok::log("probe: near-character search done (%zu objects visited)", visited.size());
         }
         wasDown = down;
     }
