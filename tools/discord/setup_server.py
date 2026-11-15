@@ -208,7 +208,7 @@ if "get-started" in ids:
         "• We do not sell anything that belongs to Lo-Fi Games. Kenshi is theirs; World of Kenshi is an "
         "unofficial fan project, not made or supported by them.\n"
         "• Hosting your own server yourself stays **free**: the server program is free to download.\n\n"
-        "**Where the money goes: 100% back into the project.**\n"
+        "**Where the money goes: 100%% back into the project.**\n"
         "• Paying for the official servers' hosting.\n"
         "• Development costs when the mod's development needs them (tools, test servers, anything that "
         "directly moves World of Kenshi forward).\n\n"
