@@ -1,6 +1,7 @@
 #include "name_tags.hpp"
 
 #include "../game/direct_control.hpp"
+#include "../log.hpp"
 #include "mygui_abi.hpp"
 
 #include <windows.h>
@@ -16,33 +17,47 @@ constexpr size_t kMaxTags = 32;
 std::string tagName(size_t i) { return "WokNameTag" + std::to_string(i); }
 
 using MatrixFn = const float* (*)(const void* self);
+using RefVecFn = const float* (*)(const void* self);          // const Vector3& getter
+using ValVecFn = float* (*)(const void* self, float* out);    // Vector3 returned by value
 struct Calls {
-    MatrixFn view = nullptr, projection = nullptr;
+    MatrixFn projection = nullptr;
+    RefVecFn position = nullptr;
+    ValVecFn right = nullptr, up = nullptr, direction = nullptr;
 };
 const Calls& calls() {
     static Calls c = [] {
         Calls r;
         if (HMODULE m = GetModuleHandleA("OgreMain_x64.dll")) {
-            r.view = reinterpret_cast<MatrixFn>(GetProcAddress(m, "?getViewMatrix@Camera@Ogre@@UEBAAEBVMatrix4@2@XZ"));
             r.projection =
                 reinterpret_cast<MatrixFn>(GetProcAddress(m, "?getProjectionMatrix@Frustum@Ogre@@UEBAAEBVMatrix4@2@XZ"));
+            r.position = reinterpret_cast<RefVecFn>(GetProcAddress(m, "?getDerivedPosition@Camera@Ogre@@QEBAAEBVVector3@2@XZ"));
+            r.right = reinterpret_cast<ValVecFn>(GetProcAddress(m, "?getDerivedRight@Camera@Ogre@@QEBA?AVVector3@2@XZ"));
+            r.up = reinterpret_cast<ValVecFn>(GetProcAddress(m, "?getDerivedUp@Camera@Ogre@@QEBA?AVVector3@2@XZ"));
+            r.direction = reinterpret_cast<ValVecFn>(GetProcAddress(m, "?getDerivedDirection@Camera@Ogre@@QEBA?AVVector3@2@XZ"));
         }
         return r;
     }();
     return c;
 }
 
-bool readMatrices(float view[16], float proj[16]) {
+// The camera's world position and axes, and its projection. Kenshi renders relative to the camera,
+// so Ogre's view matrix is not in world coordinates: the view transform is rebuilt from the axes.
+struct CameraFrame {
+    float pos[3], right[3], up[3], dir[3], proj[16];
+};
+bool readCamera(CameraFrame& f) {
     const Calls& c = calls();
     const uintptr_t cam = findGameCamera();
-    if (!c.view || !c.projection || !cam) return false;
+    if (!c.projection || !c.position || !c.right || !c.up || !c.direction || !cam) return false;
     __try {
-        const float* v = c.view(reinterpret_cast<void*>(cam));
-        const float* p = c.projection(reinterpret_cast<void*>(cam));
-        for (int i = 0; i < 16; ++i) {
-            view[i] = v[i];
-            proj[i] = p[i];
-        }
+        const void* self = reinterpret_cast<void*>(cam);
+        const float* p = c.position(self);
+        for (int i = 0; i < 3; ++i) f.pos[i] = p[i];
+        c.right(self, f.right);
+        c.up(self, f.up);
+        c.direction(self, f.dir);
+        const float* m = c.projection(self);
+        for (int i = 0; i < 16; ++i) f.proj[i] = m[i];
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -78,17 +93,27 @@ void viewSize(int& w, int& h) {
 void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
     if (!mygui::available()) return;
     static size_t shown = 0;
-    float view[16], proj[16];
-    const bool ok = visible && !tags.empty() && readMatrices(view, proj);
+    CameraFrame cam{};
+    const bool ok = visible && !tags.empty() && readCamera(cam);
+    static double lastLog = 0;  // diagnostic, every 10 s while there are tags
+    const double nowSec = GetTickCount64() / 1000.0;
+    const bool trace = !tags.empty() && nowSec - lastLog > 10.0;
+    if (trace) lastLog = nowSec;
     static int vw = 0, vh = 0;
     static unsigned frame = 0;
     if (ok && (frame++ % 120 == 0 || vw == 0)) viewSize(vw, vh);  // window size, re-read now and then
     size_t used = 0;
     for (size_t i = 0; ok && i < tags.size() && used < kMaxTags; ++i) {
         const float world[4] = {tags[i].pos[0], tags[i].pos[1] + kHeadHeight, tags[i].pos[2], 1.0f};
-        float eye[4], clip[4];
-        mul(view, world, eye);
-        mul(proj, eye, clip);
+        const float d[3] = {world[0] - cam.pos[0], world[1] - cam.pos[1], world[2] - cam.pos[2]};
+        auto dot = [&](const float* a) { return a[0] * d[0] + a[1] * d[1] + a[2] * d[2]; };
+        // Camera space: x right, y up, looking down -z.
+        const float eye[4] = {dot(cam.right), dot(cam.up), -dot(cam.dir), 1.0f};
+        float clip[4];
+        mul(cam.proj, eye, clip);
+        if (trace)
+            log("tags: '%s' clip (%.2f, %.2f, %.2f, %.2f) view %d x %d", tags[i].name.c_str(), clip[0], clip[1], clip[2],
+                clip[3], vw, vh);
         if (clip[3] <= 0.01f) continue;  // behind the camera
         const float nx = clip[0] / clip[3], ny = clip[1] / clip[3];
         if (nx < -1.2f || nx > 1.2f || ny < -1.2f || ny > 1.2f) continue;  // off screen
@@ -107,6 +132,7 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
         mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2, kTagW, kTagH);
         ++used;
     }
+    if (trace) log("tags: %zu tag(s), matrices %s, %zu label(s) shown", tags.size(), ok ? "ok" : "MISSING", used);
     for (size_t i = used; i < shown; ++i) mygui::destroy(mygui::findWidget(tagName(i)));
     shown = used;
 }

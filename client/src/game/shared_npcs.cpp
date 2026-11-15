@@ -7,6 +7,8 @@
 #include "stats.hpp"
 #include "world_characters.hpp"
 
+#include <windows.h>
+
 #include <cmath>
 #include <cstring>
 
@@ -55,6 +57,7 @@ void SharedNpcs::onMessage(const Message& msg, double nowSec) {
     if (auto* co = std::get_if<CellOwners>(&msg)) {
         owners_.clear();
         for (const CellOwner& c : co->cells) owners_[{c.cx, c.cz}] = c.owner;
+        log("shared: %zu cell owner(s) received", owners_.size());
         announced_.clear();  // a new map: tell the (possibly new) neighbours everything again
     } else if (auto* info = std::get_if<NpcInfo>(&msg)) {
         Puppet& p = puppets_[puppetId(info->owner, info->key)];
@@ -99,6 +102,7 @@ void SharedNpcs::reportOwnNpcs(double nowSec, PlayerId me, uintptr_t self,
 }
 
 void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::function<bool(uintptr_t)>& isAvatar) {
+    me_ = me;
     // Our own copies of NPCs in a cell someone else simulates: the owner's puppets replace them.
     int removed = 0;
     for (uintptr_t ch : activeCharacters()) {
@@ -108,6 +112,24 @@ void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::functi
         const PlayerId owner = ownerOf(pos[0], pos[2]);
         if (owner == 0 || owner == me) continue;
         if (spawner_.destroy(ch)) ++removed;
+    }
+    static double lastTrace = 0;
+    const double t = GetTickCount64() / 1000.0;
+    if (t - lastTrace > 10.0) {  // diagnostic while the shared world is new
+        lastTrace = t;
+        float me[3] = {};
+        mem::readBytes(self + kCharPosition, me, sizeof(me));
+        size_t total = 0, inOthers = 0;
+        for (uintptr_t ch : activeCharacters()) {
+            ++total;
+            float pos[3];
+            if (mem::readBytes(ch + kCharPosition, pos, sizeof(pos))) {
+                const PlayerId o = ownerOf(pos[0], pos[2]);
+                if (o && o != me_) ++inOthers;
+            }
+        }
+        log("shared: my cell (%d, %d) owner %u (me %u); %zu active characters, %zu in others' cells", cellOf(me[0]),
+            cellOf(me[2]), ownerOf(me[0], me[2]), me_, total, inOthers);
     }
     if (removed) log("shared: removed %d local NPC(s) simulated by another player", removed);
 }

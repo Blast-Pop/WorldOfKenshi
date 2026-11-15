@@ -56,6 +56,7 @@ private:
     // Viewer side: puppets by (owner << 32 | key).
     std::unordered_map<uint64_t, Puppet> puppets_;
     std::unordered_set<uintptr_t> puppetChars_;
+    PlayerId me_ = 0;
 };
 
 }  // namespace wok

@@ -427,6 +427,19 @@ void onFrame(float dt) {
             for (size_t i = 0; i < best.size() && i < 15; ++i)
                 wok::log("probe: %zu characters near the player via %s", best[i].first, best[i].second.c_str());
             wok::log("probe: near-character search done (%zu objects visited)", visited.size());
+            uintptr_t holder = 0;
+            wok::mem::readPtr(gw + 0x18, holder);
+            for (uintptr_t off = 0x120; off <= 0x168 && holder; off += 8) {
+                uint64_t v = 0;
+                wok::mem::readBytes(holder + off, &v, 8);
+                size_t chars = 0;
+                for (uintptr_t k = 0; k < 0x2000 && v > 0x10000 && v < 0x7fffffffffff; k += 8) {
+                    uintptr_t c = 0;
+                    if (wok::mem::readPtr(v + k, c) && c > 0x10000 && wok::mem::isA(c, ".?AVCharacterHuman@@")) ++chars;
+                }
+                wok::log("probe: *(GW+0x18)+0x%llx = %016llx (%zu characters in the next 0x2000 bytes)",
+                         (unsigned long long)off, (unsigned long long)v, chars);
+            }
         }
         wasDown = down;
     }
