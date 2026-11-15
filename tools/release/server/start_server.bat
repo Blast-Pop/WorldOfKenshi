@@ -6,7 +6,7 @@ rem Kenshi's own steam_api64.dll lets players log in with Steam (no browser). Ch
 set STEAM_API=C:\Program Files (x86)\Steam\steamapps\common\Kenshi\steam_api64.dll
 rem PRIVATE=1 keeps the server out of the public server list: players join it with "Direct connect".
 set PRIVATE=0
-set ANNOUNCE=--announce http://95.179.253.252:27801
+set ANNOUNCE=--announce http://45.77.201.239:27801
 if "%PRIVATE%"=="1" set ANNOUNCE=
 rem Optional: copy your Kenshi data\__mods.list next to this file as mods.txt to require the same mods.
 set MODS=

@@ -18,7 +18,7 @@ struct ServerEntry {
 
 // Master server list read by the server browser (any World of Kenshi server started with --master).
 // Test phase: the EU test server; to move to a permanent domain.
-inline constexpr const char* kDefaultMasterUrl = "http://95.179.253.252:27801";
+inline constexpr const char* kDefaultMasterUrl = "http://45.77.201.239:27801";
 
 struct ClientConfig {
     std::string host = "127.0.0.1";
