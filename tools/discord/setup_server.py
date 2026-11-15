@@ -76,6 +76,7 @@ LAYOUT = [
         ("rules", TEXT, "Read and accept the rules to see the whole server.", OPEN_READ_ONLY),
         ("announcements", TEXT, "News and new versions of World of Kenshi.", None),
         ("server-status", TEXT, "Live list of World of Kenshi servers.", None),
+        ("coming-soon", TEXT, "What is planned: server hosting, and where the money goes.", None),
     ]),
     ("🗡️ WORLD OF KENSHI", MEMBERS, [
         ("get-started", TEXT, "How to install and play. Type /download for the latest version.", READ_ONLY),
@@ -197,4 +198,31 @@ if "get-started" in ids:
         "**Direct connect**.\n"
         "Game rates (production, building, research) default to **1.25x**: `--production-speed`, "
         "`--building-speed`, `--research-speed`."}, pin=True)
+    post("coming-soon", {"title": "Coming soon: World of Kenshi server hosting", "color": SAND, "description":
+        "Once World of Kenshi is ready, we plan to offer **server hosting**: a server of your own, running "
+        "24/7, set up for you.
+
+"
+        "**What you would pay for: the hosting, and only the hosting.**
+"
+        "• The **mod is free** and stays free, for everyone, forever. Its source code is public on GitHub.
+"
+        "• We **do not sell Kenshi** or any copy of it. Every player needs their own copy of Kenshi on "
+        "Steam, and servers check it.
+"
+        "• We do not sell anything that belongs to Lo-Fi Games. Kenshi is theirs; World of Kenshi is an "
+        "unofficial fan project, not made or supported by them.
+"
+        "• Hosting your own server yourself stays **free**: the server program is free to download.
+
+"
+        "**Where the money goes: 100% back into the project.**
+"
+        "• Paying for the official servers' hosting.
+"
+        "• Development costs when the mod's development needs them (tools, test servers, anything that "
+        "directly moves World of Kenshi forward).
+
+"
+        "Nothing is for sale yet. We will announce it in %s when it opens." % c("announcements")}, pin=True)
     print("done")
