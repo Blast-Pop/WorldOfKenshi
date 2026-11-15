@@ -51,6 +51,8 @@
 
 namespace {
 
+constexpr double kSaidSeconds = 10.0;  // a local chat message stays above the speaker's head
+
 wok::ClientConfig loadOrCreateConfig() {
     const std::string path = wok::modFile(wok::modDir(), "wok_client.ini");
     std::ifstream in(path, std::ios::binary);
@@ -89,6 +91,11 @@ struct ClientState {
     double nextCreateDiag = 0;
     std::optional<wok::WorldRules> rules;  // the server's game rates, applied while in a world
     double nextRulesApply = 0;
+    struct Said {
+        std::string text;
+        double until = 0;
+    };
+    std::map<wok::PlayerId, Said> said;  // local chat shown above the speakers' heads
     std::vector<uint8_t> lookToApply;   // our saved look, applied once the editor has closed
     double lookAt = 0;
     wok::DirectControl control;          // WASD movement
@@ -340,6 +347,7 @@ void onFrame(float dt) {
         }
         if (auto* cm = std::get_if<wok::ChatMessage>(&m)) {
             if (s.chat) s.chat->onMessage(*cm, s.now);
+            if (cm->channel == wok::ChatChannel::Local) s.said[cm->from] = {cm->text, s.now + kSaidSeconds};
             continue;
         }
         if (auto* wr = std::get_if<wok::WorldRules>(&m)) {
@@ -534,7 +542,17 @@ void onFrame(float dt) {
     s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent), pauseMenuOpen);
     if (s.avatarsOk) {  // other players' names above their heads
         std::vector<wok::NameTag> tags;
-        if (connected && s.avatars.inGame() && !pauseMenuOpen && s.options.showNames)
+        std::erase_if(s.said, [&](const auto& kv) { return s.now >= kv.second.until; });
+        auto saidBy = [&](wok::PlayerId id) {
+            auto it = s.said.find(id);
+            return it == s.said.end() ? std::string() : it->second.text;
+        };
+        if (connected && s.avatars.inGame() && !pauseMenuOpen && s.readerOk) {
+            // What we said in local chat, above our own head (no name label for ourselves).
+            if (std::string mine = saidBy(s.net->playerId()); !mine.empty() && s.reader.character())
+                tags.push_back({"", s.reader.character(), mine});
+        }
+        if (connected && s.avatars.inGame() && !pauseMenuOpen)
             if (s.readerOk) {
                 // Only players near our character get a label (Aeglen: not across the map).
                 const float kTagRange = s.options.nameRange;
@@ -544,7 +562,10 @@ void onFrame(float dt) {
                     float p[3];
                     if (!wok::mem::readBytes(t.character + 0x48, p, sizeof(p))) continue;
                     const float dx = p[0] - me[0], dz = p[2] - me[2];
-                    if (dx * dx + dz * dz <= kTagRange * kTagRange) tags.push_back({t.name, t.character});
+                    const std::string text = saidBy(t.player);
+                    const bool inRange = dx * dx + dz * dz <= kTagRange * kTagRange;
+                    if ((inRange && s.options.showNames) || !text.empty())  // speech shows even with names off
+                        tags.push_back({inRange && s.options.showNames ? t.name : std::string(), t.character, text});
                 }
             }
         wok::updateNameTags(tags, !tags.empty());

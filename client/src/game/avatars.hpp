@@ -21,6 +21,7 @@ public:
     struct Tag {
         std::string name;
         uintptr_t character;
+        PlayerId player = 0;
     };
     std::vector<Tag> nameTags() const;  // other players' names and where their avatars stand
     bool isAvatar(uintptr_t character) const {

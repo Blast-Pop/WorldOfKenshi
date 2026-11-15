@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <string>
+#include <vector>
 
 namespace wok {
 
@@ -17,6 +18,10 @@ constexpr int kTagW = 260, kTagH = 32;  // Kenshi_CharacterNamePanel.layout
 constexpr int kLiftPx = 45;  // above the head
 constexpr size_t kMaxTags = 32;
 std::string tagName(size_t i) { return "WokNameTag" + std::to_string(i); }
+std::string bubbleName(size_t tag, size_t row) { return "WokSaid" + std::to_string(tag) + "_" + std::to_string(row); }
+constexpr const char* kSaidSkin = "Kenshi_TextboxStandardText";
+constexpr int kSaidW = 320, kSaidRowH = 20;
+constexpr size_t kSaidRows = 4;  // at most, the end of a longer message is cut
 
 using MatrixFn = const float* (*)(const void* self);
 using RefVecFn = const float* (*)(const void* self);          // const Vector3& getter
@@ -180,7 +185,10 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
         const int sx = static_cast<int>((nx * 0.5f + 0.5f) * vw), sy = static_cast<int>((0.5f - ny * 0.5f) * vh);
         const std::string name = tagName(used);
         mygui::Widget* w = mygui::findWidget(name);
-        if (!w) {
+        if (tags[i].name.empty()) {
+            mygui::destroy(w);
+            w = nullptr;
+        } else if (!w) {
             // Kenshi's own name tag look (Kenshi_CharacterNamePanel.layout, NameTagUnselected colour).
             w = mygui::createRoot("TextBox", "Kenshi_TextboxStandardText_Large", {0, 0, 0.1f, 0.03f}, "Back", name);
             if (!w) continue;
@@ -190,12 +198,46 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
             mygui::setProperty(w, "TextShadowColour", "0.28 0.28 0.28");
             mygui::setProperty(w, "NeedMouse", "false");
         }
-        mygui::setProperty(w, "Caption", "[" + tags[i].name + "]");
-        mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2 - kLiftPx, kTagW, kTagH);
+        if (w) {
+            mygui::setProperty(w, "Caption", "[" + tags[i].name + "]");
+            mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2 - kLiftPx, kTagW, kTagH);
+        }
+        // What the character just said in local chat, above its name.
+        std::vector<std::string> said;
+        if (!tags[i].said.empty()) {
+            said = mygui::wrapText(kSaidSkin, tags[i].said, kSaidW);
+            if (said.size() > kSaidRows) {
+                said.resize(kSaidRows);
+                said.back() += "...";
+            }
+        }
+        const int saidBottom = sy - kTagH / 2 - kLiftPx - (w ? 2 : -kTagH);
+        for (size_t r = 0; r < kSaidRows; ++r) {
+            mygui::Widget* b = mygui::findWidget(bubbleName(used, r));
+            if (r >= said.size()) {
+                mygui::destroy(b);
+                continue;
+            }
+            if (!b) {
+                b = mygui::createRoot("TextBox", kSaidSkin, {0, 0, 0.1f, 0.02f}, "Back", bubbleName(used, r));
+                if (!b) continue;
+                mygui::setProperty(b, "TextAlign", "Center");
+                mygui::setProperty(b, "TextColour", "1 1 1");
+                mygui::setProperty(b, "TextShadow", "true");
+                mygui::setProperty(b, "TextShadowColour", "0 0 0");
+                mygui::setProperty(b, "NeedMouse", "false");
+            }
+            mygui::setProperty(b, "Caption", said[r]);
+            const int top = saidBottom - static_cast<int>(said.size() - r) * kSaidRowH;
+            mygui::setCoord(b, sx - kSaidW / 2, top, kSaidW, kSaidRowH);
+        }
         ++used;
     }
     if (trace) log("tags: %zu tag(s), matrices %s, %zu label(s) shown", tags.size(), ok ? "ok" : "MISSING", used);
-    for (size_t i = used; i < shown; ++i) mygui::destroy(mygui::findWidget(tagName(i)));
+    for (size_t i = used; i < shown; ++i) {
+        mygui::destroy(mygui::findWidget(tagName(i)));
+        for (size_t r = 0; r < kSaidRows; ++r) mygui::destroy(mygui::findWidget(bubbleName(i, r)));
+    }
     shown = used;
 }
 

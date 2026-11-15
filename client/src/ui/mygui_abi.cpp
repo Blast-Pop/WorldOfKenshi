@@ -48,6 +48,7 @@ struct Api {
     const void* (*listNameAt)(Widget* list, size_t index);
     void (*listBeginTo)(Widget* list, size_t index);
     void (*listSetSelected)(Widget* list, size_t index) = nullptr;
+    int* (*textSize)(Widget* textBox, int* out) = nullptr;  // TextBox::getTextSize, IntSize by value
     Widget* (*listWidgetAt)(Widget* list, size_t index);
     size_t (*listSelected)(Widget* list);
     void (*risePressed)(void* widgetInput, int left, int top, int button);
@@ -137,6 +138,7 @@ bool init() {
     load(m, g_api.listNameAt, "?getItemNameAt@ListBox@MyGUI@@QEAAAEBVUString@2@_K@Z");
     load(m, g_api.listBeginTo, "?beginToItemAt@ListBox@MyGUI@@QEAAX_K@Z");
     load(m, g_api.listSetSelected, "?setIndexSelected@ListBox@MyGUI@@QEAAX_K@Z");
+    load(m, g_api.textSize, "?getTextSize@TextBox@MyGUI@@UEAA?AU?$TSize@H@types@2@XZ");
     load(m, g_api.listWidgetAt, "?getWidgetByIndex@ListBox@MyGUI@@QEAAPEAVWidget@2@_K@Z");
     load(m, g_api.listSelected, "?getIndexSelected@ListBox@MyGUI@@QEBA_KXZ");
     load(m, g_api.risePressed, "?_riseMouseButtonPressed@WidgetInput@MyGUI@@QEAAXHHUMouseButton@2@@Z");
@@ -398,6 +400,67 @@ bool pressListItem(Widget* list, std::string_view containing) {
     }
     log("mygui: no list row contains '%.*s' (%zu rows)", static_cast<int>(containing.size()), containing.data(), count);
     return false;
+}
+
+namespace {
+bool guardedTextSize(Widget* textBox, int* out) {
+    __try {
+        g_api.textSize(textBox, out);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+}  // namespace
+
+int textWidth(std::string_view skin, std::string_view text) {
+    if (!g_api.textSize) return -1;
+    const std::string probeName = "WokTextProbe_" + std::string(skin);
+    Widget* probe = findWidget(probeName);
+    if (!probe) {
+        probe = createRoot("TextBox", skin, {0, 0, 0.5f, 0.05f}, "Back", probeName);
+        if (!probe) return -1;
+        setProperty(probe, "Visible", "false");
+        setProperty(probe, "NeedMouse", "false");
+    }
+    setProperty(probe, "Caption", text);
+    int size[2] = {-1, -1};
+    return guardedTextSize(probe, size) ? size[0] : -1;
+}
+
+std::vector<std::string> wrapText(std::string_view skin, std::string_view text, int maxWidth) {
+    std::vector<std::string> lines;
+    if (maxWidth <= 0 || textWidth(skin, text) <= maxWidth) {  // fits (or cannot be measured)
+        lines.emplace_back(text);
+        return lines;
+    }
+    std::string line;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t space = text.find(' ', pos);
+        if (space == std::string_view::npos) space = text.size();
+        std::string word(text.substr(pos, space - pos));
+        pos = space + 1;
+        std::string candidate = line.empty() ? word : line + " " + word;
+        if (textWidth(skin, candidate) <= maxWidth) {
+            line = std::move(candidate);
+            continue;
+        }
+        if (!line.empty()) {
+            lines.push_back(std::move(line));
+            line.clear();
+        }
+        // A word wider than the line: cut it where it no longer fits.
+        while (textWidth(skin, word) > maxWidth && word.size() > 1) {
+            size_t n = word.size() - 1;
+            while (n > 1 && textWidth(skin, word.substr(0, n)) > maxWidth) --n;
+            lines.push_back(word.substr(0, n));
+            word.erase(0, n);
+        }
+        line = std::move(word);
+    }
+    if (!line.empty()) lines.push_back(std::move(line));
+    return lines;
 }
 
 std::string labelText(Widget* textBox) {

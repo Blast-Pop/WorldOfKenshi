@@ -18,6 +18,7 @@ constexpr float kBottom = 0.53f;     // default: the frame's bottom at 53% of th
 constexpr const char* kBox = "WokChatBox";
 constexpr const char* kInput = "WokChatInput";
 constexpr const char* kGripName = "WokChatGrip";
+constexpr const char* kLineSkin = "Kenshi_TextboxStandardText";
 std::string lineName(size_t i) { return "WokChatLine" + std::to_string(i); }
 
 bool keyDown(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
@@ -183,11 +184,24 @@ void Chat::close(bool sendIt) {
 
 void Chat::redraw(double nowSec) {
     const size_t n = rows();
-    auto visibleAt = [&](size_t i) -> const Line* {
-        // Newest at the bottom: row i shows message (size - n + i).
-        const size_t idx = i + lines_.size();
-        const Line* line = idx >= n ? &lines_[idx - n] : nullptr;
-        return line && (typing_ || dragging_ || nowSec - line->time < fadeSec_) ? line : nullptr;
+    // Messages cut to the frame's width, newest at the bottom; only the last n rows fit.
+    const int textW = boxW_ - 2 * kPad - 4;
+    struct Row {
+        const std::string* text;
+        double time;
+    };
+    std::vector<Row> all;
+    for (Line& line : lines_) {
+        if (line.rowsWidth != textW) {
+            line.rows = mygui::wrapText(kLineSkin, line.text, textW);
+            line.rowsWidth = textW;
+        }
+        for (const std::string& r : line.rows) all.push_back({&r, line.time});
+    }
+    auto visibleAt = [&](size_t i) -> const Row* {
+        const size_t idx = i + all.size();
+        const Row* row = idx >= n ? &all[idx - n] : nullptr;
+        return row && (typing_ || dragging_ || nowSec - row->time < fadeSec_) ? row : nullptr;
     };
     size_t shown = 0;
     for (size_t i = 0; i < n; ++i)
@@ -202,7 +216,7 @@ void Chat::redraw(double nowSec) {
     mygui::setProperty(box, "Alpha", std::to_string(opacity_ / 100.0f));
     const int messagesBottom = boxH_ - 2 * kPad - kInputH;  // rows end above the input line
     for (size_t i = 0; i < kMaxLines; ++i) {
-        const Line* line = i < n ? visibleAt(i) : nullptr;
+        const Row* line = i < n ? visibleAt(i) : nullptr;
         mygui::Widget* w = mygui::findWidget(lineName(i));
         if (!line) {
             mygui::destroy(w);
@@ -210,12 +224,12 @@ void Chat::redraw(double nowSec) {
         }
         if (!w) {
             const float y = float(messagesBottom - static_cast<int>(n - i) * kLineH);
-            w = mygui::createChild(box, "TextBox", "Kenshi_TextboxStandardText",
+            w = mygui::createChild(box, "TextBox", kLineSkin,
                                    inBox(boxW_, boxH_, kPad, y, float(boxW_ - 2 * kPad), kLineH), lineName(i));
             if (!w) continue;
             mygui::setProperty(w, "NeedMouse", "false");
         }
-        mygui::setProperty(w, "Caption", line->text);
+        mygui::setProperty(w, "Caption", *line->text);
     }
 }
 

@@ -57,6 +57,10 @@ std::string labelText(Widget* textBox);
 // mouse click. True when the list then has that row selected.
 bool pressListItem(Widget* list, std::string_view containing);  // caption of a plain MyGUI TextBox, empty otherwise
 const char* editText(Widget* editBox);  // UTF-8, valid until the next MyGUI call
+// Width in pixels of `text` written with `skin`'s font (measured by a hidden TextBox); -1 if unknown.
+int textWidth(std::string_view skin, std::string_view text);
+// `text` cut into lines no wider than `maxWidth` pixels, at spaces when possible.
+std::vector<std::string> wrapText(std::string_view skin, std::string_view text, int maxWidth);
 std::string nameOf(Widget* w);          // full MyGUI name (layout prefix included)
 // Kenshi loads layouts with a per-instance name prefix ("0,000,...,4B0_NewGameButton"), so its own
 // widgets are found by name suffix, searching the root widgets down to `maxDepth` levels.

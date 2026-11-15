@@ -8,6 +8,7 @@
 #include <deque>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace wok {
 
@@ -32,6 +33,8 @@ private:
     struct Line {
         std::string text;
         double time;
+        std::vector<std::string> rows;  // the text cut to the frame's width
+        int rowsWidth = -1;             // the width `rows` were cut for
     };
     void open();
     void close(bool sendIt);
