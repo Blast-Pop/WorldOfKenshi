@@ -28,6 +28,7 @@ private:
 };
 
 // Blocking HTTP GET (WinHTTP, short timeouts). Empty optional on any failure or non-200 answer.
-std::optional<std::string> httpGet(const std::string& url);
+// `maxBytes`: a longer answer is cut off and counts as a failure.
+std::optional<std::string> httpGet(const std::string& url, size_t maxBytes = 256 * 1024, int timeoutMs = 3000);
 
 }  // namespace wok

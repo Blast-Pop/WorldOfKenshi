@@ -5,6 +5,7 @@
 #include "../input.hpp"
 
 #include "../log.hpp"
+#include "../updater.hpp"
 #include "mygui_abi.hpp"
 
 #include <windows.h>
@@ -728,7 +729,10 @@ void MultiplayerMenu::refreshStatus() {
         s = error_;
     } else {
         switch (net_.status()) {
-            case ClientNet::Status::Disconnected: s = "Not connected"; break;
+            case ClientNet::Status::Disconnected:
+                s = updateNotice();  // a new version was just installed
+                if (s.empty()) s = "Not connected";
+                break;
             case ClientNet::Status::Connecting: s = "Connecting..."; break;
             case ClientNet::Status::AwaitingSteamLogin:
                 s = "Steam login in progress in your browser (steamcommunity.com tab)";

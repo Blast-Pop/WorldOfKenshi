@@ -11,7 +11,7 @@ namespace {
 std::wstring widen(const std::string& s) { return std::wstring(s.begin(), s.end()); }  // URLs are ASCII
 }  // namespace
 
-std::optional<std::string> httpGet(const std::string& url) {
+std::optional<std::string> httpGet(const std::string& url, size_t maxBytes, int timeoutMs) {
     std::wstring wurl = widen(url);
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof(parts);
@@ -26,7 +26,7 @@ std::optional<std::string> httpGet(const std::string& url) {
     HINTERNET session = WinHttpOpen(L"WorldOfKenshi/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME,
                                     WINHTTP_NO_PROXY_BYPASS, 0);
     if (!session) return std::nullopt;
-    WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
+    WinHttpSetTimeouts(session, timeoutMs, timeoutMs, timeoutMs, timeoutMs);
     HINTERNET connection = WinHttpConnect(session, host, parts.nPort, 0);
     HINTERNET request = connection ? WinHttpOpenRequest(connection, L"GET", path, nullptr, WINHTTP_NO_REFERER,
                                                         WINHTTP_DEFAULT_ACCEPT_TYPES,
@@ -39,15 +39,20 @@ std::optional<std::string> httpGet(const std::string& url) {
                             &status, &size, WINHTTP_NO_HEADER_INDEX);
         if (status == 200) {
             std::string body;
+            bool complete = false;
             for (;;) {
                 DWORD available = 0, read = 0;
-                if (!WinHttpQueryDataAvailable(request, &available) || available == 0) break;
-                if (body.size() + available > 256 * 1024) break;  // a server list is small
+                if (!WinHttpQueryDataAvailable(request, &available)) break;
+                if (available == 0) {
+                    complete = true;
+                    break;
+                }
+                if (body.size() + available > maxBytes) break;
                 std::string chunk(available, '\0');
                 if (!WinHttpReadData(request, chunk.data(), available, &read)) break;
                 body.append(chunk.data(), read);
             }
-            result = body;
+            if (complete) result = body;
         }
     }
     if (request) WinHttpCloseHandle(request);

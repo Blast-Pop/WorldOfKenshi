@@ -118,6 +118,8 @@ bool addTab(void* tabControl, MultiplayerOptions& options) {
     gap();
     checkbox("Players - show names", &options.showNames);
     slider("Players - name tag distance", 50.0f, 2000.0f, &options.nameRange);
+    gap();
+    checkbox("Updates - install new versions automatically", &options.autoUpdate);
     void* panelAny[2] = {};
     reinterpret_cast<MakePanelAnyFn>(base + kMakePanelAny)(panelAny, &panel);
     c.setItemData(tabControl, tab, panelAny);

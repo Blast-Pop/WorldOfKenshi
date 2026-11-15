@@ -13,6 +13,8 @@ struct MultiplayerOptions {
     // Players
     bool showNames = true;      // names above the other players
     float nameRange = 500.0f;   // game units (50..2000)
+    // Updates
+    bool autoUpdate = true;     // install new versions from GitHub at start-up
 };
 
 // Called on a poll: adds the tab when Kenshi's Options window is open and does not have it yet.

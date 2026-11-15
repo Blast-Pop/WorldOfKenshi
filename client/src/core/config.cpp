@@ -48,6 +48,8 @@ ClientConfig parseConfig(std::string_view text) {
             }
         } else if (key == "show_names") {
             cfg.showNames = value != "0";
+        } else if (key == "auto_update") {
+            cfg.autoUpdate = value != "0";
         } else if (key == "chat_size") {
             size_t comma = value.find(',');
             int w = 0, h = 0;
@@ -79,6 +81,7 @@ std::string serializeConfig(const ClientConfig& cfg) {
     out += "chat_size=" + std::to_string(cfg.chatWidth) + "," + std::to_string(cfg.chatHeight) + "\n";
     out += "chat_fade=" + std::to_string(static_cast<int>(cfg.chatFadeSec + 0.5f)) + "\n";
     out += std::string("show_names=") + (cfg.showNames ? "1" : "0") + "\n";
+    out += std::string("auto_update=") + (cfg.autoUpdate ? "1" : "0") + "\n";
     out += "name_range=" + std::to_string(static_cast<int>(cfg.nameRange + 0.5f)) + "\n";
     return out;
 }

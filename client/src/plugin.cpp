@@ -10,6 +10,7 @@
 #include "game/world_characters.hpp"
 #include "game/shared_npcs.hpp"
 #include "ui/chat.hpp"
+#include "updater.hpp"
 #include "ui/options_tab.hpp"
 #include "ui/name_tags.hpp"
 #include "game/identity.hpp"
@@ -481,6 +482,8 @@ void onFrame(float dt) {
             s.options.chatFadeSec = s.cfg.chatFadeSec;
             s.options.showNames = s.cfg.showNames;
             s.options.nameRange = s.cfg.nameRange;
+            s.options.autoUpdate = s.cfg.autoUpdate;
+            wok::startAutoUpdate(s.cfg.autoUpdate);  // once per start, on its own thread
             s.chat->setSize(s.cfg.chatWidth, s.cfg.chatHeight);
         }
         wok::ensureOptionsTab(s.options);
@@ -490,11 +493,12 @@ void onFrame(float dt) {
         const float fade = clampTo(s.options.chatFadeSec, 5.0f, 120.0f);
         const float range = clampTo(s.options.nameRange, 50.0f, 2000.0f);
         if (!same(opacity, s.cfg.chatOpacity) || !same(fade, s.cfg.chatFadeSec) || !same(range, s.cfg.nameRange) ||
-            s.options.showNames != s.cfg.showNames) {  // a setting changed in Options: save it
+            s.options.showNames != s.cfg.showNames || s.options.autoUpdate != s.cfg.autoUpdate) {  // changed in Options
             s.cfg.chatOpacity = opacity;
             s.cfg.chatFadeSec = fade;
             s.cfg.nameRange = range;
             s.cfg.showNames = s.options.showNames;
+            s.cfg.autoUpdate = s.options.autoUpdate;
             saveConfig(s.cfg);
         }
     }
