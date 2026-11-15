@@ -18,6 +18,11 @@ public:
     void update(double nowSec);  // game thread, every frame
     void clear();                // disconnected: forget every remote player
     bool inGame() const { return spawner_.inGame(); }
+    bool isAvatar(uintptr_t character) const {
+        for (auto& [id, a] : avatars_)
+            if (a.character == character) return true;
+        return false;
+    }
     bool restorePlayer(uintptr_t playerCharacter, const CharacterData& data) const {
         return spawner_.restorePlayerCharacter(playerCharacter, data);
     }

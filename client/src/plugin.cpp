@@ -7,6 +7,7 @@
 #include "game/game_memory.hpp"
 #include "game/direct_control.hpp"
 #include "game/world_characters.hpp"
+#include "game/shared_npcs.hpp"
 #include "ui/chat.hpp"
 #include "ui/options_tab.hpp"
 #include "game/identity.hpp"
@@ -79,6 +80,8 @@ struct ClientState {
     double nextDeathCheck = 0;
     double nextCreateDiag = 0;
     wok::DirectControl control;          // WASD movement
+    wok::SharedNpcs shared;              // shared world: NPCs (spec 7.3)
+    bool sharedOk = false;
     std::unique_ptr<wok::Chat> chat;     // in-game chat (spec 7.8)
     wok::MultiplayerOptions options;     // our tab in Kenshi's Options
     double nextOptionsPoll = 0;
@@ -186,6 +189,7 @@ void onFrame(float dt) {
     bool connected = s.net->status() == wok::ClientNet::Status::Connected;
     if (s.wasConnected && !connected) {
         s.avatars.clear();
+        if (s.sharedOk) s.shared.clear();
         wok::cancelSteamAuthTicket();  // a ticket stays valid until cancelled: no replay after we leave
     }
     if (!connected) {
@@ -311,6 +315,11 @@ void onFrame(float dt) {
             }
         }
         // The server owns the world clock: align ours once the world is being played.
+        if (std::holds_alternative<wok::CellOwners>(m) || std::holds_alternative<wok::NpcInfo>(m) ||
+            std::holds_alternative<wok::NpcSnapshot>(m)) {
+            if (s.sharedOk) s.shared.onMessage(m, s.now);
+            continue;
+        }
         if (auto* cm = std::get_if<wok::ChatMessage>(&m)) {
             if (s.chat) s.chat->onMessage(*cm, s.now);
             continue;
@@ -450,6 +459,11 @@ void onFrame(float dt) {
         pauseMenuOpen = wok::mygui::findShownBySuffix("_ResumeButton", 3) != nullptr;
     }
     s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent), pauseMenuOpen);
+    if (s.sharedOk && connected && s.characterRestored && !s.dead)
+        s.shared.update(
+            s.now, s.net->playerId(), s.reader.character(),
+            [](uintptr_t ch) { return g_state->avatars.isAvatar(ch); },
+            [](const wok::Message& m, bool reliable) { g_state->net->sendShared(m, reliable); });
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 
@@ -484,6 +498,7 @@ extern "C" __declspec(dllexport) void dllStartPlugin() {
         g_state->readerOk = g_state->reader.init();
         if (!g_state->readerOk) wok::log("local player reader disabled (signature missing)");
         g_state->avatarsOk = g_state->readerOk && g_state->avatars.init(g_state->reader.gameWorld());
+        g_state->sharedOk = g_state->avatarsOk && g_state->shared.init(g_state->reader.gameWorld());
         if (wok::mygui::init())
             g_state->menu = new wok::MultiplayerMenu(
                 g_state->cfg, *g_state->net, [] { saveConfig(g_state->cfg); }, [] { connectToServer(); },

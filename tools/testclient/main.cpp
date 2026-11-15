@@ -41,6 +41,7 @@ struct Args {
     float offset = 40.0f;
     double delay = 0.5;
     std::string ticketHex;  // Steam session ticket to present (security tests)
+    std::string fakeNpc;    // shared-world test: report one NPC of this template (needs to own the cell)
 };
 
 bool parseArgs(int argc, char** argv, Args& a) {
@@ -61,6 +62,7 @@ bool parseArgs(int argc, char** argv, Args& a) {
         else if (k == "--follow") a.follow = std::atoi(v) != 0;
         else if (k == "--offset") a.offset = static_cast<float>(std::atof(v));
         else if (k == "--delay") a.delay = std::atof(v);
+        else if (k == "--fake-npc") a.fakeNpc = v;
         else return false;
     }
     // Fake id in the server's test-bot range (needs wok_server --test-bots).
@@ -181,6 +183,23 @@ int main(int argc, char** argv) {
                 s.yaw = std::fmod(angle * 57.29578f + 90.0f, 360.0f);
                 s.anim = a.radius > 0 ? AnimState::Walk : AnimState::Idle;
                 auto b = encode(s);
+                net.send(b, false);
+            }
+            // Shared-world test: one NPC walking a small circle next to the bot, as a cell owner would
+            // report it (the server relays it only if the bot owns its cell, i.e. joined it first).
+            static double nextNpc = 0, nextNpcInfo = 0;
+            if (me != 0 && !a.fakeNpc.empty() && now() >= nextNpc) {
+                nextNpc = now() + 0.25;
+                if (now() >= nextNpcInfo) {
+                    nextNpcInfo = now() + 5.0;
+                    auto b = encode(NpcInfo{0, 1, "Test NPC", a.fakeNpc});
+                    net.send(b, true);
+                }
+                const float t = static_cast<float>(now()) * 0.4f;
+                NpcSnapshot snap;
+                snap.npcs.push_back({1, a.cx + 8.0f + 6.0f * std::cos(t), a.cy, a.cz + 6.0f * std::sin(t), 0.0f,
+                                     AnimState::Walk, false});
+                auto b = encode(snap);
                 net.send(b, false);
             }
             if (me != 0 && now() >= nextPing) {  // keepalive: a follower with no target sends nothing else

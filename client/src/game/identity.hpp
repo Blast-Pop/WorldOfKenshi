@@ -15,6 +15,10 @@ namespace wok {
 // nullopt if `character` is not a readable CharacterHuman with a name and a race.
 std::optional<CreateCharacter> readIdentity(uintptr_t character);
 
+// The FCS stringID of a character's template, and its name ("" if unreadable).
+std::string templateIdOf(uintptr_t character);
+std::string nameOf(uintptr_t character);
+
 // Kenshi's character editor "Export" writes the whole look (race, sliders, hair...) to
 // <Kenshi>/data/character/bodies/export/<name>.bod2; "Import" reads files from there.
 std::string exportedBodyPath(std::string_view characterName);

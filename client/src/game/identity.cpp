@@ -47,6 +47,12 @@ std::optional<CreateCharacter> readIdentity(uintptr_t character) {
     return c;
 }
 
+std::string templateIdOf(uintptr_t character) { return character ? stringIdAt(character + kCharTemplate) : ""; }
+
+std::string nameOf(uintptr_t character) {
+    return character ? mem::readString(character + kCharName, kMaxNameBytes) : "";
+}
+
 std::string exportedBodyPath(std::string_view characterName) {
     std::string dir = modDir();  // <Kenshi>/WorldOfKenshi
     dir = dir.substr(0, dir.find_last_of("\\/"));

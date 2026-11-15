@@ -31,6 +31,8 @@ public:
     std::optional<CharacterData> character() const;   // our server-side character, once known
     void reportDeath();                                 // permanent death of our character
     void sendChat(const ChatSend& m);
+    // Shared-world messages (NpcInfo reliable, NpcSnapshot unreliable: a newer one follows soon).
+    void sendShared(const Message& m, bool reliable);
     Status status() const { return status_; }
     RejectReason rejectReason() const { return reject_; }
     // After a ModMismatch refusal: what to change, in words ("Missing: A, B. Remove: C.").
@@ -53,6 +55,7 @@ private:
     std::optional<CreateCharacter> outgoingCreate_;
     bool outgoingDeath_ = false;
     std::vector<ChatSend> outgoingChat_;
+    std::vector<std::pair<Message, bool>> outgoingShared_;
     std::map<uint8_t, float> outgoingStats_;
     std::optional<std::vector<uint8_t>> outgoingInventory_;
     std::vector<Message> incoming_;
