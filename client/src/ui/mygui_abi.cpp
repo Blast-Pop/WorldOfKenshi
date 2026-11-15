@@ -48,6 +48,9 @@ struct Api {
     const void* (*listNameAt)(Widget* list, size_t index);
     void (*listBeginTo)(Widget* list, size_t index);
     void (*listSetSelected)(Widget* list, size_t index) = nullptr;
+    // ListBox::notifyKeyButtonPressed(sender, KeyCode, char): the list's own arrow-key handling, which
+    // selects a row and tells the list's owner (eventListChangePosition) like a player would.
+    void (*listKey)(Widget* list, Widget* sender, int key, unsigned int ch) = nullptr;
     int* (*textSize)(Widget* textBox, int* out) = nullptr;  // TextBox::getTextSize, IntSize by value
     Widget* (*listWidgetAt)(Widget* list, size_t index);
     size_t (*listSelected)(Widget* list);
@@ -138,6 +141,7 @@ bool init() {
     load(m, g_api.listNameAt, "?getItemNameAt@ListBox@MyGUI@@QEAAAEBVUString@2@_K@Z");
     load(m, g_api.listBeginTo, "?beginToItemAt@ListBox@MyGUI@@QEAAX_K@Z");
     load(m, g_api.listSetSelected, "?setIndexSelected@ListBox@MyGUI@@QEAAX_K@Z");
+    load(m, g_api.listKey, "?notifyKeyButtonPressed@ListBox@MyGUI@@IEAAXPEAVWidget@2@UKeyCode@2@I@Z");
     load(m, g_api.textSize, "?getTextSize@TextBox@MyGUI@@UEAA?AU?$TSize@H@types@2@XZ");
     load(m, g_api.listWidgetAt, "?getWidgetByIndex@ListBox@MyGUI@@QEAAPEAVWidget@2@_K@Z");
     load(m, g_api.listSelected, "?getIndexSelected@ListBox@MyGUI@@QEBA_KXZ");
@@ -363,6 +367,17 @@ std::string injectText(Widget* editBox, std::string_view text) {
 bool isShown(Widget* w) { return w && g_api.inheritedVisible && g_api.inheritedVisible(w); }
 
 
+namespace {
+bool guardedListKey(Widget* list, int key) {
+    __try {
+        g_api.listKey(list, list, key, 0);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+}  // namespace
+
 bool pressListItem(Widget* list, std::string_view containing) {
     if (!list || !mem::isA(reinterpret_cast<uintptr_t>(list), ".?AVListBox@MyGUI@@") || !g_api.listCount ||
         !g_api.listNameAt || !g_api.listBeginTo || !g_api.listWidgetAt || !g_api.risePressed || !g_api.riseReleased)
@@ -384,16 +399,22 @@ bool pressListItem(Widget* list, std::string_view containing) {
             g_api.riseReleased(reinterpret_cast<char*>(row) + kWidgetInputOffset, 0, 0, 0);
             return g_api.listSelected ? g_api.listSelected(list) : SIZE_MAX;
         };
-        size_t selected = press(i), tries = 1;
+        // The list's own keys first: Home, then Down i times (MyGUI KeyCode Home 199, ArrowDown 208).
+        size_t selected = SIZE_MAX, tries = 0;
+        if (g_api.listKey && g_api.listSelected && guardedListKey(list, 199)) {
+            for (size_t k = 0; k < i && guardedListKey(list, 208); ++k) {
+            }
+            selected = g_api.listSelected(list);
+            log("mygui: row %zu reached with the list's keys -> selected %zu", i, selected);
+        }
+        if (selected != i) {
+            selected = press(i);
+            tries = 1;
+        }
         for (size_t line = 0; selected != i && line < 64; ++line, ++tries) {
             const size_t got = press(line);
             if (got == SIZE_MAX) break;  // past the last row widget
             selected = got;
-        }
-        if (selected != i && g_api.listSetSelected) {  // last resort: select it directly
-            g_api.listSetSelected(list, i);
-            selected = g_api.listSelected ? g_api.listSelected(list) : SIZE_MAX;
-            log("mygui: row %zu selected directly", i);
         }
         log("mygui: list row %zu '%s' -> selected %zu of %zu (%zu press(es))", i, name.c_str(), selected, count, tries);
         return selected == i;
