@@ -137,6 +137,31 @@ void write(ByteWriter& w, const NpcRecords& m) {
         w.u8(c.dead ? 1 : 0);
     }
 }
+void write(ByteWriter& w, const BodyStates& m) {
+    w.u32(m.owner);
+    const size_t n = m.bodies.size() < kMaxBodiesPerMessage ? m.bodies.size() : kMaxBodiesPerMessage;
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        const BodyState& b = m.bodies[i];
+        w.u8(static_cast<uint8_t>(b.kind));
+        w.u32(b.key);
+        writeStats(w, b.health);
+        const size_t a = b.anims.size() < kMaxAnimsPerBody ? b.anims.size() : kMaxAnimsPerBody;
+        w.u8(static_cast<uint8_t>(a));
+        for (size_t k = 0; k < a; ++k) {
+            writeString(w, b.anims[k].name.substr(0, kMaxAnimNameBytes));
+            w.f32(b.anims[k].time);
+            w.f32(b.anims[k].weight);
+        }
+    }
+}
+void write(ByteWriter& w, const Hit& m) {
+    w.u32(m.from);
+    w.u32(m.owner);
+    w.u8(static_cast<uint8_t>(m.kind));
+    w.u32(m.key);
+    writeStats(w, m.damage);
+}
 void write(ByteWriter& w, const WorldRules& m) {
     w.f32(m.productionSpeed);
     w.f32(m.buildingSpeed);
@@ -229,6 +254,8 @@ constexpr MsgType typeOf(const NpcSnapshot&) { return MsgType::NpcSnapshot; }
 constexpr MsgType typeOf(const NpcRecords&) { return MsgType::NpcRecords; }
 constexpr MsgType typeOf(const NpcBind&) { return MsgType::NpcBind; }
 constexpr MsgType typeOf(const WorldRules&) { return MsgType::WorldRules; }
+constexpr MsgType typeOf(const BodyStates&) { return MsgType::BodyStates; }
+constexpr MsgType typeOf(const Hit&) { return MsgType::Hit; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -342,6 +369,42 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
                 if (!std::isfinite(c.x) || !std::isfinite(c.y) || !std::isfinite(c.z)) return std::nullopt;
             }
             if (!r.ok()) return std::nullopt;
+            return m;
+        }
+        case MsgType::BodyStates: {
+            BodyStates m;
+            m.owner = r.u32();
+            uint8_t n = r.u8();
+            if (!r.ok() || n > kMaxBodiesPerMessage) return std::nullopt;
+            m.bodies.resize(n);
+            for (auto& b : m.bodies) {
+                uint8_t kind = r.u8();
+                if (kind > static_cast<uint8_t>(BodyKind::Npc)) return std::nullopt;
+                b.kind = static_cast<BodyKind>(kind);
+                b.key = r.u32();
+                if (!readStats(r, b.health)) return std::nullopt;
+                uint8_t a = r.u8();
+                if (!r.ok() || a > kMaxAnimsPerBody) return std::nullopt;
+                b.anims.resize(a);
+                for (auto& anim : b.anims) {
+                    if (!readBytes(r, kMaxAnimNameBytes, anim.name)) return std::nullopt;
+                    anim.time = r.f32();
+                    anim.weight = r.f32();
+                    if (!finite(anim.time) || !finite(anim.weight)) return std::nullopt;
+                }
+            }
+            if (!r.ok()) return std::nullopt;
+            return m;
+        }
+        case MsgType::Hit: {
+            Hit m;
+            m.from = r.u32();
+            m.owner = r.u32();
+            uint8_t kind = r.u8();
+            if (kind > static_cast<uint8_t>(BodyKind::Npc)) return std::nullopt;
+            m.kind = static_cast<BodyKind>(kind);
+            m.key = r.u32();
+            if (!readStats(r, m.damage)) return std::nullopt;
             return m;
         }
         case MsgType::WorldRules: {
@@ -464,7 +527,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::WorldRules))
+        type > static_cast<uint8_t>(MsgType::Hit))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

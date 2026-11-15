@@ -29,6 +29,10 @@ public:
             if (a.character == character) return true;
         return false;
     }
+    uintptr_t characterOf(PlayerId id) const {
+        auto it = avatars_.find(id);
+        return it == avatars_.end() ? 0 : it->second.character;
+    }
     bool restorePlayer(uintptr_t playerCharacter, const CharacterData& data) const {
         return spawner_.restorePlayerCharacter(playerCharacter, data);
     }

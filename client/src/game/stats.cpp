@@ -108,6 +108,38 @@ std::vector<StatValue> readStats(uintptr_t character) {
     return out;
 }
 
+std::vector<StatValue> readBodyHealth(uintptr_t character) {
+    std::vector<StatValue> out;
+    for (auto& [id, addr] : healthSlots(character)) {
+        if (id == kHungerId) continue;
+        float v = 0;
+        if (mem::readBytes(addr, &v, sizeof(v)) && v == v && v > -1e4f && v < 1e4f) out.push_back({id, v});
+    }
+    return out;
+}
+
+void writeBodyHealth(uintptr_t character, const std::vector<StatValue>& values) {
+    for (auto& [id, addr] : healthSlots(character)) {
+        if (id == kHungerId) continue;
+        for (const StatValue& v : values)
+            if (v.id == id && v.value == v.value && v.value > -1e4f && v.value < 1e4f)
+                mem::writeBytes(addr, &v.value, sizeof(v.value));
+    }
+}
+
+void applyBodyDamage(uintptr_t character, const std::vector<StatValue>& damage) {
+    for (auto& [id, addr] : healthSlots(character)) {
+        if (id == kHungerId) continue;
+        for (const StatValue& d : damage) {
+            if (d.id != id || !(d.value > 0 && d.value < 1000.0f)) continue;
+            float v = 0;
+            if (!mem::readBytes(addr, &v, sizeof(v))) continue;
+            v -= d.value;
+            mem::writeBytes(addr, &v, sizeof(v));
+        }
+    }
+}
+
 int writeStats(uintptr_t character, const std::vector<StatValue>& values) {
     uintptr_t stats = statsOf(character);
     if (!stats) return 0;

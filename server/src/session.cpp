@@ -88,6 +88,8 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         return {};
     }
     if (auto* chat = std::get_if<ChatSend>(&*msg)) return handleChat(conn, c, *chat, nowSec);
+    if (auto* bodies = std::get_if<BodyStates>(&*msg)) return relayBodies(conn, c, *bodies);
+    if (auto* hit = std::get_if<Hit>(&*msg)) return routeHit(c, *hit);
     if (auto* bind = std::get_if<NpcBind>(&*msg)) {
         handleNpcBind(conn, c, *bind);
         return {};
@@ -574,6 +576,27 @@ void SessionManager::rememberNpc(Conn& c, const Message& m) {
             mem.placed = mem.dirty = true;
         }
     }
+}
+
+std::vector<Outgoing> SessionManager::relayBodies(ConnId conn, Conn& c, BodyStates m) {
+    if (!c.lastState) return {};
+    m.owner = *c.player;
+    constexpr float kRelayRadius = 2.0f * kCellSize;
+    std::vector<Outgoing> out;
+    for (auto& [otherId, other] : conns_) {
+        if (otherId == conn || !other.player || !other.lastState) continue;
+        const float dx = other.lastState->x - c.lastState->x, dz = other.lastState->z - c.lastState->z;
+        if (dx * dx + dz * dz <= kRelayRadius * kRelayRadius) out.push_back({otherId, m});
+    }
+    return out;
+}
+
+std::vector<Outgoing> SessionManager::routeHit(Conn& c, Hit m) {
+    if (m.owner == *c.player || m.damage.empty()) return {};
+    m.from = *c.player;
+    for (auto& [otherId, other] : conns_)
+        if (other.player && *other.player == m.owner) return {Outgoing{otherId, m}};
+    return {};
 }
 
 std::vector<Outgoing> SessionManager::relayNpc(ConnId conn, Conn& c, Message m) {

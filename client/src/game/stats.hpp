@@ -17,6 +17,12 @@ int writeStats(uintptr_t character, const std::vector<StatValue>& stats);
 // stomach at -100 or below (caught before that routine runs).
 bool isDead(uintptr_t character);
 
+// Body health for the shared world: blood and the body parts (no hunger), ids as in StatsUpdate.
+std::vector<StatValue> readBodyHealth(uintptr_t character);
+void writeBodyHealth(uintptr_t character, const std::vector<StatValue>& values);
+// Takes `damage` (health lost, per id) off the character's body.
+void applyBodyDamage(uintptr_t character, const std::vector<StatValue>& damage);
+
 // Hunger (character + 0x4b8, float, 300 = full): read and write.
 bool readHunger(uintptr_t character, float& out);
 void writeHunger(uintptr_t character, float value);

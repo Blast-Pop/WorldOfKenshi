@@ -53,6 +53,17 @@ void SharedNpcs::clear() {
     records_.clear();
 }
 
+uintptr_t SharedNpcs::puppetOf(PlayerId owner, uint32_t key) const {
+    auto it = puppets_.find(puppetId(owner, key));
+    return it == puppets_.end() ? 0 : it->second.character;
+}
+
+uintptr_t SharedNpcs::npcByKey(uint32_t key) const {
+    for (auto& [ch, k] : keys_)
+        if (k == key) return ch;
+    return 0;
+}
+
 PlayerId SharedNpcs::ownerOf(float x, float z) const {
     auto it = owners_.find({cellOf(x), cellOf(z)});
     return it == owners_.end() ? 0 : it->second;
@@ -92,6 +103,7 @@ void SharedNpcs::reportOwnNpcs(double nowSec, PlayerId me, uintptr_t self,
     const bool announceAll = nowSec >= nextAnnounceAll_;
     if (announceAll) nextAnnounceAll_ = nowSec + kAnnounceAllInterval;
     NpcSnapshot snap;
+    reported_.clear();
     for (uintptr_t ch : activeCharacters()) {
         if (ch == self || isAvatar(ch) || isPuppet(ch)) continue;
         float pos[3];
@@ -111,6 +123,7 @@ void SharedNpcs::reportOwnNpcs(double nowSec, PlayerId me, uintptr_t self,
             announced_.insert(key);
         }
         snap.npcs.push_back({key, pos[0], pos[1], pos[2], yawOf(ch), AnimState::Idle, isDead(ch)});
+        reported_.push_back({key, ch});
         if (snap.npcs.size() == kMaxNpcsPerSnapshot) {
             send(snap, false);
             snap.npcs.clear();
@@ -197,7 +210,8 @@ void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::functi
             "(spawned %d, destroyed %d), orders %d, teleports %d, longest order list %d, local NPCs removed %d",
             cellOf(me[0]), cellOf(me[2]), ownerOf(me[0], me[2]), me_, total, inOthers, alive, spawned_, destroyed_,
             orders_, teleports_, maxQueue, removedLocal_);
-        spawned_ = destroyed_ = orders_ = teleports_ = removedLocal_ = 0;
+        if (released_) log("shared: %d puppet(s) became our NPCs (their cells are ours now)", released_);
+        spawned_ = destroyed_ = orders_ = teleports_ = removedLocal_ = released_ = 0;
     }
     if (removed) log("shared: removed %d local NPC(s) simulated by another player", removed);
 }
@@ -207,6 +221,15 @@ void SharedNpcs::drivePuppets(double nowSec, PlayerId me) {
         Puppet& p = it->second;
         const PlayerId owner = static_cast<PlayerId>(it->first >> 32);
         const bool gone = p.lastSeen == 0 ? false : nowSec - p.lastSeen > kPuppetTimeout;
+        if (!gone && owner != me && ownerOf(p.pos[0], p.pos[2]) == me && p.character &&
+            spawner_.isAlive(p.character)) {
+            // Its cell is ours now (its owner left): the copy becomes our NPC, where it stands, instead
+            // of every copy being destroyed at once and the place emptied.
+            puppetChars_.erase(p.character);
+            it = puppets_.erase(it);
+            ++released_;
+            continue;
+        }
         if (gone || owner == me || ownerOf(p.pos[0], p.pos[2]) == me) {  // not reported, or ours now
             if (p.character && spawner_.isAlive(p.character) && spawner_.destroy(p.character)) ++destroyed_;
             puppetChars_.erase(p.character);

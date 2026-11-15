@@ -336,6 +336,28 @@ TEST_CASE("a_player_gets_the_servers_rules_on_joining") {
     CHECK(rules[0].second.researchSpeed == 2.0f);
 }
 
+TEST_CASE("bodies_reach_nearby_players_and_hits_reach_the_owner") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    auto b = join(sm, 2, 12).playerId;
+    auto far = join(sm, 3, 13).playerId;
+    sm.onPacket(1, stateBytes(a, 100.0f), 0.1);
+    sm.onPacket(2, stateBytes(b, 150.0f), 0.1);
+    sm.onPacket(3, stateBytes(far, 90000.0f), 0.1);
+    BodyStates bodies{0, {{BodyKind::Player, 0, {{48, 100.f}}, {{"Idle", 0.5f, 1.f}}}}};
+    auto relayed = sentOf<BodyStates>(sm.onPacket(1, encode(bodies), 0.2));
+    REQUIRE(relayed.size() == 1);
+    CHECK(relayed[0].first == 2);
+    CHECK(relayed[0].second.owner == a);
+    // b hits a's character: only a hears of it, with b as the sender.
+    auto hits = sentOf<Hit>(sm.onPacket(2, encode(Hit{0, a, BodyKind::Player, 0, {{49, 12.f}}}), 0.3));
+    REQUIRE(hits.size() == 1);
+    CHECK(hits[0].first == 1);
+    CHECK(hits[0].second.from == b);
+    CHECK(sentOf<Hit>(sm.onPacket(2, encode(Hit{0, b, BodyKind::Player, 0, {{49, 12.f}}}), 0.4)).empty());  // itself
+    (void)far;
+}
+
 TEST_CASE("a_newcomer_gets_the_cell_owners") {
     SessionManager sm({});
     auto a = join(sm, 1, 11).playerId;

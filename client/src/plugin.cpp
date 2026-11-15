@@ -12,6 +12,7 @@
 #include "ui/chat.hpp"
 #include "updater.hpp"
 #include "game/world_rules.hpp"
+#include "game/body_sync.hpp"
 #include "ui/options_tab.hpp"
 #include "ui/name_tags.hpp"
 #include "game/identity.hpp"
@@ -99,7 +100,8 @@ struct ClientState {
     std::vector<uint8_t> lookToApply;   // our saved look, applied once the editor has closed
     double lookAt = 0;
     wok::DirectControl control;          // WASD movement
-    wok::SharedNpcs shared;              // shared world: NPCs (spec 7.3)
+    wok::SharedNpcs shared;
+    wok::BodySync bodies;  // animations and health of everyone's characters              // shared world: NPCs (spec 7.3)
     bool sharedOk = false;
     std::unique_ptr<wok::Chat> chat;     // in-game chat (spec 7.8)
     wok::MultiplayerOptions options;     // our tab in Kenshi's Options
@@ -209,6 +211,7 @@ void onFrame(float dt) {
     if (s.wasConnected && !connected) {
         s.avatars.clear();
         if (s.sharedOk) s.shared.clear();
+        s.bodies.clear();
         wok::cancelSteamAuthTicket();  // a ticket stays valid until cancelled: no replay after we leave
     }
     if (!connected) {
@@ -340,6 +343,25 @@ void onFrame(float dt) {
             }
         }
         // The server owns the world clock: align ours once the world is being played.
+        if (auto* bs = std::get_if<wok::BodyStates>(&m)) {
+            if (s.characterRestored)
+                s.bodies.onStates(
+                    *bs, s.now,
+                    [](wok::BodyKind kind, wok::PlayerId owner, uint32_t key) -> uintptr_t {
+                        if (kind == wok::BodyKind::Player) return g_state->avatars.characterOf(owner);
+                        return g_state->sharedOk ? g_state->shared.puppetOf(owner, key) : 0;
+                    },
+                    [](const wok::Message& out, bool reliable) { g_state->net->sendShared(out, reliable); });
+            continue;
+        }
+        if (auto* hit = std::get_if<wok::Hit>(&m)) {
+            if (s.characterRestored && !s.dead)
+                s.bodies.onHit(*hit, [](wok::BodyKind kind, uint32_t key) -> uintptr_t {
+                    if (kind == wok::BodyKind::Player) return g_state->reader.character();
+                    return g_state->sharedOk ? g_state->shared.npcByKey(key) : 0;
+                });
+            continue;
+        }
         if (std::holds_alternative<wok::CellOwners>(m) || std::holds_alternative<wok::NpcInfo>(m) ||
             std::holds_alternative<wok::NpcSnapshot>(m) || std::holds_alternative<wok::NpcRecords>(m)) {
             if (s.sharedOk) s.shared.onMessage(m, s.now);
@@ -575,6 +597,12 @@ void onFrame(float dt) {
             s.now, s.net->playerId(), s.reader.character(),
             [](uintptr_t ch) { return g_state->avatars.isAvatar(ch); },
             [](const wok::Message& m, bool reliable) { g_state->net->sendShared(m, reliable); });
+    if (connected && s.characterRestored && !s.dead && s.avatarsOk && s.avatars.inGame()) {
+        s.bodies.sendOwn(s.now, s.reader.character(),
+                         s.sharedOk ? s.shared.ownNpcs() : std::vector<std::pair<uint32_t, uintptr_t>>{},
+                         [](const wok::Message& m, bool reliable) { g_state->net->sendShared(m, reliable); });
+        s.bodies.update(s.now);
+    }
     lap(FrameProfile::Avatars);
     g_prof.worstFrameMs = std::max(g_prof.worstFrameMs, FrameProfile::nowMs() - frameStart);
 

@@ -130,6 +130,10 @@ private:
     std::vector<Outgoing> updateCellOwners();
     // An owner's NPC message, relayed to the players near it.
     std::vector<Outgoing> relayNpc(ConnId conn, Conn& c, Message m);
+    // A body update (any player, for its character and the NPCs it simulates), to the players near it.
+    std::vector<Outgoing> relayBodies(ConnId conn, Conn& c, BodyStates m);
+    // Damage done to a copy, to the player who simulates the character.
+    std::vector<Outgoing> routeHit(Conn& c, Hit m);
     // The world's memory: every NPC an owner reported, kept (and saved) for the next owner.
     struct NpcMemory {
         NpcRecord rec;

@@ -28,6 +28,10 @@ public:
                 const Send& send);
     void clear();  // disconnected
     bool isPuppet(uintptr_t character) const { return puppetChars_.count(character) != 0; }
+    // Body sync: the puppet showing an owner's NPC, our NPC with a key, the NPCs we simulate now.
+    uintptr_t puppetOf(PlayerId owner, uint32_t key) const;
+    uintptr_t npcByKey(uint32_t key) const;
+    std::vector<std::pair<uint32_t, uintptr_t>> ownNpcs() const { return reported_; }
 
 private:
     struct Puppet {
@@ -58,7 +62,8 @@ private:
     uint32_t nextKey_ = 1;
     double nextReport_ = 0, nextAnnounceAll_ = 0, nextRemoval_ = 0;
     std::vector<NpcRecord> records_;  // the world's memory of our cells, not matched to an NPC yet
-    int restored_ = 0, removedDead_ = 0;
+    int restored_ = 0, removedDead_ = 0, released_ = 0;
+    std::vector<std::pair<uint32_t, uintptr_t>> reported_;  // (key, character) of the last report
     // Diagnostics (the game slowed down over a session with puppets): counted between traces.
     int spawned_ = 0, destroyed_ = 0, orders_ = 0, teleports_ = 0, removedLocal_ = 0;
     // Viewer side: puppets by (owner << 32 | key).

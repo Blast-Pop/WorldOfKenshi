@@ -62,6 +62,8 @@ enum class MsgType : uint8_t {
     NpcRecords = 21,
     NpcBind = 22,
     WorldRules = 23,
+    BodyStates = 24,
+    Hit = 25,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -255,6 +257,41 @@ struct WorldRules {
     bool operator==(const WorldRules&) const = default;
 };
 
+// Bodies (spec 7.3): whoever simulates a character (a player their own, a cell owner its NPCs)
+// sends what it is doing and how hurt it is; the others replay it on their copies. A copy hurt
+// locally (someone hit it) sends the damage to the character's owner (Hit), who applies it.
+// Added within protocol 13: older clients ignore both messages.
+constexpr size_t kMaxBodiesPerMessage = 48;
+constexpr size_t kMaxAnimsPerBody = 6;
+constexpr size_t kMaxAnimNameBytes = 64;
+enum class BodyKind : uint8_t { Player = 0, Npc = 1 };
+struct AnimPlay {
+    std::string name;   // Ogre animation state name
+    float time = 0;     // seconds into the animation
+    float weight = 1;
+    bool operator==(const AnimPlay&) const = default;
+};
+struct BodyState {
+    BodyKind kind = BodyKind::Player;
+    uint32_t key = 0;               // Npc: the owner's NPC key (as in NpcInfo); Player: 0
+    std::vector<StatValue> health;  // blood and body parts, ids as in StatsUpdate
+    std::vector<AnimPlay> anims;    // the animations playing on it
+    bool operator==(const BodyState&) const = default;
+};
+struct BodyStates {
+    PlayerId owner = 0;  // filled by the server
+    std::vector<BodyState> bodies;
+    bool operator==(const BodyStates&) const = default;
+};
+struct Hit {
+    PlayerId from = 0;   // filled by the server
+    PlayerId owner = 0;  // whose character was hit (the message goes to that player only)
+    BodyKind kind = BodyKind::Player;
+    uint32_t key = 0;
+    std::vector<StatValue> damage;  // health lost, per id
+    bool operator==(const Hit&) const = default;
+};
+
 inline int32_t cellOf(float coord) { return static_cast<int32_t>(std::floor(coord / kCellSize)); }
 
 // Chat (spec 7.8). Global: every player; local: players near the speaker.
@@ -290,7 +327,7 @@ struct PlayerInfo {
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
                              CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
                              PlayerInfo, CharacterDied, ChatSend, ChatMessage, CellOwners, NpcInfo, NpcSnapshot,
-                             NpcRecords, NpcBind, WorldRules>;
+                             NpcRecords, NpcBind, WorldRules, BodyStates, Hit>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range
