@@ -12,7 +12,6 @@ namespace wok {
 
 namespace {
 constexpr size_t kMaxLines = 40;     // messages kept
-constexpr double kFadeSec = 20.0;    // a message stays this long unless the input is open
 constexpr int kPad = 8, kInputH = 28, kLineH = 20, kGrip = 16;
 constexpr int kMinW = 300, kMinH = 110;
 constexpr float kBottom = 0.53f;     // default: the frame's bottom at 53% of the height
@@ -188,7 +187,7 @@ void Chat::redraw(double nowSec) {
         // Newest at the bottom: row i shows message (size - n + i).
         const size_t idx = i + lines_.size();
         const Line* line = idx >= n ? &lines_[idx - n] : nullptr;
-        return line && (typing_ || dragging_ || nowSec - line->time < kFadeSec) ? line : nullptr;
+        return line && (typing_ || dragging_ || nowSec - line->time < fadeSec_) ? line : nullptr;
     };
     size_t shown = 0;
     for (size_t i = 0; i < n; ++i)

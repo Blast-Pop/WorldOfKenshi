@@ -462,16 +462,28 @@ void onFrame(float dt) {
         if (!loaded) {
             loaded = true;
             s.options.chatOpacity = s.cfg.chatOpacity;
+            s.options.chatFadeSec = s.cfg.chatFadeSec;
+            s.options.showNames = s.cfg.showNames;
+            s.options.nameRange = s.cfg.nameRange;
             s.chat->setSize(s.cfg.chatWidth, s.cfg.chatHeight);
         }
         wok::ensureOptionsTab(s.options);
-        float v = s.options.chatOpacity < 20.0f ? 20.0f : (s.options.chatOpacity > 100.0f ? 100.0f : s.options.chatOpacity);
-        if (static_cast<int>(v + 0.5f) != static_cast<int>(s.cfg.chatOpacity + 0.5f)) {
-            s.cfg.chatOpacity = v;
+        auto clampTo = [](float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); };
+        auto same = [](float a, float b) { return static_cast<int>(a + 0.5f) == static_cast<int>(b + 0.5f); };
+        const float opacity = clampTo(s.options.chatOpacity, 20.0f, 100.0f);
+        const float fade = clampTo(s.options.chatFadeSec, 5.0f, 120.0f);
+        const float range = clampTo(s.options.nameRange, 50.0f, 2000.0f);
+        if (!same(opacity, s.cfg.chatOpacity) || !same(fade, s.cfg.chatFadeSec) || !same(range, s.cfg.nameRange) ||
+            s.options.showNames != s.cfg.showNames) {  // a setting changed in Options: save it
+            s.cfg.chatOpacity = opacity;
+            s.cfg.chatFadeSec = fade;
+            s.cfg.nameRange = range;
+            s.cfg.showNames = s.options.showNames;
             saveConfig(s.cfg);
         }
     }
     s.chat->setOpacity(s.options.chatOpacity);
+    s.chat->setFadeSeconds(s.options.chatFadeSec);
     if (s.chat->takeResized()) {  // the player dragged the chat frame's corner
         s.cfg.chatWidth = s.chat->width();
         s.cfg.chatHeight = s.chat->height();
@@ -486,10 +498,10 @@ void onFrame(float dt) {
     s.chat->update(s.now, connected && s.avatarsOk && s.avatars.inGame() && (s.characterRestored || s.characterSent), pauseMenuOpen);
     if (s.avatarsOk) {  // other players' names above their heads
         std::vector<wok::NameTag> tags;
-        if (connected && s.avatars.inGame() && !pauseMenuOpen)
+        if (connected && s.avatars.inGame() && !pauseMenuOpen && s.options.showNames)
             if (s.readerOk) {
                 // Only players near our character get a label (Aeglen: not across the map).
-                constexpr float kTagRange = 500.0f;
+                const float kTagRange = s.options.nameRange;
                 float me[3] = {};
                 wok::mem::readBytes(s.reader.character() + 0x48, me, sizeof(me));
                 for (auto& t : s.avatars.nameTags()) {

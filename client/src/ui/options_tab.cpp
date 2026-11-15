@@ -18,12 +18,19 @@ constexpr uintptr_t kForgottenGui = 0x21337b0;       // the ForgottenGUI object 
 constexpr uintptr_t kCreateDatapanel = 0x404da;      // (gui, const std::string& name, Widget* parent, bool) -> DatapanelGUI*
 constexpr uintptr_t kSetLineSlider = 0x1538e;        // (panel, const std::string& text, int, bool, float min, float max, float* value)
 constexpr uintptr_t kMakePanelAny = 0x40476;         // (Any* out, DatapanelGUI** value) -> Any*
+constexpr uintptr_t kSetLineCheckbox = 0x158d4;      // (panel, const std::string& text, bool* value, int)
+constexpr uintptr_t kSetLine = 0xf6d2;               // (panel, const std::string& name, const std::string& value, int, bool, bool)
+constexpr uintptr_t kAddSpace = 0x2d024;             // (panel, int, float)
 constexpr const char* kTabName = "Multiplayer";
 
 using CreateDatapanelFn = void* (*)(uintptr_t gui, const mygui::Vc10String* name, void* parent, bool flag);
 using SetLineSliderFn = void* (*)(void* panel, const mygui::Vc10String* text, int id, bool editable, float min,
                                   float max, float* value);
 using MakePanelAnyFn = void* (*)(void* out, void** panel);
+using SetLineCheckboxFn = void* (*)(void* panel, const mygui::Vc10String* text, bool* value, int id);
+using SetLineFn = void* (*)(void* panel, const mygui::Vc10String* name, const mygui::Vc10String* value, int id,
+                           bool a, bool b);
+using AddSpaceFn = void (*)(void* panel, int id, float height);
 using UStringCtorFn = void* (*)(void* self, const char* text);
 using UStringDtorFn = void (*)(void* self);
 using AnyEmptyCtorFn = void* (*)(void* self, const void* empty);
@@ -85,9 +92,28 @@ bool addTab(void* tabControl, MultiplayerOptions& options) {
     mygui::Vc10String panelName(kTabName);
     void* panel = reinterpret_cast<CreateDatapanelFn>(base + kCreateDatapanel)(base + kForgottenGui, &panelName, tab, true);
     if (!panel) return false;
-    mygui::Vc10String opacity("Chat box opacity");
-    reinterpret_cast<SetLineSliderFn>(base + kSetLineSlider)(panel, &opacity, 0x19, true, 20.0f, 100.0f,
-                                                             &options.chatOpacity);
+    // Lines grouped by category, like Kenshi's own tabs (title line, then its settings, then a gap).
+    auto title = [&](const char* text) {
+        mygui::Vc10String name(text), empty("");
+        reinterpret_cast<SetLineFn>(base + kSetLine)(panel, &name, &empty, 0x19, false, true);
+    };
+    auto slider = [&](const char* text, float min, float max, float* value) {
+        mygui::Vc10String label(text);
+        reinterpret_cast<SetLineSliderFn>(base + kSetLineSlider)(panel, &label, 0x19, true, min, max, value);
+    };
+    auto checkbox = [&](const char* text, bool* value) {
+        mygui::Vc10String label(text);
+        reinterpret_cast<SetLineCheckboxFn>(base + kSetLineCheckbox)(panel, &label, value, 0x17);
+    };
+    auto gap = [&] { reinterpret_cast<AddSpaceFn>(base + kAddSpace)(panel, 0x17, 10.0f); };
+
+    title("CHAT");
+    slider("Chat box opacity", 20.0f, 100.0f, &options.chatOpacity);
+    slider("Message fade time (seconds)", 5.0f, 120.0f, &options.chatFadeSec);
+    gap();
+    title("PLAYERS");
+    checkbox("Show player names", &options.showNames);
+    slider("Name tag distance", 50.0f, 2000.0f, &options.nameRange);
     void* panelAny[2] = {};
     reinterpret_cast<MakePanelAnyFn>(base + kMakePanelAny)(panelAny, &panel);
     c.setItemData(tabControl, tab, panelAny);
@@ -111,7 +137,8 @@ void ensureOptionsTab(MultiplayerOptions& options) {
     static bool checked = false, usable = false;
     if (!checked) {
         checked = true;
-        usable = isThunk(kCreateDatapanel) && isThunk(kSetLineSlider) && isThunk(kMakePanelAny);
+        usable = isThunk(kCreateDatapanel) && isThunk(kSetLineSlider) && isThunk(kMakePanelAny) &&
+                 isThunk(kSetLineCheckbox) && isThunk(kSetLine) && isThunk(kAddSpace);
         if (!usable) log("options: unexpected Kenshi code, no Multiplayer tab");
     }
     if (!usable) return;

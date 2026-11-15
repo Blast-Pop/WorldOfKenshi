@@ -28,6 +28,9 @@ struct ClientConfig {
     std::string masterUrl = kDefaultMasterUrl;  // "master=" (empty value keeps the default)
     float chatOpacity = 85.0f;                  // "chat_opacity=", percent (20..100)
     int chatWidth = 450, chatHeight = 200;      // "chat_size=W,H", pixels
+    float chatFadeSec = 20.0f;                  // "chat_fade=" seconds (5..120)
+    bool showNames = true;                      // "show_names=0/1"
+    float nameRange = 500.0f;                   // "name_range=" game units (50..2000)
 };
 
 struct Address {

@@ -20,6 +20,7 @@ public:
     void update(double nowSec, bool active, bool hidden = false);
     bool typing() const { return typing_; }
     void setOpacity(float percent) { opacity_ = percent; }
+    void setFadeSeconds(double s) { fadeSec_ = s; }
     // Frame size in pixels (saved by the caller when the player resizes it).
     void setSize(int width, int height);
     int width() const { return boxW_; }
@@ -47,6 +48,7 @@ private:
     double lastDrawn_ = -1;
     size_t drawnCount_ = 0;
     float opacity_ = 85.0f;  // percent
+    double fadeSec_ = 20.0;
     float appliedOpacity_ = -1;
     int boxW_ = 450, boxH_ = 200;
     int boxLeft_ = -1, boxTop_ = -1;  // pixels; set when the frame is first made

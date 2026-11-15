@@ -7,7 +7,12 @@
 namespace wok {
 
 struct MultiplayerOptions {
+    // Chat
     float chatOpacity = 85.0f;  // percent, 20..100: the chat frame's opacity
+    float chatFadeSec = 20.0f;  // seconds a message stays (5..120)
+    // Players
+    bool showNames = true;      // names above the other players
+    float nameRange = 500.0f;   // game units (50..2000)
 };
 
 // Called on a poll: adds the tab when Kenshi's Options window is open and does not have it yet.

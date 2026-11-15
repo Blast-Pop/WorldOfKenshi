@@ -40,6 +40,14 @@ ClientConfig parseConfig(std::string_view text) {
             if (!n.empty() && parseAddress(a)) cfg.servers.push_back({std::string(n), std::string(a)});
         } else if (key == "master") {
             cfg.masterUrl = std::string(value);
+        } else if (key == "chat_fade" || key == "name_range") {
+            float v = 0;
+            if (std::from_chars(value.data(), value.data() + value.size(), v).ec == std::errc{}) {
+                if (key == "chat_fade" && v >= 5.0f && v <= 120.0f) cfg.chatFadeSec = v;
+                if (key == "name_range" && v >= 50.0f && v <= 2000.0f) cfg.nameRange = v;
+            }
+        } else if (key == "show_names") {
+            cfg.showNames = value != "0";
         } else if (key == "chat_size") {
             size_t comma = value.find(',');
             int w = 0, h = 0;
@@ -69,6 +77,9 @@ std::string serializeConfig(const ClientConfig& cfg) {
     if (cfg.masterUrl != kDefaultMasterUrl) out += "master=" + cfg.masterUrl + "\n";
     out += "chat_opacity=" + std::to_string(static_cast<int>(cfg.chatOpacity + 0.5f)) + "\n";
     out += "chat_size=" + std::to_string(cfg.chatWidth) + "," + std::to_string(cfg.chatHeight) + "\n";
+    out += "chat_fade=" + std::to_string(static_cast<int>(cfg.chatFadeSec + 0.5f)) + "\n";
+    out += std::string("show_names=") + (cfg.showNames ? "1" : "0") + "\n";
+    out += "name_range=" + std::to_string(static_cast<int>(cfg.nameRange + 0.5f)) + "\n";
     return out;
 }
 
