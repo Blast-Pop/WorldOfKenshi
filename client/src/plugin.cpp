@@ -83,6 +83,8 @@ struct ClientState {
     bool dead = false;                   // our character died; reported, waiting for the server
     double nextDeathCheck = 0;
     double nextCreateDiag = 0;
+    std::vector<uint8_t> lookToApply;   // our saved look, applied once the editor has closed
+    double lookAt = 0;
     wok::DirectControl control;          // WASD movement
     wok::SharedNpcs shared;              // shared world: NPCs (spec 7.3)
     bool sharedOk = false;
@@ -201,6 +203,7 @@ void onFrame(float dt) {
         s.characterRestored = false;
         s.dead = false;
         s.deadCharacter = 0;
+        s.lookToApply.clear();
     }
 
     // Returning player: Kenshi's New Game only loads the world; bring back the server character
@@ -209,13 +212,11 @@ void onFrame(float dt) {
         if (auto data = s.net->character()) {
             s.characterRestored = true;
             s.avatars.restorePlayer(s.reader.character(), *data);
-            // The exact look, straight onto the character (the editor's Import list can hide the file
-            // when it holds many exports): the same call that dresses other players' avatars.
-            {
-                wok::Appearance look = wok::decodeAppearance(data->appearance);
-                if (auto it = look.find("bod2"); it != look.end())
-                    wok::applyBodyFile(s.reader.character(), wok::base64Decode(it->second), "self");
-            }
+            // The exact look goes straight onto the character (the editor's Import list can hide the
+            // file when it holds many exports), once the character editor has closed: applying it
+            // while the editor still holds the old look crashed the game.
+            s.lookToApply = data->appearance;
+            s.lookAt = s.now + 3.0;
             int applied = wok::writeStats(s.reader.character(), data->stats);
             wok::log("stats: %d saved skills applied", applied);
             for (auto& st : data->stats) s.statsSent[st.id] = st.value;
@@ -353,6 +354,13 @@ void onFrame(float dt) {
         float hunger = 0;
         if (wok::readHunger(s.reader.character(), hunger) && hunger < s.hungerKept)
             wok::writeHunger(s.reader.character(), s.hungerKept);
+    }
+    if (!s.lookToApply.empty() && s.now >= s.lookAt && s.readerOk && s.reader.character() &&
+        !wok::mygui::findShownBySuffix("_ConfirmButton", 12)) {
+        wok::Appearance look = wok::decodeAppearance(s.lookToApply);
+        if (auto it = look.find("bod2"); it != look.end())
+            wok::applyBodyFile(s.reader.character(), wok::base64Decode(it->second), "self");
+        s.lookToApply.clear();
     }
     lap(FrameProfile::Incoming);
     if (s.avatarsOk) s.avatars.update(s.now);
