@@ -80,6 +80,8 @@ std::vector<Outgoing> SessionManager::onPacket(ConnId conn, std::span<const uint
         return {};
     }
     if (auto* chat = std::get_if<ChatSend>(&*msg)) return handleChat(conn, c, *chat, nowSec);
+    if (std::holds_alternative<NpcInfo>(*msg) || std::holds_alternative<NpcSnapshot>(*msg))
+        return relayNpc(conn, c, *msg);
     if (std::holds_alternative<CharacterDied>(*msg)) {
         // Permanent death: the character is retired; the player stays connected and makes a new one.
         if (!c.hasCharacter || !cfg_.store) return {};
@@ -339,6 +341,11 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
         }
     }
     std::vector<Outgoing> out;
+    if (nowSec >= nextCellUpdate_) {  // shared world: cell owners, once a second
+        nextCellUpdate_ = nowSec + 1.0;
+        auto owners = updateCellOwners();
+        out.insert(out.end(), owners.begin(), owners.end());
+    }
     for (auto& [id, c] : conns_) {
         if (!c.steamPending || c.player) continue;
         uint64_t steamId = c.steamPending;
@@ -412,6 +419,49 @@ std::vector<Outgoing> SessionManager::handleChat(ConnId conn, Conn& c, const Cha
         sent.push_back({otherId, out});
     }
     return sent;
+}
+
+std::vector<Outgoing> SessionManager::updateCellOwners() {
+    // Players in play, by cell; the earliest player (lowest id) in a cell owns it, and an owner keeps
+    // its cell while it stays there.
+    std::map<std::pair<int32_t, int32_t>, std::vector<PlayerId>> present;
+    for (auto& [id, c] : conns_)
+        if (c.player && c.lastState && (c.hasCharacter || !c.characterName.empty()))
+            present[{cellOf(c.lastState->x), cellOf(c.lastState->z)}].push_back(*c.player);
+    std::map<std::pair<int32_t, int32_t>, PlayerId> next;
+    for (auto& [cell, players] : present) {
+        auto old = cellOwners_.find(cell);
+        if (old != cellOwners_.end() && std::find(players.begin(), players.end(), old->second) != players.end())
+            next[cell] = old->second;
+        else
+            next[cell] = *std::min_element(players.begin(), players.end());
+    }
+    if (next == cellOwners_) return {};
+    cellOwners_ = std::move(next);
+    CellOwners list;
+    for (auto& [cell, owner] : cellOwners_) list.cells.push_back({cell.first, cell.second, owner});
+    std::vector<Outgoing> out;
+    for (auto& [id, c] : conns_)
+        if (c.player) out.push_back({id, list});
+    return out;
+}
+
+std::vector<Outgoing> SessionManager::relayNpc(ConnId conn, Conn& c, Message m) {
+    // Only a cell owner speaks for NPCs, and only to the players around it.
+    bool owner = false;
+    for (auto& [cell, who] : cellOwners_)
+        if (who == *c.player) owner = true;
+    if (!owner || !c.lastState) return {};
+    if (auto* info = std::get_if<NpcInfo>(&m)) info->owner = *c.player;
+    if (auto* snap = std::get_if<NpcSnapshot>(&m)) snap->owner = *c.player;
+    constexpr float kRelayRadius = 2.0f * kCellSize;
+    std::vector<Outgoing> out;
+    for (auto& [otherId, other] : conns_) {
+        if (otherId == conn || !other.player || !other.lastState) continue;
+        const float dx = other.lastState->x - c.lastState->x, dz = other.lastState->z - c.lastState->z;
+        if (dx * dx + dz * dz <= kRelayRadius * kRelayRadius) out.push_back({otherId, m});
+    }
+    return out;
 }
 
 }  // namespace wok

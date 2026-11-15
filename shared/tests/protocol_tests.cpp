@@ -126,7 +126,13 @@ CharacterData makeCharacter() {
 }
 }  // namespace
 
-TEST_CASE("protocol_version_is_12") { CHECK(WOK_PROTOCOL_VERSION == 12);
+TEST_CASE("protocol_version_is_13") { CHECK(WOK_PROTOCOL_VERSION == 13);
+    CellOwners owners{{{-3, 4, 7}, {0, 0, 2}}};
+    CHECK(decode(encode(owners)) == std::optional<Message>(owners));
+    NpcInfo info{7, 12, "Bar Thug", "12-gamedata.base"};
+    CHECK(decode(encode(info)) == std::optional<Message>(info));
+    NpcSnapshot snap{7, {{12, 1.f, 2.f, 3.f, 90.f, AnimState::Walk, false}, {13, 4.f, 5.f, 6.f, 0.f, AnimState::Idle, true}}};
+    CHECK(decode(encode(snap)) == std::optional<Message>(snap));
     ChatMessage said{ChatChannel::Local, 3, "Nine", "hello"};
     CHECK(decode(encode(said)) == std::optional<Message>(said));
     ChatSend sent{ChatChannel::Global, "hi all"};

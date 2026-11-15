@@ -225,3 +225,27 @@ TEST_CASE("chat_global_reaches_all_local_only_nearby") {
     CHECK(sentOf<ChatMessage>(local)[0].second.text == "near");
     CHECK(sentOf<ChatMessage>(sm.onPacket(1, encode(ChatSend{ChatChannel::Global, "spam"}), 2.1)).empty());
 }
+
+TEST_CASE("cell_owner_is_the_earliest_player_and_npcs_reach_neighbours") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    auto b = join(sm, 2, 12).playerId;
+    auto far = join(sm, 3, 13).playerId;
+    sm.onPacket(1, stateBytes(a, 100.0f), 0.1);   // same cell as b
+    sm.onPacket(2, stateBytes(b, 150.0f), 0.1);
+    sm.onPacket(3, stateBytes(far, 90000.0f), 0.1);
+    auto owners = sentOf<CellOwners>(sm.tick(1.0));
+    REQUIRE(!owners.empty());
+    const CellOwners& list = owners[0].second;
+    REQUIRE(list.cells.size() == 2);
+    for (auto& cell : list.cells)
+        if (cell.cx == cellOf(100.0f)) CHECK(cell.owner == a);  // a joined first
+    // The owner's NPCs go to b (near), not to the far player; a non-owner cannot speak for NPCs.
+    NpcSnapshot snap{0, {{1, 10.f, 0.f, 0.f, 0.f, AnimState::Idle, false}}};
+    auto relayed = sentOf<NpcSnapshot>(sm.onPacket(1, encode(snap), 1.1));
+    REQUIRE(relayed.size() == 1);
+    CHECK(relayed[0].first == 2);
+    CHECK(relayed[0].second.owner == a);
+    CHECK(sentOf<NpcSnapshot>(sm.onPacket(2, encode(snap), 1.2)).empty());
+    CHECK(sentOf<CellOwners>(sm.tick(2.0)).empty());  // nothing changed: nothing sent
+}

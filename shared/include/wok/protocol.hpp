@@ -1,9 +1,10 @@
 #pragma once
-// World of Kenshi wire protocol, version 12.
+// World of Kenshi wire protocol, version 13.
 // Every message is: 1 byte MsgType, then the fields in declaration order, little-endian.
 // Variable-length fields are a u16 byte count followed by the bytes, with hard upper limits.
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -13,7 +14,7 @@
 
 namespace wok {
 
-constexpr uint16_t WOK_PROTOCOL_VERSION = 12;
+constexpr uint16_t WOK_PROTOCOL_VERSION = 13;
 constexpr uint16_t WOK_DEFAULT_PORT = 27800;
 
 constexpr size_t kMaxNameBytes = 31;
@@ -25,6 +26,10 @@ constexpr size_t kMaxServerDescriptionBytes = 255;
 constexpr size_t kMaxStats = 64;
 constexpr size_t kMaxMods = 255;
 constexpr size_t kMaxChatBytes = 200;
+constexpr size_t kMaxCells = 1024;
+constexpr size_t kMaxNpcsPerSnapshot = 255;
+// Shared world (spec 7.3): the world is cut into square cells; one player simulates each occupied cell.
+constexpr float kCellSize = 2000.0f;
 constexpr size_t kMaxModNameBytes = 128;
 constexpr size_t kMaxTicketBytes = 512;  // identity ticket from the master server
 constexpr size_t kMaxInventoryBytes = 32768;  // the client's inventory text (opaque to the server)  // skill ids are 1..kMaxStats (docs/re/stats.md)
@@ -51,6 +56,9 @@ enum class MsgType : uint8_t {
     CharacterDied = 15,
     ChatSend = 16,
     ChatMessage = 17,
+    CellOwners = 18,
+    NpcInfo = 19,
+    NpcSnapshot = 20,
 };
 enum class RejectReason : uint8_t {
     None = 0,
@@ -171,6 +179,43 @@ struct WorldTime {
     bool operator==(const WorldTime&) const = default;
 };
 
+// Who simulates which cell (server -> clients, whenever it changes). A cell is (floor(x / kCellSize),
+// floor(z / kCellSize)). Cells absent from the list are simulated by nobody else.
+struct CellOwner {
+    int32_t cx = 0, cz = 0;
+    PlayerId owner = 0;
+    bool operator==(const CellOwner&) const = default;
+};
+struct CellOwners {
+    std::vector<CellOwner> cells;
+    bool operator==(const CellOwners&) const = default;
+};
+
+// An NPC simulated by a cell owner. `key` is the owner's id for it; (owner, key) is unique.
+// NpcInfo once per NPC (and again now and then); NpcSnapshot several times a second.
+struct NpcInfo {
+    PlayerId owner = 0;  // filled by the server
+    uint32_t key = 0;
+    std::string name;
+    std::string templateId;  // FCS stringID of its character template
+    bool operator==(const NpcInfo&) const = default;
+};
+struct NpcState {
+    uint32_t key = 0;
+    float x = 0, y = 0, z = 0;
+    float yaw = 0;
+    AnimState anim = AnimState::Idle;
+    bool dead = false;
+    bool operator==(const NpcState&) const = default;
+};
+struct NpcSnapshot {
+    PlayerId owner = 0;  // filled by the server
+    std::vector<NpcState> npcs;
+    bool operator==(const NpcSnapshot&) const = default;
+};
+
+inline int32_t cellOf(float coord) { return static_cast<int32_t>(std::floor(coord / kCellSize)); }
+
 // Chat (spec 7.8). Global: every player; local: players near the speaker.
 enum class ChatChannel : uint8_t { Global = 0, Local = 1 };
 struct ChatSend {  // client -> server
@@ -203,7 +248,7 @@ struct PlayerInfo {
 
 using Message = std::variant<Hello, HelloAck, PlayerState, PlayerLeft, Ping, AuthChallenge, CharacterData,
                              CreateCharacter, ServerInfoRequest, ServerInfo, StatsUpdate, InventoryUpdate, WorldTime,
-                             PlayerInfo, CharacterDied, ChatSend, ChatMessage>;
+                             PlayerInfo, CharacterDied, ChatSend, ChatMessage, CellOwners, NpcInfo, NpcSnapshot>;
 
 std::vector<uint8_t> encode(const Message& msg);
 // Returns nullopt for any malformed input: unknown type, truncated, trailing bytes, out-of-range

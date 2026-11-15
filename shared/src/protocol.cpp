@@ -108,6 +108,35 @@ void write(ByteWriter& w, const CharacterData& m) {
 }
 void write(ByteWriter& w, const InventoryUpdate& m) { writeBytes(w, m.items.data(), m.items.size()); }
 void write(ByteWriter&, const CharacterDied&) {}
+void write(ByteWriter& w, const CellOwners& m) {
+    const size_t n = m.cells.size() < kMaxCells ? m.cells.size() : kMaxCells;
+    w.u16(static_cast<uint16_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        w.u32(static_cast<uint32_t>(m.cells[i].cx));
+        w.u32(static_cast<uint32_t>(m.cells[i].cz));
+        w.u32(m.cells[i].owner);
+    }
+}
+void write(ByteWriter& w, const NpcInfo& m) {
+    w.u32(m.owner);
+    w.u32(m.key);
+    writeString(w, m.name);
+    writeString(w, m.templateId);
+}
+void write(ByteWriter& w, const NpcSnapshot& m) {
+    w.u32(m.owner);
+    const size_t n = m.npcs.size() < kMaxNpcsPerSnapshot ? m.npcs.size() : kMaxNpcsPerSnapshot;
+    w.u8(static_cast<uint8_t>(n));
+    for (size_t i = 0; i < n; ++i) {
+        const NpcState& c = m.npcs[i];
+        w.u32(c.key);
+        w.f32(c.x);
+        w.f32(c.y);
+        w.f32(c.z);
+        w.f32(c.yaw);
+        w.u8(static_cast<uint8_t>(c.anim) | (c.dead ? 0x80 : 0));
+    }
+}
 void write(ByteWriter& w, const ChatSend& m) {
     w.u8(static_cast<uint8_t>(m.channel));
     writeString(w, m.text);
@@ -167,6 +196,9 @@ constexpr MsgType typeOf(const PlayerInfo&) { return MsgType::PlayerInfo; }
 constexpr MsgType typeOf(const CharacterDied&) { return MsgType::CharacterDied; }
 constexpr MsgType typeOf(const ChatSend&) { return MsgType::ChatSend; }
 constexpr MsgType typeOf(const ChatMessage&) { return MsgType::ChatMessage; }
+constexpr MsgType typeOf(const CellOwners&) { return MsgType::CellOwners; }
+constexpr MsgType typeOf(const NpcInfo&) { return MsgType::NpcInfo; }
+constexpr MsgType typeOf(const NpcSnapshot&) { return MsgType::NpcSnapshot; }
 
 bool finite(float f) { return std::isfinite(f); }
 
@@ -241,6 +273,48 @@ std::optional<Message> readBody(MsgType type, ByteReader& r) {
             uint8_t ch = r.u8();
             if (ch > 1 || !readBytes(r, kMaxChatBytes, m.text)) return std::nullopt;
             m.channel = static_cast<ChatChannel>(ch);
+            return m;
+        }
+        case MsgType::CellOwners: {
+            CellOwners m;
+            uint16_t n = r.u16();
+            if (!r.ok() || n > kMaxCells) return std::nullopt;
+            m.cells.resize(n);
+            for (auto& c : m.cells) {
+                c.cx = static_cast<int32_t>(r.u32());
+                c.cz = static_cast<int32_t>(r.u32());
+                c.owner = r.u32();
+            }
+            if (!r.ok()) return std::nullopt;
+            return m;
+        }
+        case MsgType::NpcInfo: {
+            NpcInfo m;
+            m.owner = r.u32();
+            m.key = r.u32();
+            if (!readBytes(r, kMaxNameBytes, m.name) || !readBytes(r, kMaxStringIdBytes, m.templateId))
+                return std::nullopt;
+            return m;
+        }
+        case MsgType::NpcSnapshot: {
+            NpcSnapshot m;
+            m.owner = r.u32();
+            uint8_t n = r.u8();
+            if (!r.ok()) return std::nullopt;
+            m.npcs.resize(n);
+            for (auto& c : m.npcs) {
+                c.key = r.u32();
+                c.x = r.f32();
+                c.y = r.f32();
+                c.z = r.f32();
+                c.yaw = r.f32();
+                uint8_t a = r.u8();
+                if ((a & 0x7f) > static_cast<uint8_t>(AnimState::Run)) return std::nullopt;
+                c.anim = static_cast<AnimState>(a & 0x7f);
+                c.dead = (a & 0x80) != 0;
+                if (!std::isfinite(c.x) || !std::isfinite(c.y) || !std::isfinite(c.z)) return std::nullopt;
+            }
+            if (!r.ok()) return std::nullopt;
             return m;
         }
         case MsgType::ChatMessage: {
@@ -321,7 +395,7 @@ std::optional<Message> decode(std::span<const uint8_t> bytes) {
     ByteReader r(bytes);
     uint8_t type = r.u8();
     if (!r.ok() || type < static_cast<uint8_t>(MsgType::Hello) ||
-        type > static_cast<uint8_t>(MsgType::ChatMessage))
+        type > static_cast<uint8_t>(MsgType::NpcSnapshot))
         return std::nullopt;
     auto msg = readBody(static_cast<MsgType>(type), r);
     if (!msg || !r.ok() || !r.atEnd()) return std::nullopt;

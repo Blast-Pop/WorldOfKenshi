@@ -117,6 +117,12 @@ private:
     std::vector<Outgoing> accept(ConnId conn, Conn& c, const AuthToken& newToken, double nowSec);
     std::vector<Outgoing> reject(ConnId conn, RejectReason reason);
     std::vector<Outgoing> handleChat(ConnId conn, Conn& c, const ChatSend& m, double nowSec);
+    // Shared world (spec 7.3): recompute who simulates each occupied cell; the new list if it changed.
+    std::vector<Outgoing> updateCellOwners();
+    // An owner's NPC message, relayed to the players near it.
+    std::vector<Outgoing> relayNpc(ConnId conn, Conn& c, Message m);
+    std::map<std::pair<int32_t, int32_t>, PlayerId> cellOwners_;
+    double nextCellUpdate_ = 0;
     void savePosition(Conn& c);
     std::vector<Outgoing> dropConn(ConnId conn);  // removes and broadcasts PlayerLeft if needed
     void requestClose(ConnId conn);
