@@ -487,7 +487,18 @@ void onFrame(float dt) {
     if (s.avatarsOk) {  // other players' names above their heads
         std::vector<wok::NameTag> tags;
         if (connected && s.avatars.inGame() && !pauseMenuOpen)
-            for (auto& t : s.avatars.nameTags()) tags.push_back({t.name, t.character});
+            if (s.readerOk) {
+                // Only players near our character get a label (Aeglen: not across the map).
+                constexpr float kTagRange = 80.0f;
+                float me[3] = {};
+                wok::mem::readBytes(s.reader.character() + 0x48, me, sizeof(me));
+                for (auto& t : s.avatars.nameTags()) {
+                    float p[3];
+                    if (!wok::mem::readBytes(t.character + 0x48, p, sizeof(p))) continue;
+                    const float dx = p[0] - me[0], dz = p[2] - me[2];
+                    if (dx * dx + dz * dz <= kTagRange * kTagRange) tags.push_back({t.name, t.character});
+                }
+            }
         wok::updateNameTags(tags, !tags.empty());
     }
     if (s.sharedOk && connected && s.characterRestored && !s.dead)
