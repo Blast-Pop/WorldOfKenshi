@@ -5,6 +5,7 @@
 #include "frame_hook.hpp"
 #include "game/avatars.hpp"
 #include "game/game_memory.hpp"
+#include "game/avatar_look.hpp"
 #include "game/direct_control.hpp"
 #include "game/world_characters.hpp"
 #include "game/shared_npcs.hpp"
@@ -208,6 +209,13 @@ void onFrame(float dt) {
         if (auto data = s.net->character()) {
             s.characterRestored = true;
             s.avatars.restorePlayer(s.reader.character(), *data);
+            // The exact look, straight onto the character (the editor's Import list can hide the file
+            // when it holds many exports): the same call that dresses other players' avatars.
+            {
+                wok::Appearance look = wok::decodeAppearance(data->appearance);
+                if (auto it = look.find("bod2"); it != look.end())
+                    wok::applyBodyFile(s.reader.character(), wok::base64Decode(it->second), "self");
+            }
             int applied = wok::writeStats(s.reader.character(), data->stats);
             wok::log("stats: %d saved skills applied", applied);
             for (auto& st : data->stats) s.statsSent[st.id] = st.value;
