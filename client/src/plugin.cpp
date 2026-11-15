@@ -328,7 +328,7 @@ void onFrame(float dt) {
         }
         // The server owns the world clock: align ours once the world is being played.
         if (std::holds_alternative<wok::CellOwners>(m) || std::holds_alternative<wok::NpcInfo>(m) ||
-            std::holds_alternative<wok::NpcSnapshot>(m)) {
+            std::holds_alternative<wok::NpcSnapshot>(m) || std::holds_alternative<wok::NpcRecords>(m)) {
             if (s.sharedOk) s.shared.onMessage(m, s.now);
             continue;
         }
