@@ -120,6 +120,7 @@ void AvatarManager::update(double nowSec) {
         }
         constexpr float kTeleportGap = 40.0f, kArrived = 1.0f;
         if (gap2 > kTeleportGap * kTeleportGap) {
+            log("avatar: player %u teleported (%.1f units behind)", id, std::sqrt(gap2));
             spawner_.setPosition(a.character, pos);
             a.walking = false;
         } else if (gap2 > kArrived * kArrived) {

@@ -60,7 +60,7 @@ private:
     std::vector<NpcRecord> records_;  // the world's memory of our cells, not matched to an NPC yet
     int restored_ = 0, removedDead_ = 0;
     // Diagnostics (the game slowed down over a session with puppets): counted between traces.
-    int spawned_ = 0, destroyed_ = 0, orders_ = 0, removedLocal_ = 0;
+    int spawned_ = 0, destroyed_ = 0, orders_ = 0, teleports_ = 0, removedLocal_ = 0;
     // Viewer side: puppets by (owner << 32 | key).
     std::unordered_map<uint64_t, Puppet> puppets_;
     std::unordered_set<uintptr_t> puppetChars_;

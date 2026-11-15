@@ -1,0 +1,15 @@
+[Unit]
+Description=WOK Bot (World of Kenshi Discord bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/wok-bot.env
+ExecStart=/opt/wok-bot/venv/bin/python /opt/wok-bot/wok_bot.py
+Restart=always
+RestartSec=10
+DynamicUser=yes
+StateDirectory=wok-bot
+
+[Install]
+WantedBy=multi-user.target

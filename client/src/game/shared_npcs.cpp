@@ -21,8 +21,8 @@ constexpr uintptr_t kCharOrientation = 0xb0;  // Quaternion (w, x, y, z), offset
 constexpr double kReportInterval = 0.25;      // owner: NPC snapshots, 4 a second
 constexpr double kAnnounceAllInterval = 10.0; // owner: every NPC's info again, for newcomers
 constexpr double kPuppetTimeout = 5.0;        // viewer: a puppet not reported for this long goes away
-constexpr double kPuppetOrderInterval = 1.0;  // viewer: a puppet gets a new move order at most this often
-constexpr float kPuppetOrderMove = 2.0f;      // ...and only when its target moved this far
+constexpr double kPuppetOrderInterval = 0.5;  // viewer: a puppet gets a new move order at most this often
+constexpr float kPuppetOrderMove = 1.0f;      // ...and only when its target moved this far
 constexpr float kTeleportGap = 40.0f;
 constexpr float kRestoreGap = 5.0f;           // ...and is put back where it was if further than this
 constexpr const char* kPuppetFaction = "Drifters";
@@ -194,10 +194,10 @@ void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::functi
                 maxQueue = std::max(maxQueue, orderCount(p.character));
             }
         log("shared: my cell (%d, %d) owner %u (me %u); %zu active characters, %zu in others' cells; puppets %d "
-            "(spawned %d, destroyed %d), orders %d, longest order list %d, local NPCs removed %d",
+            "(spawned %d, destroyed %d), orders %d, teleports %d, longest order list %d, local NPCs removed %d",
             cellOf(me[0]), cellOf(me[2]), ownerOf(me[0], me[2]), me_, total, inOthers, alive, spawned_, destroyed_,
-            orders_, maxQueue, removedLocal_);
-        spawned_ = destroyed_ = orders_ = removedLocal_ = 0;
+            orders_, teleports_, maxQueue, removedLocal_);
+        spawned_ = destroyed_ = orders_ = teleports_ = removedLocal_ = 0;
     }
     if (removed) log("shared: removed %d local NPC(s) simulated by another player", removed);
 }
@@ -239,6 +239,7 @@ void SharedNpcs::drivePuppets(double nowSec, PlayerId me) {
         const float gap2 = dx * dx + dz * dz;
         if (gap2 > kTeleportGap * kTeleportGap) {
             spawner_.setPosition(p.character, p.pos);
+            ++teleports_;
         } else if (gap2 > 1.0f && nowSec >= p.nextOrder) {
             const float mx = p.pos[0] - p.sentPos[0], mz = p.pos[2] - p.sentPos[2];
             if (mx * mx + mz * mz > kPuppetOrderMove * kPuppetOrderMove) {
