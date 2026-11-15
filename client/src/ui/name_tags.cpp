@@ -14,6 +14,7 @@ namespace wok {
 namespace {
 constexpr float kHeadHeight = 2.4f;  // label anchor above the feet
 constexpr int kTagW = 220, kTagH = 22;
+constexpr int kLiftPx = 20;  // a little above the head
 constexpr size_t kMaxTags = 32;
 std::string tagName(size_t i) { return "WokNameTag" + std::to_string(i); }
 
@@ -188,7 +189,7 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
             mygui::setProperty(w, "NeedMouse", "false");
         }
         mygui::setProperty(w, "Caption", tags[i].name);
-        mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2, kTagW, kTagH);
+        mygui::setCoord(w, sx - kTagW / 2, sy - kTagH / 2 - kLiftPx, kTagW, kTagH);
         ++used;
     }
     if (trace) log("tags: %zu tag(s), matrices %s, %zu label(s) shown", tags.size(), ok ? "ok" : "MISSING", used);
