@@ -31,6 +31,7 @@ using namespace wok;
 namespace {
 
 std::atomic<bool> g_running{true};
+std::atomic<uint32_t> g_players{0};  // for the announcer thread
 void onSignal(int) { g_running = false; }
 
 struct Args {
@@ -262,8 +263,11 @@ int main(int argc, char** argv) {
                         if (s % 60 != 0) continue;
                         httplib::Client master(args.announceUrl);
                         master.set_connection_timeout(5);
-                        auto r = master.Post("/master/announce", "port=" + std::to_string(args.port),
-                                             "application/x-www-form-urlencoded");
+                        httplib::Params form{{"port", std::to_string(args.port)},
+                                             {"name", args.name},
+                                             {"players", std::to_string(g_players.load())},
+                                             {"max", std::to_string(args.maxPlayers)}};
+                        auto r = master.Post("/master/announce", form);
                         if (s == 0 || !r || r->status != 200)
                             std::printf("announce to %s: %s\n", args.announceUrl.c_str(),
                                         r && r->status == 200 ? "ok" : "FAILED");
@@ -294,6 +298,7 @@ int main(int argc, char** argv) {
             };
 
             while (g_running) {
+                g_players = static_cast<uint32_t>(session.playerCount());
                 for (auto& ev : server.poll()) {
                     switch (ev.kind) {
                         case NetEvent::Connected:

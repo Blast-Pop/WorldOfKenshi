@@ -54,12 +54,24 @@ bool AuthHttp::start() {
             std::lock_guard lock(mutex_);
             res.set_content(master_->listText(now()), "text/plain; charset=utf-8");
         });
+        server_->Get("/master/servers.json", [this, now](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            res.set_content(master_->listJson(now()), "application/json; charset=utf-8");
+        });
         server_->Post("/master/announce", [this, now](const httplib::Request& req, httplib::Response& res) {
             long port = std::strtol(req.get_param_value("port").c_str(), nullptr, 10);
             bool ok = false;
             if (port > 0 && port < 65536) {
                 std::lock_guard lock(mutex_);
-                ok = master_->announce(req.remote_addr, static_cast<uint16_t>(port), now());
+                MasterDetails details;
+                if (req.has_param("name")) {
+                    details.known = true;
+                    details.name = req.get_param_value("name");
+                    details.players = static_cast<uint32_t>(std::strtoul(req.get_param_value("players").c_str(), nullptr, 10));
+                    details.maxPlayers =
+                        static_cast<uint32_t>(std::strtoul(req.get_param_value("max").c_str(), nullptr, 10));
+                }
+                ok = master_->announce(req.remote_addr, static_cast<uint16_t>(port), now(), details);
             }
             res.status = ok ? 200 : 400;
             res.set_content(ok ? "ok\n" : "rejected\n", "text/plain");
