@@ -21,7 +21,6 @@ constexpr double kReportInterval = 0.25;      // owner: NPC snapshots, 4 a secon
 constexpr double kAnnounceAllInterval = 10.0; // owner: every NPC's info again, for newcomers
 constexpr double kPuppetTimeout = 5.0;        // viewer: a puppet not reported for this long goes away
 constexpr float kTeleportGap = 40.0f;
-constexpr float kMatchRadius = 400.0f;        // owner: an NPC continues a record of the same kind this close
 constexpr float kRestoreGap = 5.0f;           // ...and is put back where it was if further than this
 constexpr const char* kPuppetFaction = "Drifters";
 
@@ -125,7 +124,9 @@ bool SharedNpcs::applyRecord(uintptr_t character, uint32_t key, float pos[3], co
     if (records_.empty()) return false;
     const std::string tpl = templateIdOf(character), name = nameOf(character);
     size_t best = records_.size();
-    float bestD2 = kMatchRadius * kMatchRadius;
+    // The nearest record of the same kind, however far: a new game places a town's people anywhere
+    // in it, and the records are those of our own cells only.
+    float bestD2 = 3.0e38f;
     for (size_t i = 0; i < records_.size(); ++i) {
         const NpcRecord& r = records_[i];
         if (r.templateId != tpl || r.name != name) continue;

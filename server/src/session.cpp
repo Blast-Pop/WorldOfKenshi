@@ -373,6 +373,27 @@ std::vector<Outgoing> SessionManager::tick(double nowSec) {
             }
         cfg_.store->saveNpcs(changed);
     }
+    now_ = nowSec;
+    if (nowSec >= nextNpcForget_) {  // offered to an owner who has no such NPC: forget it
+        nextNpcForget_ = nowSec + kNpcSaveIntervalSec;
+        std::unordered_set<uint32_t> bound;
+        for (auto& [id, c] : conns_)
+            for (auto& [key, record] : c.npcKeys) bound.insert(record);
+        std::vector<uint32_t> forgotten;
+        for (auto it = npcRecords_.begin(); it != npcRecords_.end();) {
+            NpcMemory& m = it->second;
+            if (m.offered == 0 || nowSec - m.offered < kNpcOfferSec) {
+                ++it;
+            } else if (bound.count(it->first) || m.rec.dead) {  // continued, or dead until it is forgotten
+                m.offered = 0;
+                ++it;
+            } else {
+                forgotten.push_back(it->first);
+                it = npcRecords_.erase(it);
+            }
+        }
+        if (cfg_.store) cfg_.store->forgetNpcs(forgotten);
+    }
     for (auto& [id, c] : conns_) {
         if (!c.steamPending || c.player) continue;
         uint64_t steamId = c.steamPending;
@@ -498,6 +519,10 @@ std::vector<Outgoing> SessionManager::recordsFor(ConnId conn, const std::vector<
         const std::pair<int32_t, int32_t> cell{cellOf(m.rec.x), cellOf(m.rec.z)};
         if (std::find(gained.begin(), gained.end(), cell) == gained.end()) continue;
         given.insert(id);
+        if (const auto& at = conns_[conn].lastState) {
+            const float dx = m.rec.x - at->x, dz = m.rec.z - at->z;
+            if (dx * dx + dz * dz <= kNpcOfferRadius * kNpcOfferRadius) m.offered = now_ > 0 ? now_ : 1e-9;
+        }
         batch.records.push_back(m.rec);
         if (batch.records.size() == kMaxNpcRecordsPerMessage) {
             out.push_back({conn, batch});

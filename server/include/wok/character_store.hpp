@@ -36,6 +36,7 @@ public:
     // after a day (the place gets its people back, as in Kenshi).
     std::vector<NpcRecord> loadNpcs();
     void saveNpcs(const std::vector<NpcRecord>& records);
+    void forgetNpcs(const std::vector<uint32_t>& ids);
 
 private:
     sqlite3* db_ = nullptr;

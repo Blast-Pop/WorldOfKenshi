@@ -33,6 +33,10 @@ inline constexpr double kPendingAuthTtlSec = 300.0;
 // The world's NPC records: saved this often, and no more than this many.
 inline constexpr double kNpcSaveIntervalSec = 5.0;
 inline constexpr size_t kMaxNpcRecords = 50000;
+// A record given to a new owner standing this close to it, and not continued within this long, is
+// forgotten: that NPC does not exist in the owner's game (no stale doubles).
+inline constexpr float kNpcOfferRadius = 1500.0f;
+inline constexpr double kNpcOfferSec = 90.0;
 
 struct Outgoing {
     ConnId to;
@@ -130,6 +134,7 @@ private:
         NpcRecord rec;
         bool placed = false;  // a position was reported
         bool dirty = false;   // changed since the last save
+        double offered = 0;   // when it was given to a new owner standing close to it (0: not pending)
     };
     void rememberNpc(Conn& c, const Message& m);
     void handleNpcBind(ConnId conn, Conn& c, const NpcBind& m);
@@ -138,6 +143,8 @@ private:
     std::map<uint32_t, NpcMemory> npcRecords_;
     uint32_t nextNpcRecord_ = 1;
     double nextNpcSave_ = 0;
+    double now_ = 0;  // the last tick's time
+    double nextNpcForget_ = 0;
     std::map<std::pair<int32_t, int32_t>, PlayerId> cellOwners_;
     double nextCellUpdate_ = 0;
     void savePosition(Conn& c);

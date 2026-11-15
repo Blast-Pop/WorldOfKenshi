@@ -290,6 +290,40 @@ TEST_CASE("the_world_remembers_npcs_for_the_next_owner") {
     CHECK(again[0].second.records[0].dead);
 }
 
+TEST_CASE("a_record_the_new_owner_does_not_continue_is_forgotten") {
+    SessionManager sm({});
+    auto a = join(sm, 1, 11).playerId;
+    sm.onPacket(1, stateBytes(a, 100.0f), 0.1);
+    sm.tick(1.0);
+    sm.onPacket(1, encode(NpcInfo{0, 5, "Barman", "12-gamedata.base"}), 1.1);
+    sm.onPacket(1, encode(NpcInfo{0, 6, "Drifter", "13-gamedata.base"}), 1.1);
+    sm.onPacket(1, encode(NpcSnapshot{0, {{5, 300.f, 0.f, 0.f, 0.f, AnimState::Idle, false},
+                                         {6, 320.f, 0.f, 0.f, 0.f, AnimState::Idle, false}}}), 1.2);
+    sm.onDisconnect(1);
+    sm.tick(2.0);
+    auto b = join(sm, 2, 12, WOK_PROTOCOL_VERSION, 2.5).playerId;
+    sm.onPacket(2, stateBytes(b, 150.0f), 2.6);
+    auto recs = sentOf<NpcRecords>(sm.tick(3.5));
+    REQUIRE(recs.size() == 1);
+    REQUIRE(recs[0].second.records.size() == 2);
+    uint32_t barman = 0;
+    for (auto& r : recs[0].second.records)
+        if (r.name == "Barman") barman = r.id;
+    sm.onPacket(2, encode(NpcBind{{{1, barman}}}), 3.6);  // b's game has the barman, not the drifter
+    for (double t = 5.0; t < 3.5 + kNpcOfferSec + 10.0; t += 5.0) {
+        sm.onPacket(2, encode(Ping{}), t);
+        sm.tick(t);
+    }
+    sm.onDisconnect(2);
+    sm.tick(200.0);
+    auto c = join(sm, 3, 13, WOK_PROTOCOL_VERSION, 201.0).playerId;
+    sm.onPacket(3, stateBytes(c, 120.0f), 201.1);
+    auto again = sentOf<NpcRecords>(sm.tick(202.0));
+    REQUIRE(again.size() == 1);
+    REQUIRE(again[0].second.records.size() == 1);
+    CHECK(again[0].second.records[0].name == "Barman");
+}
+
 TEST_CASE("a_newcomer_gets_the_cell_owners") {
     SessionManager sm({});
     auto a = join(sm, 1, 11).playerId;

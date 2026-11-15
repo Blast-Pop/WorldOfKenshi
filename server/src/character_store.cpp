@@ -238,6 +238,16 @@ void CharacterStore::saveNpcs(const std::vector<NpcRecord>& records) {
     sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
 }
 
+void CharacterStore::forgetNpcs(const std::vector<uint32_t>& ids) {
+    if (ids.empty()) return;
+    sqlite3_exec(db_, "BEGIN", nullptr, nullptr, nullptr);
+    for (uint32_t id : ids) {
+        Stmt s(db_, "DELETE FROM npcs WHERE id = ?1");
+        s.id(1, id).step();
+    }
+    sqlite3_exec(db_, "COMMIT", nullptr, nullptr, nullptr);
+}
+
 void CharacterStore::savePosition(uint64_t steamId, float x, float y, float z, float yaw) {
     Stmt s(db_, "UPDATE characters SET x = ?2, y = ?3, z = ?4, yaw = ?5 WHERE steam_id = ?1");
     s.id(1, steamId).real(2, x).real(3, y).real(4, z).real(5, yaw).step();
