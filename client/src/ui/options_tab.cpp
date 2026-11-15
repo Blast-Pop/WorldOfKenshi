@@ -92,6 +92,12 @@ bool addTab(void* tabControl, MultiplayerOptions& options) {
     mygui::Vc10String panelName(kTabName);
     void* panel = reinterpret_cast<CreateDatapanelFn>(base + kCreateDatapanel)(base + kForgottenGui, &panelName, tab, true);
     if (!panel) return false;
+    // Kenshi calls this right after making each of its option panels (vtable + 0xc0, argument 0x19):
+    // the panel's layout setup, without which its lines never show.
+    {
+        void** vt = *reinterpret_cast<void***>(panel);
+        reinterpret_cast<void (*)(void*, int)>(vt[0xc0 / 8])(panel, 0x19);
+    }
     // Lines grouped by category, like Kenshi's own tabs (title line, then its settings, then a gap).
     auto slider = [&](const char* text, float min, float max, float* value) {
         mygui::Vc10String label(text);
