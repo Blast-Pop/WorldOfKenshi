@@ -427,12 +427,15 @@ std::vector<Outgoing> SessionManager::handleChat(ConnId conn, Conn& c, const Cha
 }
 
 std::vector<Outgoing> SessionManager::updateCellOwners() {
-    // Players in play, by cell; the earliest player (lowest id) in a cell owns it, and an owner keeps
-    // its cell while it stays there.
+    // Every player in play claims its cell and the 8 around it (what it can see); among the players
+    // claiming a cell the earliest (lowest id) owns it, and an owner keeps a cell while it still claims it.
     std::map<std::pair<int32_t, int32_t>, std::vector<PlayerId>> present;
     for (auto& [id, c] : conns_)
-        if (c.player && c.lastState && (c.hasCharacter || !c.characterName.empty()))
-            present[{cellOf(c.lastState->x), cellOf(c.lastState->z)}].push_back(*c.player);
+        if (c.player && c.lastState && (c.hasCharacter || !c.characterName.empty())) {
+            const int32_t cx = cellOf(c.lastState->x), cz = cellOf(c.lastState->z);
+            for (int32_t dx = -1; dx <= 1; ++dx)
+                for (int32_t dz = -1; dz <= 1; ++dz) present[{cx + dx, cz + dz}].push_back(*c.player);
+        }
     std::map<std::pair<int32_t, int32_t>, PlayerId> next;
     for (auto& [cell, players] : present) {
         auto old = cellOwners_.find(cell);

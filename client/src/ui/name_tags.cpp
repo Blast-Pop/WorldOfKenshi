@@ -21,7 +21,9 @@ using MatrixFn = const float* (*)(const void* self);
 using RefVecFn = const float* (*)(const void* self);          // const Vector3& getter
 using ValVecFn = float* (*)(const void* self, float* out);    // Vector3 returned by value
 using NodeOfFn = void* (*)(const void* movable);
+using AabbFn = float* (*)(const void* movable, float* out);  // Aabb {center, halfSize} by value
 struct Calls {
+    AabbFn worldAabb = nullptr;
     NodeOfFn parentNode = nullptr;
     ValVecFn nodePosition = nullptr;
     MatrixFn projection = nullptr;
@@ -32,6 +34,7 @@ const Calls& calls() {
     static Calls c = [] {
         Calls r;
         if (HMODULE m = GetModuleHandleA("OgreMain_x64.dll")) {
+            r.worldAabb = reinterpret_cast<AabbFn>(GetProcAddress(m, "?getWorldAabb@MovableObject@Ogre@@QEBA?AUAabb@2@XZ"));
             r.parentNode = reinterpret_cast<NodeOfFn>(
                 GetProcAddress(m, "?getParentSceneNode@MovableObject@Ogre@@QEBAPEAVSceneNode@2@XZ"));
             r.nodePosition =
@@ -78,9 +81,20 @@ bool readCamera(CameraFrame& f) {
 bool renderPositionRaw(uintptr_t entity, float out[3]) {
     const Calls& c = calls();
     __try {
+        if (c.worldAabb) {  // the top of the body's bounding box: right above the head, any size
+            float box[6] = {};
+            c.worldAabb(reinterpret_cast<void*>(entity), box);
+            if (box[4] > 0.0f) {
+                out[0] = box[0];
+                out[1] = box[1] + box[4];
+                out[2] = box[2];
+                return true;
+            }
+        }
         void* node = c.parentNode(reinterpret_cast<void*>(entity));
         if (!node) return false;
         c.nodePosition(node, out);
+        out[1] += kHeadHeight;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -149,7 +163,7 @@ void updateNameTags(const std::vector<NameTag>& tags, bool visible) {
     for (size_t i = 0; ok && i < tags.size() && used < kMaxTags; ++i) {
         float feet[3];
         if (!renderPosition(tags[i].character, feet)) continue;
-        const float world[4] = {feet[0], feet[1] + kHeadHeight, feet[2], 1.0f};
+        const float world[4] = {feet[0], feet[1], feet[2], 1.0f};  // already above the head
         const float d[3] = {world[0] - cam.pos[0], world[1] - cam.pos[1], world[2] - cam.pos[2]};
         auto dot = [&](const float* a) { return a[0] * d[0] + a[1] * d[1] + a[2] * d[2]; };
         // Camera space: x right, y up, looking down -z.

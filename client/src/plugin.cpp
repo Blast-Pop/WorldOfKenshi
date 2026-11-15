@@ -489,7 +489,7 @@ void onFrame(float dt) {
         if (connected && s.avatars.inGame() && !pauseMenuOpen)
             if (s.readerOk) {
                 // Only players near our character get a label (Aeglen: not across the map).
-                constexpr float kTagRange = 80.0f;
+                constexpr float kTagRange = 500.0f;
                 float me[3] = {};
                 wok::mem::readBytes(s.reader.character() + 0x48, me, sizeof(me));
                 for (auto& t : s.avatars.nameTags()) {

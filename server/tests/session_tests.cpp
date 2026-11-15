@@ -237,9 +237,9 @@ TEST_CASE("cell_owner_is_the_earliest_player_and_npcs_reach_neighbours") {
     auto owners = sentOf<CellOwners>(sm.tick(1.0));
     REQUIRE(!owners.empty());
     const CellOwners& list = owners[0].second;
-    REQUIRE(list.cells.size() == 2);
+    CHECK(list.cells.size() == 18);  // two separate areas of 3 x 3 cells
     for (auto& cell : list.cells)
-        if (cell.cx == cellOf(100.0f)) CHECK(cell.owner == a);  // a joined first
+        if (cell.cx == cellOf(100.0f) && cell.cz == cellOf(0.0f)) CHECK(cell.owner == a);  // a joined first
     // The owner's NPCs go to b (near), not to the far player; a non-owner cannot speak for NPCs.
     NpcSnapshot snap{0, {{1, 10.f, 0.f, 0.f, 0.f, AnimState::Idle, false}}};
     auto relayed = sentOf<NpcSnapshot>(sm.onPacket(1, encode(snap), 1.1));
@@ -258,5 +258,5 @@ TEST_CASE("a_newcomer_gets_the_cell_owners") {
     sm.onConnect(2, 2.0);
     auto out = sm.onPacket(2, helloBytes(12), 2.0);
     REQUIRE(sentOf<CellOwners>(out).size() == 1);
-    CHECK(sentOf<CellOwners>(out)[0].second.cells.size() == 1);
+    CHECK(sentOf<CellOwners>(out)[0].second.cells.size() == 9);  // a's 3 x 3 cells
 }
