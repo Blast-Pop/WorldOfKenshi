@@ -370,9 +370,9 @@ bool pressListItem(Widget* list, std::string_view containing) {
         if (name.find(containing) == std::string::npos) continue;
         g_api.listBeginTo(list, i);  // scroll it into view: only visible rows have a widget
         // Left button press/release on a row widget, as the mouse does: the list selects it and
-        // tells its owner (Kenshi's file dialog) which file is chosen. In this MyGUI build
-        // getWidgetByIndex takes the on-screen line (item - first visible item): press line i once,
-        // deduce the first visible item from what got selected, then press the right line.
+        // tells its owner (Kenshi's file dialog) which file is chosen. Which item a row widget stands
+        // for depends on the scroll, so press the widget of index i first, then every row widget
+        // until the list reports item i as selected.
         auto press = [&](size_t line) {
             Widget* row = g_api.listWidgetAt(list, line);
             if (!row) return SIZE_MAX;
@@ -380,9 +380,13 @@ bool pressListItem(Widget* list, std::string_view containing) {
             g_api.riseReleased(reinterpret_cast<char*>(row) + kWidgetInputOffset, 0, 0, 0);
             return g_api.listSelected ? g_api.listSelected(list) : SIZE_MAX;
         };
-        size_t selected = press(0);
-        if (selected != SIZE_MAX && selected <= i && selected != i) selected = press(i - selected);
-        log("mygui: list row %zu '%s' -> selected %zu of %zu", i, name.c_str(), selected, count);
+        size_t selected = press(i), tries = 1;
+        for (size_t line = 0; selected != i && line < 64; ++line, ++tries) {
+            const size_t got = press(line);
+            if (got == SIZE_MAX) break;  // past the last row widget
+            selected = got;
+        }
+        log("mygui: list row %zu '%s' -> selected %zu of %zu (%zu press(es))", i, name.c_str(), selected, count, tries);
         return selected == i;
     }
     log("mygui: no list row contains '%.*s' (%zu rows)", static_cast<int>(containing.size()), containing.data(), count);
