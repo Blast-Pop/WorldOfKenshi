@@ -217,21 +217,32 @@ void SharedNpcs::removeOthersNpcs(PlayerId me, uintptr_t self, const std::functi
 }
 
 void SharedNpcs::drivePuppets(double nowSec, PlayerId me) {
+    int destroyedNow = 0;  // destroying many characters in one frame crashed the game (Batman, 0.3.1)
     for (auto it = puppets_.begin(); it != puppets_.end();) {
         Puppet& p = it->second;
         const PlayerId owner = static_cast<PlayerId>(it->first >> 32);
         const bool gone = p.lastSeen == 0 ? false : nowSec - p.lastSeen > kPuppetTimeout;
-        if (!gone && owner != me && ownerOf(p.pos[0], p.pos[2]) == me && p.character &&
-            spawner_.isAlive(p.character)) {
-            // Its cell is ours now (its owner left): the copy becomes our NPC, where it stands, instead
-            // of every copy being destroyed at once and the place emptied.
+        const PlayerId cellOwner = ownerOf(p.pos[0], p.pos[2]);
+        const bool alive = p.character && spawner_.isAlive(p.character);
+        // Its owner stopped (left, or lags) and its cell is ours or nobody's: the copy becomes our NPC,
+        // where it stands, instead of every copy being destroyed at once and the place emptied.
+        if (alive && owner != me && (cellOwner == me || (gone && cellOwner == 0))) {
             puppetChars_.erase(p.character);
             it = puppets_.erase(it);
             ++released_;
             continue;
         }
-        if (gone || owner == me || ownerOf(p.pos[0], p.pos[2]) == me) {  // not reported, or ours now
-            if (p.character && spawner_.isAlive(p.character) && spawner_.destroy(p.character)) ++destroyed_;
+        if (gone || owner == me || cellOwner == me) {  // another player simulates it now: theirs replace it
+            if (alive) {
+                if (destroyedNow >= 2) {  // a few per frame
+                    ++it;
+                    continue;
+                }
+                if (spawner_.destroy(p.character)) {
+                    ++destroyed_;
+                    ++destroyedNow;
+                }
+            }
             puppetChars_.erase(p.character);
             it = puppets_.erase(it);
             continue;
