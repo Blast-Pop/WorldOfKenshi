@@ -498,7 +498,7 @@ void onFrame(float dt) {
         wok::applyWorldRules(*s.rules);
     }
     if (s.now >= s.nextOptionsPoll) {  // our Options tab; save a changed setting
-        s.nextOptionsPoll = s.now + 0.5;
+        s.nextOptionsPoll = s.now + 0.1;  // also hides our options panel behind the other tabs
         static bool loaded = false;
         if (!loaded) {
             loaded = true;

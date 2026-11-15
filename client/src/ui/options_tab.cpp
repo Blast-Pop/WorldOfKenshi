@@ -39,6 +39,7 @@ using AnyEmptyCtorFn = void* (*)(void* self, const void* empty);
 using AddItemFn = void* (*)(void* tabControl, const void* name, void* anyByValue);
 using FindItemFn = void* (*)(void* tabControl, const void* name);
 using SetItemDataFn = void (*)(void* tabControl, void* item, void* anyByValue);
+using ItemSelectedFn = void* (*)(void* tabControl);
 
 struct MyGuiCalls {
     UStringCtorFn ustring = nullptr;
@@ -48,6 +49,7 @@ struct MyGuiCalls {
     AddItemFn addItem = nullptr;
     FindItemFn findItem = nullptr;
     SetItemDataFn setItemData = nullptr;
+    ItemSelectedFn itemSelected = nullptr;
     bool ok = false;
 };
 
@@ -64,6 +66,7 @@ const MyGuiCalls& calls() {
         r.addItem = reinterpret_cast<AddItemFn>(get("?addItem@TabControl@MyGUI@@QEAAPEAVTabItem@2@AEBVUString@2@VAny@2@@Z"));
         r.findItem = reinterpret_cast<FindItemFn>(get("?findItemWith@TabControl@MyGUI@@QEAAPEAVTabItem@2@AEBVUString@2@@Z"));
         r.setItemData = reinterpret_cast<SetItemDataFn>(get("?setItemData@TabControl@MyGUI@@QEAAXPEAVTabItem@2@VAny@2@@Z"));
+        r.itemSelected = reinterpret_cast<ItemSelectedFn>(get("?getItemSelected@TabControl@MyGUI@@QEAAPEAVTabItem@2@XZ"));
         r.ok = r.ustring && r.ustringDtor && r.anyEmpty && r.anyNull && r.addItem && r.findItem && r.setItemData;
         if (!r.ok) log("options: MyGUI exports missing, no Multiplayer tab");
         return r;
@@ -82,6 +85,24 @@ struct UStringBox {
     explicit UStringBox(const char* text) { calls().ustring(storage, text); }
     ~UStringBox() { calls().ustringDtor(storage); }
 };
+
+// Our tab and its panel. Kenshi shows and hides its own option panels when the player changes tab
+// (DatapanelGUI vtable + 0x10, show(bool)) but not ours, whose lines then covered the other tabs.
+struct OurTab {
+    void* tab = nullptr;
+    void* panel = nullptr;
+    int shown = -1;  // what we last asked: -1 unknown
+} g_ours;
+
+bool guardedShow(void* panel, bool show) {
+    __try {
+        void** vt = *reinterpret_cast<void***>(panel);
+        reinterpret_cast<void (*)(void*, bool)>(vt[0x10 / 8])(panel, show);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
 bool addTab(void* tabControl, MultiplayerOptions& options) {
     const MyGuiCalls& c = calls();
@@ -123,6 +144,7 @@ bool addTab(void* tabControl, MultiplayerOptions& options) {
     void* panelAny[2] = {};
     reinterpret_cast<MakePanelAnyFn>(base + kMakePanelAny)(panelAny, &panel);
     c.setItemData(tabControl, tab, panelAny);
+    g_ours = {tab, panel, -1};
     return true;
 }
 
@@ -150,7 +172,13 @@ void ensureOptionsTab(MultiplayerOptions& options) {
     if (!usable) return;
     {
         UStringBox name(kTabName);
-        if (calls().findItem(tabs, name.storage)) return;  // already there
+        if (void* ours = calls().findItem(tabs, name.storage)) {  // already there: show it only when selected
+            if (ours == g_ours.tab && g_ours.panel && calls().itemSelected) {
+                const int want = calls().itemSelected(tabs) == ours ? 1 : 0;
+                if (want != g_ours.shown && guardedShow(g_ours.panel, want == 1)) g_ours.shown = want;
+            }
+            return;
+        }
     }
     bool ok = guardedAddTab(tabs, options);
     log("options: Multiplayer tab %s", ok ? "added" : "FAILED");
