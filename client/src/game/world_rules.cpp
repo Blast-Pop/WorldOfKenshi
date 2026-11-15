@@ -45,9 +45,16 @@ bool applyWorldRules(const WorldRules& rules) {
     for (auto [rate, value] : {std::pair{kProduction, rules.productionSpeed}, std::pair{kBuilding, rules.buildingSpeed},
                                std::pair{kResearch, rules.researchSpeed}}) {
         float now = 0;
-        if (!mem::readBytes(base + rate.global, &now, sizeof(now))) return false;
+        if (!mem::readBytes(base + rate.global, &now, sizeof(now))) {
+            log("rules: cannot read Kenshi's %s speed", rate.name);
+            return false;
+        }
         if (now == value) continue;
-        if (!mem::writeBytes(base + rate.global, &value, sizeof(value))) return false;
+        if (!mem::writeBytes(base + rate.global, &value, sizeof(value))) {
+            log("rules: cannot write Kenshi's %s speed", rate.name);
+            return false;
+        }
+        log("rules: %s speed %.2f -> %.2f", rate.name, now, value);
         changed = true;
     }
     if (changed)

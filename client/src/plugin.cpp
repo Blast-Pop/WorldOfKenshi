@@ -345,6 +345,8 @@ void onFrame(float dt) {
         if (auto* wr = std::get_if<wok::WorldRules>(&m)) {
             s.rules = *wr;
             s.nextRulesApply = 0;
+            wok::log("rules: received production x%.2f, building x%.2f, research x%.2f", wr->productionSpeed,
+                     wr->buildingSpeed, wr->researchSpeed);
             continue;
         }
         if (auto* wt = std::get_if<wok::WorldTime>(&m); wt && s.characterRestored)

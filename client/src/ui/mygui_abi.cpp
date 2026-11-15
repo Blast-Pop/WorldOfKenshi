@@ -47,6 +47,7 @@ struct Api {
     size_t (*listCount)(Widget* list);
     const void* (*listNameAt)(Widget* list, size_t index);
     void (*listBeginTo)(Widget* list, size_t index);
+    void (*listSetSelected)(Widget* list, size_t index) = nullptr;
     Widget* (*listWidgetAt)(Widget* list, size_t index);
     size_t (*listSelected)(Widget* list);
     void (*risePressed)(void* widgetInput, int left, int top, int button);
@@ -135,6 +136,7 @@ bool init() {
     load(m, g_api.listCount, "?getItemCount@ListBox@MyGUI@@QEBA_KXZ");
     load(m, g_api.listNameAt, "?getItemNameAt@ListBox@MyGUI@@QEAAAEBVUString@2@_K@Z");
     load(m, g_api.listBeginTo, "?beginToItemAt@ListBox@MyGUI@@QEAAX_K@Z");
+    load(m, g_api.listSetSelected, "?setIndexSelected@ListBox@MyGUI@@QEAAX_K@Z");
     load(m, g_api.listWidgetAt, "?getWidgetByIndex@ListBox@MyGUI@@QEAAPEAVWidget@2@_K@Z");
     load(m, g_api.listSelected, "?getIndexSelected@ListBox@MyGUI@@QEBA_KXZ");
     load(m, g_api.risePressed, "?_riseMouseButtonPressed@WidgetInput@MyGUI@@QEAAXHHUMouseButton@2@@Z");
@@ -385,6 +387,11 @@ bool pressListItem(Widget* list, std::string_view containing) {
             const size_t got = press(line);
             if (got == SIZE_MAX) break;  // past the last row widget
             selected = got;
+        }
+        if (selected != i && g_api.listSetSelected) {  // last resort: select it directly
+            g_api.listSetSelected(list, i);
+            selected = g_api.listSelected ? g_api.listSelected(list) : SIZE_MAX;
+            log("mygui: row %zu selected directly", i);
         }
         log("mygui: list row %zu '%s' -> selected %zu of %zu (%zu press(es))", i, name.c_str(), selected, count, tries);
         return selected == i;
