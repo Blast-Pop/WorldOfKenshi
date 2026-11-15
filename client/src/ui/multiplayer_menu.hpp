@@ -22,6 +22,7 @@ public:
     MultiplayerMenu(ClientConfig& cfg, ClientNet& net, std::function<void()> saveConfig, std::function<void()> connect,
                     std::function<void()> unlink, std::function<bool()> inGame, std::function<void()> disconnect);
     void update(float dt);  // game thread, every frame
+    bool multiplayerWorld() const { return multiplayerWorld_; }  // the loaded world came from Multiplayer
 
 private:
     void ensureButton();
@@ -62,6 +63,7 @@ private:
     std::string lastStatus_;
     std::string error_;
     bool enteredGame_ = false;
+    bool savesHidden_ = false;        // we hid New/Save/Load in the pause menu
     bool multiplayerWorld_ = false;   // the loaded world was started from multiplayer (until the title screen)
     int autoStep_ = 0;                // returning player: 1 = Begin clicked, 2 = editor confirmed
     int confirmWaits_ = 0;

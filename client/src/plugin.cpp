@@ -220,6 +220,19 @@ void onFrame(float dt) {
         s.dead = false;
         s.deadCharacter = 0;
         s.lookToApply.clear();
+        s.rules.reset();  // the server's rates are for its world only
+        s.said.clear();
+    }
+    // A solo game (a world not started from Multiplayer): the mod stays out of it entirely. Only the
+    // title screen's Multiplayer button (menu update, above) keeps running, to come back online.
+    if (!connected && s.avatarsOk && s.avatars.inGame() && !(s.menu && s.menu->multiplayerWorld())) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            wok::log("solo game: World of Kenshi stays idle until you go back to the title screen");
+        }
+        lap(FrameProfile::Avatars);
+        return;
     }
 
     // Returning player: Kenshi's New Game only loads the world; bring back the server character

@@ -124,6 +124,8 @@ void MultiplayerMenu::applyPauseMenu() {
     // A world started from multiplayer never touches local saves, even after a disconnect (the exit
     // dialog would otherwise reveal Save again): hide New/Save/Load until back on the title screen.
     bool mp = multiplayerWorld_ && !newGameAsked_;  // after a death, New Game is the way on
+    if (!mp && !savesHidden_) return;  // a solo game: Kenshi's own menu, untouched
+    savesHidden_ = mp;
     for (const char* suffix : {"_NewGameButton", "_SaveGameButton", "_LoadGameButton"})
         if (mygui::Widget* b = mygui::findBySuffix(suffix, 3); b && mygui::parentOf(b) == mygui::parentOf(resume))
             mygui::setVisible(b, !mp);
