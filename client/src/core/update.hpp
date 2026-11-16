@@ -9,7 +9,7 @@
 
 namespace wok {
 
-inline constexpr const char* kClientVersion = "0.3.2";
+inline constexpr const char* kClientVersion = "0.3.3";
 // The repository's releases, newest first (pre-releases included), as GitHub's API returns them.
 inline constexpr const char* kReleasesUrl = "https://api.github.com/repos/Blast-Pop/WorldOfKenshi/releases?per_page=5";
 // Only files published on that repository's releases are ever downloaded.

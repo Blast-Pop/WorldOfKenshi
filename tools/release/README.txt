@@ -1,4 +1,4 @@
-World of Kenshi - alpha 0.3.2
+World of Kenshi - alpha 0.3.3
 ===========================
 
 A multiplayer mod for Kenshi (Steam version 1.0.68). This is an ALPHA: expect bugs.
